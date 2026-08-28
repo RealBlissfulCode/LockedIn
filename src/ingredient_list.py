@@ -1,16 +1,10 @@
 # -*- coding: utf-8 -*-
-"""Master ingredient list generator.
+"""Aisle map: which supermarket aisle every ingredient key belongs to.
 
-Reads every recipe, works out which ingredients are actually used, how often, and in what
-typical quantity, then emits:
-  - an HTML section for the handbook (grouped by supermarket aisle)
-  - ingredient_list.csv
-  - an extra sheet in the workbook
-
-Nothing here is typed by hand. Usage counts and gram totals come from the recipes themselves.
+Consumed by src/build_data.py, which bakes it into assets/data.js so the app can
+group a shopping list the way the store is actually laid out. Every key used by a
+recipe must appear in exactly one aisle; build_data.py reports the ones that do not.
 """
-import csv, html
-from collections import defaultdict
 
 # Aisle assignment. Every ingredient key must land in exactly one aisle.
 AISLES = [
@@ -77,93 +71,3 @@ GF_CRITICAL = {
 }
 
 COSTTIER = {1:"Low",2:"Moderate",3:"Higher"}
-
-
-def build(ING, DATA, OUT):
-    use = defaultdict(lambda: {"n":0,"g":0.0,"ids":[]})
-    for d in DATA:
-        r = d["r"]
-        for k,g,_m in r["ing"]:
-            u = use[k]; u["n"] += 1; u["g"] += g/max(r["servings"],1); u["ids"].append(r["id"])
-
-    placed = {k for _t,keys in AISLES for k in keys}
-    unplaced = sorted(set(use) - placed)
-
-    # ---------- CSV ----------
-    rows = []
-    for aisle, keys in AISLES:
-        for k in keys:
-            if k not in use: continue
-            u = use[k]; ig = ING[k]
-            rows.append([aisle, ig["name"], k, u["n"], round(u["g"]),
-                         round(u["g"]/u["n"]), ig["kcal"], ig["p"], ig["c"], ig["f"], ig["fib"],
-                         round(ig["leu"],2),
-                         round(ig["p"]*4/ig["kcal"]*100) if ig["kcal"] else 0,
-                         "YES" if k in GF_CRITICAL else "",
-                         GF_CRITICAL.get(k,""), ", ".join(u["ids"][:12])])
-    for k in unplaced:
-        u = use[k]; ig = ING[k]
-        rows.append(["Unsorted", ig["name"], k, u["n"], round(u["g"]), round(u["g"]/u["n"]),
-                     ig["kcal"], ig["p"], ig["c"], ig["f"], ig["fib"], round(ig["leu"],2),
-                     round(ig["p"]*4/ig["kcal"]*100) if ig["kcal"] else 0, "", "",
-                     ", ".join(u["ids"][:12])])
-
-    head = ["Aisle","Ingredient","Key","RecipesUsingIt","TotalGramsPerServingAcrossRecipes",
-            "TypicalGramsPerServing","kcal_per100g","Protein_per100g","Carbs_per100g","Fat_per100g",
-            "Fiber_per100g","Leucine_per100g","ProteinDensity_pct","GF_CHECK_REQUIRED",
-            "GF_Note","ExampleRecipeIDs"]
-    with open(f"{OUT}/ingredient_list.csv","w",newline="") as fh:
-        w = csv.writer(fh); w.writerow(head); w.writerows(rows)
-
-    # ---------- HTML ----------
-    top = sorted(use.items(), key=lambda kv:-kv[1]["n"])[:20]
-    h = ['<h2 id="ingredients">Master ingredient list</h2>',
-     '<p>Everything the catalog actually draws on, grouped by where I find it in the '
-     'store. The "used in" column counts how many recipes call for it, so the items at '
-     'the top of each group are the ones worth always having. Protein density is protein calories '
-     'as a share of total calories, which is the number that tells me whether something is a '
-     'protein source or a carb or fat source wearing a protein label.</p>']
-
-    h.append('<div class="callout warn"><h4>The gluten-free checklist</h4><p>These are the '
-     'ingredients where the specific product matters, not just the food. Everything else on this '
-     'list is gluten-free by nature.</p><table><tr><th>Ingredient</th><th>What to check</th></tr>')
-    for k,note in sorted(GF_CRITICAL.items(), key=lambda kv: ING[kv[0]]["name"] if kv[0] in ING else kv[0]):
-        if k in use:
-            h.append(f'<tr><td>{html.escape(ING[k]["name"])}</td><td>{html.escape(note)}</td></tr>')
-    h.append('</table></div>')
-
-    h.append('<h3>The twenty ingredients that carry the whole catalog</h3>')
-    h.append('<p class="small">Ranked by how many recipes use them. With these in the house me '
-             'can cook most of what follows without another trip.</p><table><tr><th>#</th>'
-             '<th>Ingredient</th><th>Recipes</th><th>Typical serving</th><th>Protein density</th></tr>')
-    for i,(k,u) in enumerate(top,1):
-        ig = ING[k]; pd_ = round(ig["p"]*4/ig["kcal"]*100) if ig["kcal"] else 0
-        h.append(f'<tr><td>{i}</td><td>{html.escape(ig["name"])}</td><td>{u["n"]}</td>'
-                 f'<td>{round(u["g"]/u["n"])} g</td><td>{pd_}%</td></tr>')
-    h.append('</table>')
-
-    for aisle, keys in AISLES:
-        present = [k for k in keys if k in use]
-        if not present: continue
-        present.sort(key=lambda k:-use[k]["n"])
-        h.append(f'<h3>{html.escape(aisle)}</h3>')
-        h.append('<table><tr><th>Ingredient</th><th>Used in</th><th>Typical per serving</th>'
-                 '<th>kcal /100g</th><th>P</th><th>C</th><th>F</th><th>Fib</th>'
-                 '<th>Protein density</th><th>Cost</th><th>GF check</th></tr>')
-        for k in present:
-            ig = ING[k]; u = use[k]
-            pd_ = round(ig["p"]*4/ig["kcal"]*100) if ig["kcal"] else 0
-            flag = '<b style="color:#B4442A">CHECK</b>' if k in GF_CRITICAL else ''
-            cost = COSTTIER.get(ig.get("cost",2),"")
-            h.append(f'<tr><td>{html.escape(ig["name"])}</td><td>{u["n"]}</td>'
-                     f'<td>{round(u["g"]/u["n"])} g</td><td>{ig["kcal"]}</td><td>{ig["p"]}</td>'
-                     f'<td>{ig["c"]}</td><td>{ig["f"]}</td><td>{ig["fib"]}</td>'
-                     f'<td>{pd_}%</td><td>{cost}</td><td>{flag}</td></tr>')
-        h.append('</table>')
-
-    if unplaced:
-        h.append('<h3>Unsorted</h3><p class="small">' +
-                 html.escape(", ".join(ING[k]["name"] for k in unplaced)) + '</p>')
-
-    h.append('<p class="back"><a href="#top">Top</a></p>')
-    return "\n".join(h), rows, head

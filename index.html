@@ -3,51 +3,98 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>The Meal Handbook</title>
-<meta name="description" content="Gluten-free meal system, calculator, grocery builder and daily log for two people.">
-<meta name="theme-color" content="#0A1A2F">
-<meta name="color-scheme" content="light">
+<title>The Handbook</title>
+<meta name="description" content="Meals, training, shopping, money and schedule for two people. Everything stays on the device.">
+<meta name="theme-color" content="#FBFAF7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#16160F" media="(prefers-color-scheme: dark)">
+<meta name="color-scheme" content="light dark">
 
-<!-- installable on a phone home screen -->
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Meal Handbook">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Handbook">
 <link rel="apple-touch-icon" href="/icons/icon-192.png">
 <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
 <link rel="icon" href="/icons/icon-192.png" sizes="192x192">
 
-<meta property="og:title" content="The Meal Handbook">
-<meta property="og:description" content="251 gluten-free recipes, live calculator, grocery builder, daily log.">
+<meta property="og:title" content="The Handbook">
+<meta property="og:description" content="251 recipes, 211 exercises, shopping, budget and schedule in one app.">
 <meta property="og:type" content="website">
 <meta property="og:image" content="/icons/icon-512.png">
 
-<link rel="stylesheet" href="/assets/app.css?v=7af6849b">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap">
+<link rel="preload" href="/assets/data.js?v=7030b5e9" as="script">
+<link rel="stylesheet" href="/assets/app.css?v=7030b5e9">
+
+<script>
+/* Stamp the theme before first paint so a dark-mode reload never flashes white.
+   Kept deliberately tiny and inline; app.js owns the toggle from here on. */
+(function(){
+  try{
+    var raw = localStorage.getItem('handbook.v6');
+    var pref = raw ? (JSON.parse(raw).theme || 'auto') : 'auto';
+    var dark = pref === 'dark' ||
+      (pref === 'auto' && window.matchMedia &&
+       window.matchMedia('(prefers-color-scheme: dark)').matches);
+    if(dark) document.documentElement.setAttribute('data-theme','dark');
+  }catch(e){}
+})();
+</script>
 </head>
 <body>
+<a class="skip" href="#view">Skip to content</a>
+
 <header class="top"><div class="topin">
-  <div class="brand">The Meal <em>Handbook</em></div>
-  <div class="whoswitch" id="who"></div>
-  <nav class="tabs" id="tabs"></nav>
+  <button class="brand" id="home" title="Home">The <em>Handbook</em></button>
+  <div class="whoswitch" id="who" role="group" aria-label="Whose numbers to show"></div>
+  <nav class="tabs" id="tabs" aria-label="Sections"></nav>
+  <button class="icobtn" id="cmdBtn" title="Search everything (Ctrl K)" aria-label="Search everything">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+  </button>
+  <button class="icobtn" id="themeBtn" title="Switch theme" aria-label="Switch theme"></button>
+  <button class="icobtn" id="menuBtn" title="Data and settings" aria-label="Data and settings">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1A1.7 1.7 0 008 19.4a1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.9 1.7 1.7 0 00-1.5-1H2a2 2 0 110-4h.1A1.7 1.7 0 003.6 8a1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.9.3H8a1.7 1.7 0 001-1.5V2a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9V8a1.7 1.7 0 001.5 1H22a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg>
+  </button>
 </div></header>
 
-<main class="wrap" id="view">
-  <noscript>
-    <div style="padding:40px 0">
-      <h1>JavaScript is switched off</h1>
-      <p>This is an app rather than a document, so it needs JavaScript. The printable PDF
-      version of the same content does not.</p>
-    </div>
-  </noscript>
+<main class="wrap pagepad" id="view" tabindex="-1">
+  <noscript><div style="padding:44px 0">
+    <h1>JavaScript is off</h1>
+    <p>This is an app rather than a page, so it needs JavaScript switched on.</p>
+  </div></noscript>
 </main>
-<nav class="btmnav" id="btm"></nav>
 
-<script src="/assets/data.js?v=7af6849b"></script>
-<script src="/assets/app.js?v=7af6849b"></script>
+<nav class="btmnav" id="btm" aria-label="Sections"></nav>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+
+<script src="/assets/data.js?v=7030b5e9"></script>
+<script src="/assets/core.js?v=7030b5e9"></script>
+<script src="/assets/ui.js?v=7030b5e9"></script>
+<script src="/assets/views.js?v=7030b5e9"></script>
+<script src="/assets/app.js?v=7030b5e9"></script>
 <script>
 if('serviceWorker' in navigator){
   window.addEventListener('load',function(){
-    navigator.serviceWorker.register('/sw.js').catch(function(){});
+    navigator.serviceWorker.register('/sw.js').then(function(reg){
+      // A new build is live: tell the app so it can offer a reload rather than
+      // silently serving yesterday's bundle until every tab is closed.
+      reg.addEventListener('updatefound',function(){
+        var w=reg.installing; if(!w)return;
+        w.addEventListener('statechange',function(){
+          if(w.state==='installed' && navigator.serviceWorker.controller){
+            window.Handbook && window.Handbook.updateReady(function(){
+              w.postMessage({type:'SKIP_WAITING'});
+            });
+          }
+        });
+      });
+    }).catch(function(){});
+    var reloading=false;
+    navigator.serviceWorker.addEventListener('controllerchange',function(){
+      if(reloading)return; reloading=true; location.reload();
+    });
   });
 }
 </script>

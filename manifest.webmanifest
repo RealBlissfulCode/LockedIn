@@ -1,13 +1,26 @@
 {
-  "name": "The Meal Handbook",
-  "short_name": "Meals",
-  "description": "Gluten-free meal system, calculator, grocery builder and daily log.",
+  "id": "/",
+  "name": "The Handbook",
+  "short_name": "Handbook",
+  "description": "Meals, training, shopping, money and schedule for two people. Everything stays on the device.",
+  "lang": "en",
+  "dir": "ltr",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "orientation": "portrait",
-  "background_color": "#F6F9FC",
-  "theme_color": "#0A1A2F",
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
+  "orientation": "any",
+  "categories": [
+    "food",
+    "health",
+    "fitness",
+    "productivity"
+  ],
+  "background_color": "#FBFAF7",
+  "theme_color": "#1F4D3A",
   "icons": [
     {
       "src": "/icons/icon-192.png",
@@ -30,16 +43,29 @@
   ],
   "shortcuts": [
     {
-      "name": "Today",
-      "url": "/#/"
+      "name": "Meals",
+      "short_name": "Meals",
+      "url": "/#/meals"
     },
     {
-      "name": "Recipes",
-      "url": "/#/recipes"
+      "name": "Plan the week",
+      "short_name": "Plan",
+      "url": "/#/plan"
     },
     {
-      "name": "Grocery list",
-      "url": "/#/grocery"
+      "name": "Shopping",
+      "short_name": "Shopping",
+      "url": "/#/shopping"
+    },
+    {
+      "name": "Training",
+      "short_name": "Training",
+      "url": "/#/training"
+    },
+    {
+      "name": "Schedule",
+      "short_name": "Schedule",
+      "url": "/#/schedule"
     }
   ]
 }

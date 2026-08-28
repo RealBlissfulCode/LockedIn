@@ -1,0 +1,48 @@
+name: CI
+
+# Two things can quietly break this repo: assets/data.js drifting out of sync
+# with the Python it is generated from, and a change to the front end that only
+# fails once it is in a browser. This checks both on every push.
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: The checked-in data file matches the sources
+        run: python3 src/build_data.py --check
+
+      - name: Static checks and core logic
+        run: node test/run.js
+
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Playwright
+        run: |
+          npm install --no-save playwright@1.49.1
+          npx playwright install --with-deps chromium
+
+      - name: Walk every route in a real browser
+        run: node test/run.js

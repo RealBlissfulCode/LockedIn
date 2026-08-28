@@ -1,18 +1,32 @@
-/* Offline shell. Bump CACHE when assets change; the version query does the rest. */
-var CACHE='meal-handbook-7af6849b';
-var CORE=['/','/index.html','/assets/app.css?v=7af6849b','/assets/app.js?v=7af6849b',
-          '/assets/data.js?v=7af6849b','/manifest.webmanifest',
+/* Offline cache. The version string is stamped by src/build_data.py, so a rebuild
+   always produces a new cache name and the old one is dropped on activate. */
+var CACHE='handbook-7030b5e9';
+var CORE=['/','/index.html',
+          '/assets/app.css?v=7030b5e9',
+          '/assets/core.js?v=7030b5e9',
+          '/assets/ui.js?v=7030b5e9',
+          '/assets/views.js?v=7030b5e9',
+          '/assets/app.js?v=7030b5e9',
+          '/assets/data.js?v=7030b5e9',
+          '/manifest.webmanifest',
           '/icons/icon.svg','/icons/icon-192.png','/icons/icon-512.png'];
 
 self.addEventListener('install',function(e){
-  self.skipWaiting();
-  e.waitUntil(caches.open(CACHE).then(function(c){return c.addAll(CORE).catch(function(){});}));
+  e.waitUntil(caches.open(CACHE).then(function(c){
+    return c.addAll(CORE).catch(function(){});
+  }));
+});
+
+/* The page asks for this once the user accepts the update prompt. Without it a
+   new build waits until every tab is closed. */
+self.addEventListener('message',function(e){
+  if(e.data&&e.data.type==='SKIP_WAITING') self.skipWaiting();
 });
 
 self.addEventListener('activate',function(e){
   e.waitUntil(caches.keys().then(function(keys){
     return Promise.all(keys.map(function(k){ if(k!==CACHE) return caches.delete(k); }));
-  }).then(function(){return self.clients.claim();}));
+  }).then(function(){ return self.clients.claim(); }));
 });
 
 self.addEventListener('fetch',function(e){
@@ -21,19 +35,26 @@ self.addEventListener('fetch',function(e){
   var url=new URL(req.url);
   if(url.origin!==location.origin) return;
 
-  // Shell: network first so a redeploy shows up, cache as the fallback.
+  /* Navigations: network first, so a deploy is picked up as soon as there is a
+     connection, with the cached shell as the offline fallback. */
   if(req.mode==='navigate'){
     e.respondWith(fetch(req).then(function(res){
-      var copy=res.clone(); caches.open(CACHE).then(function(c){c.put('/index.html',copy);});
+      var copy=res.clone();
+      caches.open(CACHE).then(function(c){c.put('/index.html',copy);});
       return res;
-    }).catch(function(){return caches.match('/index.html');}));
+    }).catch(function(){
+      return caches.match('/index.html');
+    }));
     return;
   }
-  // Everything else: cache first, it is all immutable and versioned.
+
+  /* Everything else is content-hashed, so cache first is safe and instant. */
   e.respondWith(caches.match(req).then(function(hit){
-    return hit || fetch(req).then(function(res){
-      if(res && res.status===200){
-        var copy=res.clone(); caches.open(CACHE).then(function(c){c.put(req,copy);});
+    if(hit) return hit;
+    return fetch(req).then(function(res){
+      if(res&&res.status===200&&res.type==='basic'){
+        var copy=res.clone();
+        caches.open(CACHE).then(function(c){c.put(req,copy);});
       }
       return res;
     });
