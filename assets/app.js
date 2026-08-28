@@ -2,10 +2,15 @@
 'use strict';
 var _D=window.MH_DATA||{recipes:[],ing:{},aisles:[],learn:[]};
 var R=_D.recipes, ING=_D.ing, AISLES=_D.aisles, LEARN=_D.learn;
+/* Price is always whichever store is cheaper for that specific item. */
+function best(q){if(!q)return 0;var w=q.w,c=q.c;
+  if(c!=null&&c>0&&(w==null||w<=0||c<w))return c; return w||0;}
+function bestStore(q){if(!q)return '';var w=q.w,c=q.c;
+  if(c!=null&&c>0&&(w==null||w<=0||c<w))return 'Costco'; return 'Walmart';}
 var KEY='mh.v4';
 
 /* ============ state ============ */
-var DEF={who:'j',store:'walmart',fav:[],lists:{'Weeknight go-tos':[],'Aaliyah likes':[],'Move-in week':[]},
+var DEF={who:'j',fav:[],lists:{'Weeknight go-tos':[],'Aaliyah likes':[],'Move-in week':[]},
   mine:[],photos:{},days:{},grocery:[],
   prof:{j:{name:'Me',sex:'m',w:150,h:68,age:20,bf:20,act:1.55,goal:1.09,pf:1.1},
         a:{name:'Aaliyah',sex:'f',w:120,h:66.5,age:20,bf:24,act:1.45,goal:1.0,pf:0.8}}};
@@ -25,8 +30,8 @@ function toast(m){var t=document.createElement('div');t.className='toast';t.text
   setTimeout(function(){t.style.opacity='0';setTimeout(function(){t.remove();},300);},2000);}
 function all(){return R.concat(S.mine);}
 function byId(id){var a=all();for(var i=0;i<a.length;i++)if(a[i].id===id)return a[i];return null;}
-function cps(r){return S.store==='costco'?r.ccs:r.cws;}
-function ctot(r){return S.store==='costco'?r.cc:r.cw;}
+function cps(r){var a=r.cws,b=r.ccs;return (b!=null&&b>0&&b<a)?b:a;}
+function ctot(r){var a=r.cw,b=r.cc;return (b!=null&&b>0&&b<a)?b:a;}
 function dl(name,text,type){var b=new Blob([text],{type:type||'text/plain'});var a=document.createElement('a');
   a.href=URL.createObjectURL(b);a.download=name;a.click();setTimeout(function(){URL.revokeObjectURL(a.href);},900);}
 
@@ -76,15 +81,15 @@ function eaten(ds){
 /* ============ visuals ============ */
 function ring(r,size){
   var s=size||44,tot=r.p*4+r.c*4+r.f*9;if(!tot)tot=1;
-  var cf=2*Math.PI*15.9155,segs=[[r.p*4/tot,'#2680EB'],[r.c*4/tot,'#E0A80D'],[r.f*9/tot,'#8B6FD4']],off=25,h='';
+  var cf=2*Math.PI*15.9155,segs=[[r.p*4/tot,'#1F4D3A'],[r.c*4/tot,'#C2860E'],[r.f*9/tot,'#5C4A78']],off=25,h='';
   segs.forEach(function(g){var d=g[0]*100;h+='<circle cx="18" cy="18" r="15.9155" fill="none" stroke="'+g[1]+
     '" stroke-width="4.2" stroke-dasharray="'+d.toFixed(2)+' '+(100-d).toFixed(2)+'" stroke-dashoffset="'+off+'"></circle>';off-=d;});
   return '<svg class="ring" viewBox="0 0 36 36" width="'+s+'" height="'+s+'">'+
     '<circle cx="18" cy="18" r="15.9155" fill="rgba(255,255,255,.9)" stroke="#E6EDF5" stroke-width="4.2"></circle>'+h+
-    '<text x="18" y="19.6" text-anchor="middle" font-size="8.4" font-weight="800" fill="#0A1A2F">'+Math.round(r.k)+'</text>'+
+    '<text x="18" y="19.6" text-anchor="middle" font-size="8.4" font-weight="800" fill="#14140F">'+Math.round(r.k)+'</text>'+
     '<text x="18" y="25" text-anchor="middle" font-size="4.4" font-weight="700" fill="#5D7186">KCAL</text></svg>';
 }
-var CATC={'Breakfast':['#F7B733','#FC913A'],'Lunch/Dinner':['#2680EB','#164272'],'Snack':['#3FA796','#1B7A6B'],
+var CATC={'Breakfast':['#D89A3C','#B0651F'],'Lunch/Dinner':['#2C6B50','#173C2C'],'Snack':['#4E8C7A','#28584A'],
  'Drink':['#8B6FD4','#5B3FA0'],'SDA Meat/Fish':['#E2725B','#B0432F'],'My recipe':['#5D7186','#2F3F4F']};
 function art(r){
   var ph=S.photos[r.id];
@@ -144,6 +149,7 @@ function route(){
     : v==='training'?vTraining() : v==='calendar'?vCalendar() : v==='learn'?vLearn() : vHome();
   try{window.scrollTo(0,0);}catch(e){}
   $$('.tab,.btmnav button').forEach(function(b){b.classList.toggle('on',b.dataset.v===(v==='r'?'recipes':v));});
+  $$('#who button').forEach(function(b){b.classList.toggle('on',b.dataset.w===S.who);});
   bind();
 }
 window.addEventListener('hashchange',route);
@@ -380,7 +386,7 @@ function drawIng(r,mult){
   var el=$('#ingList'); if(!el)return;
   el.innerHTML=(r.ing||[]).map(function(i){
     var measure=i[0],key=i[1],g=i[2]||0,pr=0,name=key&&ING[key]?ING[key].n:measure;
-    if(key&&ING[key]){var q=ING[key];pr=(g*mult/100)*(S.store==='costco'&&q.c?q.c:q.w);}
+    if(key&&ING[key]){var q=ING[key];pr=(g*mult/100)*best(q);}
     var gs=g?Math.round(g*mult)+' g':'';
     var sub=(key&&ING[key]&&measure)?' <span class="muted xs">('+E(measure)+')</span>':'';
     return '<li><b>'+gs+'</b><span>'+E(name)+sub+'</span>'+(pr?'<span class="c">'+$$$(pr)+'</span>':'')+'</li>';
@@ -395,7 +401,7 @@ function vGrocery(){
   var tot=S.grocery.reduce(function(a,i){return a+(i.done?0:i.price*i.qty);},0);
   var done=S.grocery.filter(function(i){return i.done;}).length;
   return '<div class="page"><div class="phead"><h1>Grocery list</h1>'+
-   '<p>Grouped the way the store is laid out. Prices are '+(S.store==='costco'?'Costco Timnath':'Walmart Fort Collins')+' estimates.</p></div>'+
+   '<p>Grouped the way the store is laid out. Each item is priced at whichever of Walmart Fort Collins or Costco Timnath is cheaper for that item.</p></div>'+
    '<div class="card pad" style="margin-bottom:14px"><div class="stats">'+
      '<div class="stat acc"><b>'+$$$(tot)+'</b><span>Still to buy</span></div>'+
      '<div class="stat"><b>'+S.grocery.length+'</b><span>Items</span></div>'+
@@ -549,14 +555,14 @@ function ingBrowser(cb){
     var L=keys.filter(function(k){return ING[k].n.toLowerCase().indexOf(q)>=0;}).slice(0,140);
     $('#ibList',m).innerHTML=L.map(function(k){var g=ING[k];
       return '<div class="pickrow" data-ing="'+k+'"><b>'+E(g.n)+'</b>'+
-      '<span class="muted sm right">'+$$$(S.store==='costco'&&g.c?g.c:g.w)+'/100g &middot; '+E(g.aisle)+'</span></div>';}).join('')
+      '<span class="muted sm right">'+$$$(best(g))+'/100g &middot; '+E(bestStore(g))+' &middot; '+E(g.aisle)+'</span></div>';}).join('')
       ||'<p class="muted sm">No match. Add it manually below.</p>';
   }
   draw();$('#ibq',m).addEventListener('input',draw);
   m.addEventListener('click',function(e){
     var p=e.target.closest('[data-ing]');
     if(p){var k=p.dataset.ing,g=ING[k];
-      cb({key:k,name:g.n,qty:1,price:(S.store==='costco'&&g.c?g.c:g.w)*2,aisle:g.aisle,note:'about 200 g',done:false});
+      cb({key:k,name:g.n,qty:1,price:best(g)*2,aisle:g.aisle,note:'about 200 g',done:false});
       m.remove();return;}
     if(e.target.hasAttribute('data-close'))m.remove();
     if(e.target.id==='ibAdd'){var n=$('#ibNew',m).value.trim();if(!n)return;
@@ -608,9 +614,9 @@ function pickPhoto(id){
 /* ============ downloads ============ */
 function cardPNG(r){
   var W=900,H=1280,cv=document.createElement('canvas');cv.width=W;cv.height=H;var x=cv.getContext('2d');
-  var g=x.createLinearGradient(0,0,W,H);g.addColorStop(0,'#0A1A2F');g.addColorStop(.6,'#164272');g.addColorStop(1,'#2680EB');
-  x.fillStyle=g;x.fillRect(0,0,W,H);x.fillStyle='#7FC4FF';x.fillRect(0,0,W,7);
-  x.fillStyle='#7FC4FF';x.font='700 19px Helvetica,Arial';
+  var g=x.createLinearGradient(0,0,W,H);g.addColorStop(0,'#14140F');g.addColorStop(.58,'#1F3A2C');g.addColorStop(1,'#2C6B50');
+  x.fillStyle=g;x.fillRect(0,0,W,H);x.fillStyle='#A8CDB8';x.fillRect(0,0,W,7);
+  x.fillStyle='#A8CDB8';x.font='700 19px Helvetica,Arial';
   x.fillText(r.id+'   \u00B7   '+(r.cat||'').toUpperCase(),54,80);
   x.fillStyle='#fff';x.font='800 52px Helvetica,Arial';
   var y=146+wrap(x,r.n,54,146,790,56);
@@ -620,16 +626,16 @@ function cardPNG(r){
   mac.forEach(function(mm,i){var bx=54+i*(bw+5);
     x.fillStyle='rgba(255,255,255,.10)';x.fillRect(bx,y,bw,90);
     x.fillStyle='#fff';x.font='800 25px Helvetica,Arial';x.textAlign='center';x.fillText(String(mm[0]),bx+bw/2,y+41);
-    x.fillStyle='#7FC4FF';x.font='700 11px Helvetica,Arial';x.fillText(mm[1],bx+bw/2,y+66);x.textAlign='left';});
+    x.fillStyle='#A8CDB8';x.font='700 11px Helvetica,Arial';x.fillText(mm[1],bx+bw/2,y+66);x.textAlign='left';});
   y+=130;
-  x.fillStyle='#2680EB';x.fillRect(54,y,790,62);x.fillStyle='#fff';x.font='700 23px Helvetica,Arial';
+  x.fillStyle='#1F4D3A';x.fillRect(54,y,790,62);x.fillStyle='#fff';x.font='700 23px Helvetica,Arial';
   x.fillText('Makes '+(r.sv||1)+'   \u00B7   '+$$$(cps(r))+'/serving   \u00B7   '+$$$(ctot(r))+' total   \u00B7   '+r.t+' min',78,y+39);
   y+=100;
-  x.fillStyle='#7FC4FF';x.font='700 16px Helvetica,Arial';x.fillText('INGREDIENTS',54,y);y+=28;
-  x.fillStyle='#DCE9FA';x.font='400 18px Helvetica,Arial';
+  x.fillStyle='#A8CDB8';x.font='700 16px Helvetica,Arial';x.fillText('INGREDIENTS',54,y);y+=28;
+  x.fillStyle='#E6EDE7';x.font='400 18px Helvetica,Arial';
   (r.ing||[]).slice(0,15).forEach(function(it){var nm=(it[1]&&ING[it[1]])?ING[it[1]].n:it[0];
     var g=it[2]?Math.round(it[2])+' g ':'';x.fillText('\u2022  '+g+nm,54,y);y+=26;});
-  y+=20;x.fillStyle='#7FC4FF';x.font='700 16px Helvetica,Arial';x.fillText('METHOD',54,y);y+=28;
+  y+=20;x.fillStyle='#A8CDB8';x.font='700 16px Helvetica,Arial';x.fillText('METHOD',54,y);y+=28;
   x.fillStyle='#C4DAF3';x.font='400 16px Helvetica,Arial';
   (r.st||[]).slice(0,6).forEach(function(s,i){y+=wrap(x,(i+1)+'. '+s,54,y,790,23)+7;});
   x.fillStyle='#5C8CC4';x.font='700 13px Helvetica,Arial';x.fillText('The Meal Handbook',54,H-40);
@@ -639,9 +645,9 @@ function cardPNG(r){
 function nutrientCard(){
   var p=S.prof[S.who],r=calc(p),d=dayLog(today()),t=dayTarget(S.who,d.workout);
   var W=900,H=1120,cv=document.createElement('canvas');cv.width=W;cv.height=H;var x=cv.getContext('2d');
-  var g=x.createLinearGradient(0,0,W,H);g.addColorStop(0,'#0A1A2F');g.addColorStop(1,'#164272');
-  x.fillStyle=g;x.fillRect(0,0,W,H);x.fillStyle='#2680EB';x.fillRect(0,0,W,7);
-  x.fillStyle='#7FC4FF';x.font='700 18px Helvetica,Arial';x.fillText('DAILY NUTRIENT TARGETS',54,74);
+  var g=x.createLinearGradient(0,0,W,H);g.addColorStop(0,'#14140F');g.addColorStop(1,'#1F4D3A');
+  x.fillStyle=g;x.fillRect(0,0,W,H);x.fillStyle='#1F4D3A';x.fillRect(0,0,W,7);
+  x.fillStyle='#A8CDB8';x.font='700 18px Helvetica,Arial';x.fillText('DAILY NUTRIENT TARGETS',54,74);
   x.fillStyle='#fff';x.font='800 54px Helvetica,Arial';x.fillText(p.name,54,140);
   x.fillStyle='#A9C6E4';x.font='400 20px Helvetica,Arial';
   x.fillText(pretty(today())+'   \u00B7   '+TRAIN[d.workout].n,54,176);
@@ -651,18 +657,18 @@ function nutrientCard(){
   items.forEach(function(it,i){
     var col=i%2,row=Math.floor(i/2),bx=54+col*400,by=y+row*118;
     x.fillStyle='rgba(255,255,255,.09)';x.fillRect(bx,by,380,100);
-    x.fillStyle='#7FC4FF';x.font='700 13px Helvetica,Arial';x.fillText(it[0].toUpperCase(),bx+22,by+34);
+    x.fillStyle='#A8CDB8';x.font='700 13px Helvetica,Arial';x.fillText(it[0].toUpperCase(),bx+22,by+34);
     x.fillStyle='#fff';x.font='800 42px Helvetica,Arial';x.fillText(String(it[1]),bx+22,by+80);});
   y+=380;
-  x.fillStyle='#7FC4FF';x.font='700 16px Helvetica,Arial';x.fillText('HOW THESE ARE BUILT',54,y);y+=32;
-  x.fillStyle='#DCE9FA';x.font='400 17px Helvetica,Arial';
+  x.fillStyle='#A8CDB8';x.font='700 16px Helvetica,Arial';x.fillText('HOW THESE ARE BUILT',54,y);y+=32;
+  x.fillStyle='#E6EDE7';x.font='400 17px Helvetica,Arial';
   [['RMR',Math.round(r.rmr)+' kcal, Mifflin-St Jeor'],
    ['Maintenance',Math.round(r.tdee)+' kcal at '+p.act+'x activity'],
    ['Goal',(p.goal>1?'+':'')+Math.round((p.goal-1)*100)+'% of maintenance'],
    ['Protein',p.pf+' g per lb bodyweight'],
    ['Session',TRAIN[d.workout].n+' adjustment applied'],
    ['Expected',(r.rate>=0?'+':'')+r.rate.toFixed(2)+' lb per week']].forEach(function(l){
-    x.fillStyle='#7FC4FF';x.fillText(l[0],54,y);x.fillStyle='#DCE9FA';x.fillText(l[1],250,y);y+=31;});
+    x.fillStyle='#A8CDB8';x.fillText(l[0],54,y);x.fillStyle='#E6EDE7';x.fillText(l[1],250,y);y+=31;});
   x.fillStyle='#5C8CC4';x.font='700 13px Helvetica,Arial';x.fillText('The Meal Handbook',54,H-40);
   var a=document.createElement('a');a.download='targets-'+p.name.toLowerCase()+'-'+today()+'.png';
   a.href=cv.toDataURL('image/png');a.click();
@@ -742,7 +748,7 @@ function addRecipeToGrocery(r){
     var key=i[1],g=i[2]||0;if(!key||!ING[key])return;
     var q=ING[key],ex=null;
     S.grocery.forEach(function(it){if(it.key===key)ex=it;});
-    var price=(g/100)*(S.store==='costco'&&q.c?q.c:q.w);
+    var price=(g/100)*best(q);
     if(ex){ex.grams=(ex.grams||0)+g;ex.price+=price;ex.note=Math.round(ex.grams)+' g';}
     else{S.grocery.push({key:key,name:q.n,qty:1,price:price,grams:g,note:Math.round(g)+' g',aisle:q.aisle,done:false});}
     n++;
@@ -780,7 +786,7 @@ function editGrocery(i){
 }
 function groceryTxt(){
   var byA={};S.grocery.forEach(function(it){(byA[it.aisle]=byA[it.aisle]||[]).push(it);});
-  var out='GROCERY LIST  '+pretty(today())+'\n'+(S.store==='costco'?'Costco Timnath':'Walmart Fort Collins')+
+  var out='GROCERY LIST  '+pretty(today())+'\n'+'Best price of Walmart Fort Collins / Costco Timnath'+
     '\n'+'='.repeat(46)+'\n\n';
   var tot=0;
   AISLES.map(function(a){return a[0];}).concat(['Other']).forEach(function(a){
@@ -820,9 +826,6 @@ function chrome(){
     return '<button data-w="'+k+'"'+(S.who===k?' class="on"':'')+'>'+E(S.prof[k].name)+'</button>';}).join('');
   $('#who').onclick=function(e){var b=e.target.closest('[data-w]');if(!b)return;
     S.who=b.dataset.w;save();route();};
-  $('#store').onclick=function(){S.store=S.store==='walmart'?'costco':'walmart';save();
-    $('#store').textContent=S.store==='costco'?'Costco':'Walmart';route();};
-  $('#store').textContent=S.store==='costco'?'Costco':'Walmart';
 }
 var ICO={home:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10l9-7 9 7v10a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>',
 recipes:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h13a2 2 0 012 2v14H6a2 2 0 01-2-2z"/><path d="M8 8h7M8 12h7"/></svg>',

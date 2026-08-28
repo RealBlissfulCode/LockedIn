@@ -229,7 +229,6 @@ def build(DATA, ING):
       '<header class="top"><div class="topin">'
       '<div class="brand">The Meal <em>Handbook</em></div>'
       '<div class="whoswitch" id="who"></div>'
-      '<button class="tab" id="store" title="Switch store pricing"></button>'
       '<nav class="tabs" id="tabs"></nav></div></header>'
       '<main class="wrap" id="view"></main>'
       '<nav class="btmnav" id="btm"></nav>'

@@ -1,7 +1,7 @@
 /* Offline shell. Bump CACHE when assets change; the version query does the rest. */
-var CACHE='meal-handbook-027be106';
-var CORE=['/','/index.html','/assets/app.css?v=027be106','/assets/app.js?v=027be106',
-          '/assets/data.js?v=027be106','/manifest.webmanifest',
+var CACHE='meal-handbook-7af6849b';
+var CORE=['/','/index.html','/assets/app.css?v=7af6849b','/assets/app.js?v=7af6849b',
+          '/assets/data.js?v=7af6849b','/manifest.webmanifest',
           '/icons/icon.svg','/icons/icon-192.png','/icons/icon-512.png'];
 
 self.addEventListener('install',function(e){
