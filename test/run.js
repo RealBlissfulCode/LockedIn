@@ -433,6 +433,147 @@ async function browserTests() {
     });
     ok('export then import is lossless', roundTrip);
 
+    // Every dialog in the app, opened and driven. These are the paths a route
+    // walk does not touch, and the ones most likely to throw on a rename.
+    group('Dialogs');
+    async function dialog(name, open, drive) {
+      errors.length = 0;
+      try {
+        await open();
+        await page.waitForSelector('.mask', { timeout: 3000 });
+        if (drive) await drive();
+        await page.waitForTimeout(220);
+        // Anything still open gets dismissed so the next case starts clean.
+        while (await page.locator('.mask').count()) {
+          await page.keyboard.press('Escape');
+          await page.waitForTimeout(120);
+        }
+        ok(name, errors.length === 0, errors.slice(0, 2).join(' | '));
+      } catch (e) {
+        ok(name, false, e.message.split('\n')[0]);
+        while (await page.locator('.mask').count()) {
+          await page.keyboard.press('Escape');
+          await page.waitForTimeout(120);
+        }
+      }
+    }
+    const goto = async h => {
+      await page.evaluate(x => { location.hash = x; }, h);
+      await page.waitForTimeout(320);
+    };
+
+    await goto('#/settings');
+    await dialog('profile editor opens and saves',
+      () => page.click('[data-prof="j"]'),
+      async () => {
+        await page.fill('#pfW', '158');
+        await page.waitForTimeout(120);
+        const preview = await page.locator('#pfPreview').innerText();
+        ok('  profile editor previews the new targets', /Kcal/i.test(preview));
+        await page.click('#pfSave');
+      });
+    ok('saving the profile persisted the weight',
+      await page.evaluate(() => window.Handbook.state().prof.j.w === 158));
+
+    await goto('#/training');
+    await dialog('split generator opens and writes the calendar',
+      () => page.click('#splitBtn'),
+      () => page.click('#spGo'));
+    ok('the split reached the calendar',
+      await page.evaluate(() => window.Handbook.dayLog(window.Handbook.today()).workout !== 'rest'));
+
+    await dialog('session detail opens', () => page.click('[data-sess]'));
+
+    await goto('#/shopping/ingredients');
+    await dialog('ingredient editor opens and saves',
+      () => page.click('[data-ie]'),
+      () => page.click('#ieSave'));
+    await dialog('new ingredient needs a name',
+      () => page.click('#ingNew'),
+      async () => {
+        await page.click('#ieSave');
+        ok('  it refuses to save a nameless ingredient',
+          await page.locator('.mask').count() === 1);
+        await page.fill('#ieN', 'Test ingredient');
+        await page.click('#ieSave');
+      });
+
+    await goto('#/shopping/pantry');
+    await dialog('pantry add opens the ingredient picker', () => page.click('#panAdd'));
+
+    await goto('#/shopping');
+    await dialog('shopping item editor opens',
+      () => page.click('[data-ge]'),
+      () => page.click('#seSave'));
+    await dialog('recipe picker opens', () => page.click('#gRecipe'));
+    await dialog('new list asks for a name', () => page.click('#newList'));
+
+    await goto('#/financial');
+    await dialog('job editor opens and saves', () => page.click('#jobAdd'), () => page.click('#jSave'));
+    await dialog('cost editor opens and saves', () => page.click('#costAdd'), () => page.click('#cSave'));
+    await dialog('edit an existing income line', () => page.click('[data-jobe]'));
+    await dialog('edit an existing cost line', () => page.click('[data-coste]'));
+    await dialog('scenario save asks for a name', () => page.click('#scenSave'));
+
+    await goto('#/financial/actual');
+    await dialog('shift editor opens and saves', () => page.click('#shAdd'), () => page.click('#sSave'));
+    ok('the shift was logged',
+      await page.evaluate(() => window.Handbook.state().fin.shifts.length > 0));
+
+    await goto('#/financial/purchases');
+    await dialog('new comparison list asks for a name', () => page.click('#bpNew'));
+
+    await goto('#/schedule');
+    await dialog('event editor opens and saves', () => page.click('#evAdd'), () => page.click('#eSave'));
+    await dialog('spend editor opens and saves', () => page.click('#spAdd'), () => page.click('#spSave'));
+    await dialog('meal picker opens', () => page.click('#mealAdd'));
+    ok('the event reached the day',
+      await page.evaluate(() => {
+        const H = window.Handbook;
+        return H.dayLog(H.calSel).sched.length > 0 && H.dayLog(H.calSel).spend.length > 0;
+      }));
+
+    await goto('#/schedule/week');
+    await dialog('weekly template editor opens and saves',
+      () => page.click('[data-tadd="1"]'), () => page.click('#tSave2'));
+
+    await goto('#/meals');
+    await dialog('own recipe needs a name',
+      () => page.click('#addOwn'),
+      async () => {
+        await page.fill('#on', 'Test recipe');
+        await page.fill('#ok', '400');
+        await page.fill('#op', '30');
+        await page.click('#oSave');
+      });
+    ok('the custom recipe is now in the catalogue',
+      await page.evaluate(() => window.Handbook.all().some(r => r.n === 'Test recipe')));
+
+    await goto('#/r/B-01');
+    await dialog('recipe list picker opens', () => page.click('[data-tolist]'), () => page.click('#lS'));
+    await dialog('put-on-a-day picker opens', () => page.click('[data-plan]'));
+
+    group('Accessibility');
+    await goto('#/meals');
+    ok('recipe cards are reachable from the keyboard',
+      await page.evaluate(() => {
+        const c = document.querySelector('.rc');
+        return c && c.getAttribute('tabindex') === '0' && !!c.getAttribute('aria-label');
+      }));
+    ok('the active tab is marked for screen readers',
+      await page.locator('.tab[aria-current="page"]').count() === 1);
+    await page.evaluate(() => window.Handbook.openPalette());
+    await page.waitForTimeout(200);
+    ok('a dialog announces itself as one',
+      await page.locator('.mask[role="dialog"][aria-modal="true"]').count() === 1);
+    ok('focus lands inside the dialog',
+      await page.evaluate(() => !!document.activeElement.closest('.mask')));
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(200);
+    ok('Escape closes it', await page.locator('.mask').count() === 0);
+    ok('focus returns to the page behind it',
+      await page.evaluate(() => !document.activeElement.closest || !document.activeElement.closest('.mask')));
+
     ok('no errors from any of that', errors.length === 0, errors.slice(0, 3).join('\n      '));
   } finally {
     await browser.close();

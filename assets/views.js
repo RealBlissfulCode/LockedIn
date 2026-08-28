@@ -38,6 +38,15 @@
       H.ringSVG(r) + '</div>';
   }
 
+  function heroPlate() {
+    return '<svg class="heroart" viewBox="0 0 240 140" preserveAspectRatio="xMaxYMid slice" ' +
+      'aria-hidden="true"><g fill="none" stroke="rgba(255,255,255,.16)">' +
+      '<circle cx="176" cy="58" r="46" stroke-width="4"/>' +
+      '<circle cx="176" cy="58" r="26" stroke-width="3"/>' +
+      '<path d="M214 22v78M226 22v26a9 9 0 009 9v43" stroke-width="4" stroke-linecap="round"/>' +
+      '</g></svg>';
+  }
+
   function pscale(v) { return v < 1.6 ? '$' : v < 3.2 ? '$$' : '$$$'; }
 
   function rcard(r) {
@@ -199,7 +208,7 @@
       '<span class="chip">' + E(r.cat) + '</span></div>' +
 
       '<div class="dhero" style="background:linear-gradient(135deg,' + c[0] + ',' + c[1] + ')">' +
-      (ph ? '<img src="' + ph + '" alt="">' : '') +
+      (ph ? '<img src="' + ph + '" alt="">' : heroPlate()) +
       '<div class="scrim"></div><div class="in">' +
       '<div class="chips"><span class="chip">' + E(r.diff) + '</span>' +
       '<span class="chip">' + r.t + ' min</span>' +

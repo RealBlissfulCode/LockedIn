@@ -1,10 +1,24 @@
 {
+  "id": "/",
   "name": "The Handbook",
   "short_name": "Handbook",
-  "description": "Meals, training, shopping, money and schedule.",
+  "description": "Meals, training, shopping, money and schedule for two people. Everything stays on the device.",
+  "lang": "en",
+  "dir": "ltr",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
+  "orientation": "any",
+  "categories": [
+    "food",
+    "health",
+    "fitness",
+    "productivity"
+  ],
   "background_color": "#FBFAF7",
   "theme_color": "#1F4D3A",
   "icons": [
@@ -30,18 +44,27 @@
   "shortcuts": [
     {
       "name": "Meals",
+      "short_name": "Meals",
       "url": "/#/meals"
     },
     {
+      "name": "Plan the week",
+      "short_name": "Plan",
+      "url": "/#/plan"
+    },
+    {
       "name": "Shopping",
+      "short_name": "Shopping",
       "url": "/#/shopping"
     },
     {
-      "name": "Financial",
-      "url": "/#/financial"
+      "name": "Training",
+      "short_name": "Training",
+      "url": "/#/training"
     },
     {
       "name": "Schedule",
+      "short_name": "Schedule",
       "url": "/#/schedule"
     }
   ]
