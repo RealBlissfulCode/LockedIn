@@ -83,18 +83,43 @@ means writing a function in `views.js`, a case in `viewHTML` and a `bind*` in
 ## What the app does on its own
 
 - **Plan a week.** Meals → *Plan the week* → *Generate*. It picks real recipes
-  for each slot, aiming at that day's targets for whichever person is selected,
-  and respects a daily budget, a maximum cook time, favourites-only, and how
-  soon a meal may repeat. Each day shows how close it landed.
+  for each slot, aiming at that day's targets for whichever person is selected.
+  *Change the settings* opens the daily budget, maximum cook time,
+  favourites-only and how soon a meal may repeat; the defaults are enough to
+  press Generate straight away. Each day shows how close it landed.
 - **Turn the plan into a shopping list.** Aggregates every ingredient across the
   planned days, subtracts what is in the pantry, prices each line at the cheaper
   store, and groups it by aisle.
 - **Keep the pantry current.** Ticking a shopping list off and hitting *Move
-  checked into the pantry* stocks it; logging a meal draws it back down.
+  checked into the pantry* (under More) stocks it; logging a meal draws it back
+  down. Aisles collapse as you finish them, and the ones you closed stay closed.
 - **Generate a training split.** Writes a repeating week onto the calendar,
   which is what every macro target keys off.
 - **Apply the weekly template** to a week of the calendar in one go.
 - **Nudge a backup** when the save file is more than a week behind the data.
+
+## How the interface is put together
+
+A few rules the views follow, so a new page fits without thinking about it.
+
+- **One primary action per view.** Whatever you came to do is a filled button.
+  Everything rare — CSV, save to a file, load, delete — goes behind a single
+  **More** menu built with `H.actionBar(id, actions)`. Nine equal buttons in a
+  row means none of them is the answer.
+- **Tables are built with `H.table(cols, rows)`, never by hand.** Below 720px
+  each row restacks into a card with every value labelled from its column
+  header. A column marked `hide: true` is detail that only appears on a wider
+  screen. A long table takes `limit:` and shows the rest on demand, because a
+  forty-row table restacked as cards is a very long page.
+- **Anything you tap is at least 38px**, and a control that is painted smaller
+  than that (a switch, a checkbox) sits inside a larger hit area. On the
+  shopping list the whole row is the tick target.
+- **Nothing may run off the right edge**, at any width, on any route. The test
+  suite walks every page at 390, 768 and 1280 and fails on an element that
+  overflows or clips with no way to scroll to the rest.
+- **A phone gets a different shape, not a squeezed one.** A recipe is a poster
+  on a laptop and a row on a phone; a menu is a popover on a pointer device and
+  a bottom sheet on a touch screen.
 
 ## Keyboard
 
@@ -107,10 +132,11 @@ means writing a function in `views.js`, a case in `viewHTML` and a `bind*` in
 
 ## Your data
 
-**Save** in the top bar downloads the whole state as
-`handbook-data-YYYY-MM-DD.json`: profiles, ingredient edits, every shopping list,
-the pantry, the meal plan, favourites, custom recipes, photos, every logged day,
-shifts, costs, scenarios and the schedule. **Load** restores it.
+**Save to file**, on the Settings page behind the gear, downloads the whole
+state as `handbook-data-YYYY-MM-DD.json`: profiles, ingredient edits, every
+shopping list, the pantry, the meal plan, favourites, custom recipes, photos,
+every logged day, shifts, costs, scenarios and the schedule. **Load a file**
+restores it. Both are also in the Ctrl-K search.
 
 Because storage is per browser and per device, it does not sync between a phone
 and a laptop by itself. Save on one, Load on the other.

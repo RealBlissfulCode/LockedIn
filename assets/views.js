@@ -63,7 +63,7 @@
       '<div class="chips"><span class="chip">' + r.t + ' min</span>' +
       '<span class="chip ' + dc + '">' + diff.charAt(0) + diff.slice(1).toLowerCase() + '</span>' +
       '<span class="chip p">' + pscale(H.cps(r)) + ' ' + money(H.cps(r)) + '</span>' +
-      '<span class="chip t">' + E(H.bestFor(r)) + '</span></div>' +
+      '<span class="chip t bestfor">' + E(H.bestFor(r)) + '</span></div>' +
       '<div class="rcm"><div><b>' + Math.round(r.k) + '</b><span>kcal</span></div>' +
       '<div><b>' + Math.round(r.p) + '</b><span>prot</span></div>' +
       '<div><b>' + Math.round(r.c) + '</b><span>carb</span></div>' +
@@ -73,7 +73,6 @@
 
   /* ============================================================ MEALS */
   H.flt = { q: '', cat: '', tag: '', sort: 'rec', page: 1 };
-  var PAGE = 48;
 
   V.meals = function () {
     var st = S(), ds = H.today(), d = H.dayLog(ds);
@@ -82,24 +81,29 @@
     var rec = H.rank(left, d.workout).slice(0, 8);
     var est = H.estDayCost(tgt, st.prefs.costMode);
     var planned = H.planFor(ds);
+    var eatenAny = got.n > 0;
 
     return '<div class="page"><div class="phead"><h1>Meals</h1>' +
       '<p>' + H.all().length + ' recipes, all gluten-free. Average ' + money(H.avgCost()) +
       ' a serving at the cheaper of Walmart or Costco.</p></div>' +
 
-      '<div class="sec"><div class="spread"><h2>What ' + E(H.P().name) + ' needs today</h2>' +
-      '<button class="b o s" data-nav="plan">Plan the week</button></div>' +
-      '<p class="sub">Adjusted for ' + E(H.TRAIN[d.workout].n.toLowerCase()) +
-      '. Change it on the Training tab.</p>' +
+      '<div class="sec"><div class="spread"><h2>' + E(H.P().name) + ' today</h2>' +
+      '<div class="row"><button class="b o s" data-nav="plan">Plan the week</button>' +
+      '<button class="b o s" id="quickLog">Log a meal</button></div></div>' +
+      '<p class="sub">Targets are set for ' + E(H.TRAIN[d.workout].n.toLowerCase()) +
+      '. Change the session on Training.</p>' +
+
       '<div class="grid g2"><div class="card pad">' + H.statRow(tgt) +
       '<div style="height:16px"></div>' +
       H.bar('Calories', got.kcal, tgt.kcal, 'pk') +
       H.bar('Protein', got.p, tgt.p, 'pp') +
       H.bar('Carbs', got.c, tgt.c, 'pc') +
       H.bar('Fat', got.f, tgt.f, 'pf') +
-      '<p class="sm muted" style="margin-top:12px">Left today: <b>' + Math.round(left.k) +
-      ' kcal</b>, <b>' + Math.round(left.p) + ' g protein</b> &middot; spent ' +
-      money(got.cost) + '</p>' +
+      '<p class="sm muted" style="margin-top:12px">' +
+      (eatenAny
+        ? 'Still to go: <b>' + Math.round(left.k) + ' kcal</b> and <b>' + Math.round(left.p) +
+        ' g protein</b>. Spent ' + money(got.cost) + ' on food so far.'
+        : 'Nothing logged yet today.') + '</p>' +
       (planned.length
         ? '<div class="note" style="margin-bottom:0"><b>Planned for today.</b> ' +
         planned.map(function (m) {
@@ -110,26 +114,27 @@
         : '') +
       '</div>' +
 
-      '<div class="card pad"><h3 style="font-size:15px">What that costs</h3>' +
-      '<p class="sub sm">Estimated food cost to actually hit today\'s numbers.</p>' +
-      '<label class="f"><span>Base the estimate on</span><select id="costMode">' +
-      H.opt([['all', 'Every recipe (average)'], ['cheap', 'The cheapest 40 per calorie'],
-      ['fav', 'My favourites only'], ['logged', 'What we actually logged']], st.prefs.costMode) +
-      '</select></label>' +
-      '<div class="stats">' +
-      H.stat(money(est.byKcal), 'Today', 'acc') +
-      (est.byProt ? H.stat(money(est.byProt), 'By protein') : '') +
-      H.stat(money(est.byKcal * 7), 'Per week') +
-      H.stat(money(est.byKcal * 30), 'Per month') + '</div>' +
-      '<p class="xs muted" style="margin-top:10px">From ' + E(est.src) + '. ' +
-      (est.byProt ? 'The two figures differ because protein is the expensive macro; if they are ' +
-        'far apart the day is protein-heavy relative to its calories.' : '') + '</p>' +
-      '<div class="row" style="margin-top:12px">' +
-      '<button class="b o s" id="bothCost">Cost for both of us</button></div>' +
-      '<div id="bothOut"></div></div></div></div>' +
+      /* One number, one sentence. The old panel put four estimate modes and two
+         competing dollar figures on the busiest screen in the app. */
+      '<div class="card pad"><div class="spread" style="margin-bottom:4px">' +
+      '<h3 style="font-size:15px">What a day costs</h3>' +
+      '<button class="icobtn" id="costMenu" aria-label="Change how this is estimated" ' +
+      'aria-haspopup="menu"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' +
+      '<circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/>' +
+      '<circle cx="12" cy="19" r="1.8"/></svg></button></div>' +
+      '<p class="sub sm">To actually hit today\'s numbers, from ' + E(est.src) + '.</p>' +
+      '<div class="bignum">' + money(est.byKcal) + '<span>a day for ' +
+      E(H.P().name) + '</span></div>' +
+      '<div class="stats" style="margin-top:14px">' +
+      H.stat(money(est.byKcal * 7), 'A week') +
+      H.stat(money(est.byKcal * 30), 'A month') +
+      H.stat(money(bothCost(st)), 'Both of us, a day') +
+      H.stat(money(bothCost(st) * 30), 'Both, a month') + '</div>' +
+      '</div></div></div>' +
 
-      '<div class="sec"><h2>For today</h2>' +
-      '<p class="sub">Ranked for the session and what is left.</p>' +
+      '<div class="sec"><h2>Good picks right now</h2>' +
+      '<p class="sub">Ranked for ' + E(H.TRAIN[d.workout].n.toLowerCase()) +
+      ' and what is left of the day.</p>' +
       '<div class="grid g3" data-stagger>' + rec.map(rcard).join('') + '</div></div>' +
 
       (st.fav.length
@@ -137,29 +142,98 @@
         st.fav.map(H.byId).filter(Boolean).map(rcard).join('') + '</div></div>'
         : '') +
 
-      '<div class="sec"><h2>Everything</h2>' +
-      '<div class="card pad filterbar"><div class="fr">' +
-      '<label class="f"><span>Search</span><input id="fq" type="search" ' +
-      'placeholder="tofu, oats, burger..." value="' + E(H.flt.q) + '"></label>' +
-      '<label class="f"><span>Category</span><select id="fcat">' +
-      H.opt([['', 'All'], ['Breakfast', 'Breakfast'], ['Lunch/Dinner', 'Mains'], ['Snack', 'Snacks'],
-      ['Drink', 'Drinks'], ['SDA Meat/Fish', 'Meat and fish'], ['My recipe', 'Mine']], H.flt.cat) +
-      '</select></label>' +
-      '<label class="f"><span>Best for</span><select id="ftag">' +
-      H.opt([['', 'Any'], ['LEUCINE PRIORITY', 'High protein'], ['CHEAT MEAL', 'Cheat meal'],
-      ['HEALTHY DESSERT', 'Dessert'], ['BUDGET FRIENDLY', 'Cheap'], ['NO-COOK', 'No cooking'],
-      ['MEAL PREP', 'Meal prep'], ['HIGH FIBER', 'High fiber'], ['QUICK', 'Under ten minutes']],
-        H.flt.tag) + '</select></label>' +
-      '<label class="f"><span>Sort</span><select id="fsort">' +
-      H.opt([['rec', 'Protein'], ['cheap', 'Cheapest'], ['kcal_cheap', 'Cheapest per calorie'],
-      ['t', 'Fastest'], ['k', 'Most calories'], ['az', 'A to Z']], H.flt.sort) +
-      '</select></label></div>' +
-      '<div class="row"><button class="b o s" id="addOwn">Add my own recipe</button>' +
-      '<button class="b o s" id="clearFlt">Clear filters</button>' +
-      '<span class="right sm muted" id="fcount"></span></div></div>' +
+      '<div class="sec"><div class="spread"><h2>All ' + H.all().length + ' recipes</h2>' +
+      '<button class="b o s" id="addOwn">Add my own</button></div>' +
+
+      /* Search stays visible; the rest fold into a sheet and come back as chips
+         you can dismiss, so the current filter is always legible. */
+      '<div class="searchbar"><div class="row" style="flex-wrap:nowrap">' +
+      '<input class="inp" id="fq" type="search" placeholder="Search ' + H.all().length +
+      ' recipes…" ' +
+      'value="' + E(H.flt.q) + '" aria-label="Search recipes">' +
+      '<button class="b o" id="fOpen" style="flex:none">Filter' +
+      (activeFilters() ? ' <span class="cnt">' + activeFilters() + '</span>' : '') +
+      '</button></div>' +
+      (activeFilters()
+        ? '<div class="row" style="margin-top:10px">' + filterChips() + '</div>'
+        : '') +
+      '</div>' +
+      '<p class="sm muted" id="fcount" style="margin:12px 0"></p>' +
       '<div class="grid g3" id="fgrid"></div>' +
       '<div class="row" style="justify-content:center;margin-top:20px" id="fmore"></div>' +
       '</div></div>';
+  };
+
+  function bothCost(st) {
+    var w = H.dayLog(H.today()).workout;
+    return H.estDayCost(H.dayTarget('j', w), st.prefs.costMode).byKcal +
+      H.estDayCost(H.dayTarget('a', w), st.prefs.costMode).byKcal;
+  }
+
+  var FILTER_LABELS = {
+    cat: {
+      'Breakfast': 'Breakfast', 'Lunch/Dinner': 'Mains', 'Snack': 'Snacks',
+      'Drink': 'Drinks', 'SDA Meat/Fish': 'Meat and fish', 'My recipe': 'Mine'
+    },
+    tag: {
+      'LEUCINE PRIORITY': 'High protein', 'CHEAT MEAL': 'Cheat meal',
+      'HEALTHY DESSERT': 'Dessert', 'BUDGET FRIENDLY': 'Cheap', 'NO-COOK': 'No cooking',
+      'MEAL PREP': 'Meal prep', 'HIGH FIBER': 'High fiber', 'QUICK': 'Under ten minutes'
+    },
+    sort: {
+      rec: 'Most protein', cheap: 'Cheapest', kcal_cheap: 'Cheapest per calorie',
+      t: 'Fastest', k: 'Most calories', az: 'A to Z'
+    }
+  };
+  H.FILTER_LABELS = FILTER_LABELS;
+
+  function activeFilters() {
+    var n = 0;
+    if (H.flt.cat) n++;
+    if (H.flt.tag) n++;
+    if (H.flt.sort !== 'rec') n++;
+    return n;
+  }
+  H.activeFilters = activeFilters;
+
+  function filterChips() {
+    var out = [];
+    if (H.flt.cat) {
+      out.push('<button class="pill on" data-unflt="cat">' +
+        E(FILTER_LABELS.cat[H.flt.cat] || H.flt.cat) + ' ×</button>');
+    }
+    if (H.flt.tag) {
+      out.push('<button class="pill on" data-unflt="tag">' +
+        E(FILTER_LABELS.tag[H.flt.tag] || H.flt.tag) + ' ×</button>');
+    }
+    if (H.flt.sort !== 'rec') {
+      out.push('<button class="pill on" data-unflt="sort">' +
+        E(FILTER_LABELS.sort[H.flt.sort]) + ' ×</button>');
+    }
+    return out.join('');
+  }
+
+  V.filterBody = function () {
+    return H.form([
+      {
+        id: 'fcat', l: 'Category', t: 'select', v: H.flt.cat,
+        o: [['', 'All']].concat(Object.keys(FILTER_LABELS.cat).map(function (k) {
+          return [k, FILTER_LABELS.cat[k]];
+        }))
+      },
+      {
+        id: 'ftag', l: 'Best for', t: 'select', v: H.flt.tag,
+        o: [['', 'Anything']].concat(Object.keys(FILTER_LABELS.tag).map(function (k) {
+          return [k, FILTER_LABELS.tag[k]];
+        }))
+      },
+      {
+        id: 'fsort', l: 'Sort by', t: 'select', v: H.flt.sort, wide: true,
+        o: Object.keys(FILTER_LABELS.sort).map(function (k) {
+          return [k, FILTER_LABELS.sort[k]];
+        })
+      }
+    ]);
   };
 
   H.filtered = function () {
@@ -218,16 +292,19 @@
       '</span> &middot; ' + money(H.cps(r)) + ' per serving, <span id="totHero">' +
       money(H.ctot(r)) + '</span> total</div></div></div>' +
 
-      '<div class="row" style="margin:16px 0">' +
+      /* One obvious action, the two next-most-used beside it, and the rest in a
+         menu. Seven equal buttons made none of them the answer. */
+      '<div class="actions" style="margin:16px 0">' +
       '<button class="b" data-log="' + id + '">Log to today</button>' +
-      '<button class="b o" data-fav="' + id + '">' + (fav ? '★ Favourited' : '☆ Favourite') + '</button>' +
-      '<button class="b o" data-plan="' + id + '">Put on a day</button>' +
       '<button class="b o" data-groc="' + id + '">Add to shopping</button>' +
-      '<button class="b o" data-tolist="' + id + '">Add to a list</button>' +
-      '<button class="b o" data-photo="' + id + '">' + (ph ? 'Change photo' : 'Add photo') + '</button>' +
-      '<button class="b o" data-card="' + id + '">Save card</button>' +
-      (ph ? '<button class="b o dz" data-rmphoto="' + id + '">Remove photo</button>' : '') +
-      '</div>' +
+      '<button class="b o icon" data-fav="' + id + '" aria-pressed="' + fav + '" ' +
+      'title="' + (fav ? 'Remove from favourites' : 'Add to favourites') + '">' +
+      (fav ? '★' : '☆') + '<span class="lbl-inline">' +
+      (fav ? 'Favourited' : 'Favourite') + '</span></button>' +
+      '<button class="b o more" id="recipeMore" data-rid="' + id + '" aria-haspopup="menu">More' +
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+      'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      '<path d="M6 9l6 6 6-6"/></svg></button></div>' +
 
       '<div class="sec"><div class="stats s6">' +
       H.stat(Math.round(r.k), 'Calories', 'acc') +
@@ -245,9 +322,10 @@
       '<div class="grid g2"><div class="card pad">' +
       '<div class="spread" style="margin-bottom:10px"><h3 style="font-size:16px">Ingredients ' +
       '<span class="muted sm" id="svLabel">for ' + sv + '</span></h3></div>' +
-      '<div class="row" style="margin-bottom:12px"><span class="muted sm">Scale</span>' +
-      [0.5, 1, 1.5, 2, 3, 4].map(function (x) {
-        return '<button class="pill' + (x === 1 ? ' on' : '') + '" data-scale="' + x + '">' + x + 'x</button>';
+      '<div class="seg" role="group" aria-label="Scale the recipe">' +
+      [0.5, 1, 2, 3, 4].map(function (x) {
+        return '<button' + (x === 1 ? ' class="on"' : '') + ' data-scale="' + x + '" ' +
+          'aria-pressed="' + (x === 1) + '">' + (x === 0.5 ? '½' : x) + '×</button>';
       }).join('') + '</div>' +
       '<ul class="ing" id="ingList"></ul>' +
       '<p class="xs muted" style="margin-top:10px">Prices come from the ingredient list. ' +
@@ -283,6 +361,7 @@
     var days = H.planOpts.days;
     var rows = H.planRange(from, days);
     var anyPlanned = rows.some(function (r) { return r.meals.length; });
+    var o = H.planOpts;
 
     var totals = { kcal: 0, p: 0, cost: 0, tk: 0, tp: 0 };
     rows.forEach(function (row) {
@@ -293,36 +372,35 @@
       totals.tk += t.kcal; totals.tp += t.p;
     });
 
+    // One sentence describing what will be generated, so the six controls can
+    // stay folded away until someone actually wants to change something.
+    var summary = days + ' days from ' + H.shortD(from) + ' · ' + o.slots + ' meals a day' +
+      (o.budget === '' ? '' : ' · under ' + money(H.num(o.budget)) + ' a day') +
+      (o.maxMinutes === '' ? '' : ' · nothing over ' + o.maxMinutes + ' min') +
+      (o.favOnly ? ' · favourites only' : '');
+
     return '<div class="page"><div class="phead"><h1>Meal plan</h1>' +
-      '<p>Generate a run of days that lands on ' + E(H.P().name) +
-      '’s macro targets without going over budget, then turn the whole thing ' +
-      'into one shopping list.</p></div>' +
+      '<p>Pick real recipes for a run of days that land on ' + E(H.P().name) +
+      '’s targets, then turn the whole thing into one shopping list.</p></div>' +
 
-      '<div class="card pad filterbar"><div class="fr">' +
-      '<label class="f"><span>Start</span><input id="pFrom" type="date" value="' + from + '"></label>' +
-      '<label class="f"><span>How many days</span><select id="pDays">' +
-      H.opt([[3, '3 days'], [5, '5 days'], [7, 'A week'], [14, 'Two weeks'], [28, 'Four weeks']],
-        H.planOpts.days) + '</select></label>' +
-      '<label class="f"><span>Meals a day</span><select id="pSlots">' +
-      H.opt([[2, '2'], [3, '3'], [4, '4']], H.planOpts.slots) + '</select></label>' +
-      '<label class="f"><span>Budget a day</span>' +
-      '<input id="pBudget" type="number" step="0.5" min="0" placeholder="no limit" value="' +
-      E(H.planOpts.budget) + '"></label>' +
-      '<label class="f"><span>Nothing longer than</span><select id="pMax">' +
-      H.opt([['', 'Any length'], [10, '10 minutes'], [20, '20 minutes'], [35, '35 minutes']],
-        H.planOpts.maxMinutes) + '</select></label>' +
-      '<label class="f"><span>Repeat a meal after</span><select id="pVar">' +
-      H.opt([[1, 'Any time'], [2, '2 days'], [3, '3 days'], [5, '5 days'], [7, 'A week']],
-        H.planOpts.variety) + '</select></label>' +
-      '</div><div class="row">' +
-      '<button class="b" id="pGen">Generate the plan</button>' +
-      '<button class="pill' + (H.planOpts.favOnly ? ' on' : '') + '" id="pFav">Favourites only</button>' +
-      (anyPlanned ? '<button class="b o" id="pShop">Build the shopping list</button>' +
-        '<button class="b o" id="pCsv">Export</button>' +
-        '<button class="b o dz right" id="pClear">Clear the plan</button>' : '') +
-      '</div></div>' +
+      '<div class="card pad hero">' +
+      '<p class="summary">' + E(summary) + '</p>' +
+      '<div class="row">' +
+      '<button class="b lg" id="pGen">' + (anyPlanned ? 'Generate again' : 'Generate the plan') +
+      '</button>' +
+      '<button class="b o" id="pOpts">Change the settings</button>' +
+      (anyPlanned
+        ? '<button class="b o" id="pShop">Build the shopping list</button>'
+        : '') +
+      '</div>' +
+      (anyPlanned
+        ? '<div class="row" style="margin-top:10px">' +
+        '<button class="b o s" id="pCsv">Export as CSV</button>' +
+        '<button class="b o s dz" id="pClear">Clear these days</button></div>'
+        : '') +
+      '</div>' +
 
-      (anyPlanned ? '<div class="stats" style="margin:16px 0">' +
+      (anyPlanned ? '<div class="stats" style="margin:18px 0">' +
         H.stat(money(totals.cost), 'Food for ' + days + ' days', 'acc') +
         H.stat(money(totals.cost / days), 'A day') +
         H.stat(Math.round(totals.kcal / days).toLocaleString(), 'Avg kcal') +
@@ -332,14 +410,44 @@
 
       (anyPlanned
         ? '<div class="sec"><div class="plan" data-stagger>' + rows.map(planDay).join('') + '</div>' +
-        '<p class="sm muted" style="margin-top:14px">Tap any meal to swap it, or open the day ' +
-        'on the schedule to log what actually happened.</p></div>'
+        '<p class="sm muted" style="margin-top:14px">Tap any meal to swap it or change the ' +
+        'portion. Days you have already trained on are planned against that session.</p></div>'
         : '<div class="sec">' + H.empty(
           'No plan yet for these days.',
-          'Generating one picks real recipes so the week lands on the targets, then the ' +
-          'shopping list falls out of it.',
-          '<button class="b" id="pGen2">Generate the plan</button>') + '</div>') +
+          'Generating one picks real recipes so the week lands on the targets, and the ' +
+          'shopping list falls straight out of it.',
+          '<button class="b lg" id="pGen2">Generate the plan</button>') + '</div>') +
       '</div>';
+  };
+
+  /* The generator settings, folded into a dialog. Six selects sitting permanently
+     above the plan pushed the plan itself off the screen. */
+  V.planOptionsBody = function () {
+    var o = H.planOpts;
+    return H.form([
+      { id: 'pFrom', l: 'Start on', t: 'date', v: H.planCursor || H.today() },
+      {
+        id: 'pDays', l: 'How many days', t: 'select', v: o.days,
+        o: [[3, '3 days'], [5, '5 days'], [7, 'A week'], [14, 'Two weeks'], [28, 'Four weeks']]
+      },
+      {
+        id: 'pSlots', l: 'Meals a day', t: 'select', v: o.slots,
+        o: [[2, '2 — two big meals'], [3, '3 — no snack'], [4, '4 — with a snack']]
+      },
+      {
+        id: 'pBudget', l: 'Budget a day', t: 'number', step: '0.5', min: 0, v: o.budget,
+        ph: 'no limit', hint: 'Leave blank to ignore cost.'
+      },
+      {
+        id: 'pMax', l: 'Nothing longer than', t: 'select', v: o.maxMinutes,
+        o: [['', 'Any length'], [10, '10 minutes'], [20, '20 minutes'], [35, '35 minutes']]
+      },
+      {
+        id: 'pVar', l: 'Repeat a meal after', t: 'select', v: o.variety,
+        o: [[1, 'Any time'], [2, '2 days'], [3, '3 days'], [5, '5 days'], [7, 'A week']]
+      }
+    ]) + H.switchRow('pFav', 'Favourites only',
+      'Build the plan out of starred recipes rather than the whole catalogue.', o.favOnly);
   };
 
   function pct(a, b) { return b ? Math.round(a / b * 100) + '%' : '—'; }
@@ -378,78 +486,87 @@
 
     var st = S(), L = H.shopLists(), names = Object.keys(L);
     var cur = H.curList(), items = cur.items || [];
+    var tot = H.listTotals(items);
+    var hide = st.prefs.hideChecked;
+
     var byAisle = {};
     items.forEach(function (it, i) {
       (byAisle[it.aisle] = byAisle[it.aisle] || []).push([it, i]);
     });
-    var order = H.AISLES.map(function (a) { return a[0]; }).concat(['Other']);
-    var tot = H.listTotals(items);
+    var order = H.AISLES.map(function (a) { return a[0]; }).concat(['Other'])
+      .filter(function (a) { return byAisle[a]; });
+
     var cats = {};
     names.forEach(function (n) {
-      var c = L[n].cat || 'Lists';
-      (cats[c] = cats[c] || []).push(n);
+      (cats[L[n].cat || 'Lists'] = cats[L[n].cat || 'Lists'] || []).push(n);
     });
 
-    return '<div class="page"><div class="phead"><h1>Shopping</h1>' +
-      '<p>Every item priced at whichever of Walmart Fort Collins or Costco Timnath is ' +
-      'cheaper for that item.</p></div>' +
+    return '<div class="page"><div class="phead tight"><h1>Shopping</h1>' +
+      '<p>Priced at whichever store is cheaper, item by item.</p></div>' +
 
-      '<div class="sec"><div class="spread"><h2>Lists</h2>' +
-      '<div class="row"><button class="b o s" id="newList">New list</button>' +
-      '<button class="b o s" data-nav="shopping/pantry">Pantry</button>' +
-      '<button class="b o s" data-nav="shopping/ingredients">Ingredient list</button></div></div>' +
+      /* The list picker is one scrolling strip rather than a stack of sections. */
+      '<div class="listbar">' +
       Object.keys(cats).sort().map(function (c) {
-        return '<div style="margin:10px 0"><div class="lbl" style="margin-bottom:7px">' + E(c) + '</div>' +
-          '<div class="row">' + cats[c].map(function (n) {
-            return '<button class="pill' + (n === st.shop.active ? ' on' : '') +
-              '" data-list="' + E(n) + '">' + (L[n].fav ? '★ ' : '') + E(n) +
-              ' <span class="muted">' + L[n].items.length + '</span></button>';
-          }).join('') + '</div></div>';
-      }).join('') + '</div>' +
+        return cats[c].sort().map(function (n) {
+          var n2 = H.listTotals(L[n].items);
+          return '<button class="listchip' + (n === st.shop.active ? ' on' : '') +
+            '" data-list="' + E(n) + '">' +
+            '<span class="nm">' + (L[n].fav ? '★ ' : '') + E(n) + '</span>' +
+            '<span class="mt">' + L[n].items.length + ' · ' + money0(n2.todo) + '</span>' +
+            '</button>';
+        }).join('');
+      }).join('') +
+      '<button class="listchip add" id="newList" aria-label="New list">+</button></div>' +
 
-      '<div class="sec"><div class="spread"><h2>' + E(st.shop.active) + '</h2>' +
-      '<div class="row"><button class="b o s" id="listFav">' +
-      (cur.fav ? '★ Favourite' : '☆ Favourite') + '</button>' +
-      '<button class="b o s" id="listRename">Rename</button>' +
-      '<button class="b o s" id="listDup">Duplicate</button>' +
-      '<button class="b o s dz" id="listDel">Delete</button></div></div>' +
+      '<div class="col">' +
+      '<div class="spread" style="margin:22px 0 4px">' +
+      '<h2 style="font-size:23px">' + E(st.shop.active) + '</h2>' +
+      '<button class="icobtn" id="listMenu" aria-label="List options" aria-haspopup="menu">' +
+      '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' +
+      '<circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/>' +
+      '<circle cx="12" cy="19" r="1.8"/></svg></button></div>' +
 
       '<div class="stats" style="margin:12px 0">' +
       H.stat(money0(tot.todo), 'Still to buy', 'acc', 'shopTodo') +
-      H.stat(tot.n, 'Items', '', 'shopCount') +
+      H.stat(tot.n - tot.done, 'Left', '', 'shopCount') +
       H.stat(money0(tot.got), 'In the cart', '', 'shopGot') +
       H.stat(tot.aisles, 'Aisles') + '</div>' +
 
-      '<div class="row" style="margin-bottom:14px">' +
-      '<button class="b" id="gAdd">Add item</button>' +
-      '<button class="b o" id="gRecipe">Add from a recipe</button>' +
-      '<button class="b o" id="gPlan">Build from the meal plan</button>' +
-      '<button class="b o" id="gTxt">Checklist</button>' +
-      '<button class="b o" id="gCsv">CSV</button>' +
-      '<button class="b o" id="gSave">Save to file</button>' +
-      '<button class="b o" id="gLoad">Load</button></div>' +
-      '<div class="row" style="margin-bottom:14px">' +
-      '<button class="b o" id="gStock">Move checked into the pantry</button>' +
-      '<button class="b o dz right" id="gClear">Clear checked</button></div>' +
+      H.actionBar('shop', [
+        { label: 'Add an item', primary: true, run: H.act.gAdd },
+        { label: 'From a recipe', keep: true, run: H.act.gRecipe },
+        { label: 'Build from the meal plan', hint: 'a whole week at once', run: H.act.gPlan },
+        { label: 'Move checked into the pantry', run: H.act.gStock },
+        { label: 'Download a checklist', run: H.act.gTxt },
+        { label: 'Download as CSV', run: H.act.gCsv },
+        { label: 'Save this list to a file', run: H.act.gSave },
+        { label: 'Load a saved list', run: H.act.gLoad },
+        { label: 'Clear what is checked', danger: true, run: H.act.gClear }
+      ]) +
 
       (items.length
-        ? '<div id="shopBody">' + order.filter(function (a) { return byAisle[a]; }).map(function (a) {
+        ? (tot.done
+          ? '<div class="row" style="margin:-4px 0 14px">' +
+          '<button class="pill' + (hide ? ' on' : '') + '" id="hideChecked">' +
+          (hide ? 'Showing what is left' : 'Hide the ' + tot.done + ' in the cart') +
+          '</button></div>'
+          : '') +
+        '<div id="shopBody">' + order.map(function (a) {
           var rows = byAisle[a];
-          var st2 = rows.reduce(function (x, p) { return x + (p[0].done ? 0 : p[0].price * p[0].qty); }, 0);
-          return '<div class="card" style="margin-bottom:12px;overflow:hidden">' +
-            '<div class="aisle">' + E(a) + '<span>' + money0(st2) + '</span></div>' +
-            rows.map(function (p) {
-              var it = p[0], i = p[1];
-              return '<div class="gitem' + (it.done ? ' done' : '') + '">' +
-                '<input type="checkbox" data-gt="' + i + '"' + (it.done ? ' checked' : '') +
-                ' aria-label="' + E(it.name) + '">' +
-                '<div style="flex:1;min-width:0"><div class="gn">' + E(it.name) + '</div>' +
-                '<div class="gq">' + (it.qty > 1 ? it.qty + ' × ' : '') + E(it.note || '') +
-                (it.key ? ' &middot; ' + E(H.bestStore(H.ING(it.key))) : '') + '</div></div>' +
-                '<span class="gp">' + money(it.price * it.qty) + '</span>' +
-                '<button class="b o s" data-ge="' + i + '">Edit</button>' +
-                '<button class="x" data-gd="' + i + '" aria-label="Remove">&times;</button></div>';
-            }).join('') + '</div>';
+          var left = rows.filter(function (p) { return !p[0].done; });
+          var subtotal = left.reduce(function (x, p) { return x + p[0].price * p[0].qty; }, 0);
+          var visible = hide ? left : rows;
+          var open = st.prefs.closedAisles.indexOf(a) < 0;
+          return '<section class="aislegrp' + (open ? '' : ' shut') + '">' +
+            '<button class="aisle" data-aisle="' + E(a) + '" aria-expanded="' + open + '">' +
+            '<span class="ar" aria-hidden="true"></span>' +
+            '<span class="an">' + E(a) + '</span>' +
+            '<span class="ac">' + (left.length ? left.length + ' left · ' + money0(subtotal)
+              : 'all in the cart') + '</span></button>' +
+            '<div class="aisleitems">' + (visible.length
+              ? visible.map(function (p) { return gitem(p[0], p[1]); }).join('')
+              : '<p class="xs muted" style="padding:14px 18px;margin:0">Everything here is in ' +
+              'the cart.</p>') + '</div></section>';
         }).join('') + '</div>'
         : H.empty('Nothing on this list.',
           'Add an item, open a recipe and hit Add to shopping, or build the whole list ' +
@@ -457,6 +574,24 @@
           '<button class="b" id="gPlan2">Build from the meal plan</button>')) +
       '</div></div>';
   };
+
+  /* One row of a shopping list. The whole row is the tick target — in a shop you
+     are holding a phone one-handed, not aiming at a 19px checkbox — and the two
+     rare actions live behind the row menu. */
+  function gitem(it, i) {
+    return '<div class="gitem' + (it.done ? ' done' : '') + '">' +
+      '<label class="gtick"><input type="checkbox" data-gt="' + i + '"' +
+      (it.done ? ' checked' : '') + ' aria-label="' + E(it.name) + '">' +
+      '<span class="box" aria-hidden="true"></span>' +
+      '<span class="gtext"><span class="gn">' + E(it.name) + '</span>' +
+      '<span class="gq">' + (it.qty > 1 ? it.qty + ' × ' : '') + E(it.note || '') +
+      (it.key ? ' · ' + E(H.bestStore(H.ING(it.key))) : '') + '</span></span></label>' +
+      '<span class="gp">' + money(it.price * it.qty) + '</span>' +
+      '<button class="rowmenu" data-gm="' + i + '" aria-label="Options for ' + E(it.name) + '" ' +
+      'aria-haspopup="menu"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' +
+      '<circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/>' +
+      '<circle cx="12" cy="19" r="1.7"/></svg></button></div>';
+  }
 
   V.pantry = function () {
     var st = S();
@@ -466,32 +601,32 @@
       return a + (st.pantry[k].g / 100) * H.best(H.ING(k));
     }, 0);
 
-    return '<div class="page"><div class="phead"><h1>Pantry</h1>' +
-      '<p>What is already in the cupboard. A generated shopping list subtracts this ' +
-      'first, and logging a meal draws it back down.</p></div>' +
+    return '<div class="page"><div class="phead tight"><h1>Pantry</h1>' +
+      '<p>What is already in the cupboard. A generated list skips it, and logging a ' +
+      'meal draws it back down.</p></div>' +
 
-      '<div class="row" style="margin-bottom:14px">' +
-      '<button class="b" id="panAdd">Add something</button>' +
-      '<button class="b o" data-nav="shopping">&larr; Lists</button>' +
-      '<button class="b o" id="panCsv">Export</button>' +
-      (keys.length ? '<button class="b o dz right" id="panClear">Empty the pantry</button>' : '') +
-      '</div>' +
+      H.actionBar('pan', [
+        { label: 'Add something', primary: true, run: H.act.panAdd },
+        { label: 'Back to lists', keep: true, run: function () { H.nav('shopping'); } },
+        { label: 'Export as CSV', run: H.act.panCsv },
+        { label: 'Empty the pantry', danger: true, run: H.act.panClear }
+      ]) +
 
       (keys.length
         ? '<div class="stats" style="margin-bottom:16px">' +
         H.stat(keys.length, 'Things in stock', 'acc') +
         H.stat(money0(value), 'Roughly worth') + '</div>' +
-        '<div class="tw"><table><thead><tr><th>Ingredient</th><th>Aisle</th>' +
-        '<th>In stock</th><th>Value</th><th></th></tr></thead><tbody>' +
-        keys.map(function (k) {
-          var g = H.ING(k), grams = st.pantry[k].g;
-          return '<tr><td><b>' + E(g.n) + '</b></td>' +
-            '<td class="sm muted">' + E(g.a || 'Other') + '</td>' +
-            '<td class="num">' + Math.round(grams) + ' g</td>' +
-            '<td class="num">' + money(grams / 100 * H.best(g)) + '</td>' +
-            '<td><button class="b o s" data-pane="' + E(k) + '">Edit</button> ' +
-            '<button class="x" data-pand="' + E(k) + '" aria-label="Remove">&times;</button></td></tr>';
-        }).join('') + '</tbody></table></div>'
+        H.table([{ h: 'Ingredient' }, { h: 'Aisle' }, { h: 'In stock', cls: 'num' },
+        { h: 'Value', cls: 'num' }, { h: '' }],
+          keys.map(function (k) {
+            var g = H.ING(k), grams = st.pantry[k].g;
+            return ['<b>' + E(g.n) + '</b>',
+              '<span class="sm muted">' + E(g.a || 'Other') + '</span>',
+              Math.round(grams) + ' g',
+              money(grams / 100 * H.best(g)),
+              '<button class="b o s" data-pane="' + E(k) + '">Edit</button> ' +
+              '<button class="x" data-pand="' + E(k) + '" aria-label="Remove">&times;</button>'];
+          }))
         : H.empty('The pantry is empty.',
           'Tick things off a shopping list and hit "Move checked into the pantry", or add ' +
           'what is already in the cupboard by hand.',
@@ -503,20 +638,18 @@
     var st = S();
     var count = H.allIngKeys().length;
     var edited = Object.keys(st.ingOv).length;
-    return '<div class="page"><div class="phead"><h1>Ingredient list</h1>' +
-      '<p>The master list every recipe price comes from. Edit a price here and all ' +
-      H.all().length + ' recipes recost instantly. ' + edited + ' edited or added so far.</p></div>' +
-      '<div class="card pad filterbar"><div class="row">' +
-      '<button class="b" id="ingNew">Add an ingredient</button>' +
-      '<button class="b o" data-nav="shopping">&larr; Back to lists</button>' +
-      '<button class="b o" id="ingCsv">Export list</button>' +
-      '<input class="inp right" id="ingQ" type="search" style="max-width:260px" ' +
-      'placeholder="Search ' + count + ' ingredients" aria-label="Search ingredients">' +
-      '</div></div>' +
-      '<div class="tw"><table><thead><tr><th>Ingredient</th><th>Aisle</th>' +
-      '<th>Walmart /100g</th><th>Costco /100g</th><th>Best</th><th>Used in</th><th></th></tr></thead>' +
-      '<tbody id="ingBody"></tbody></table></div>' +
-      '<p class="sm muted" id="ingCount" style="margin-top:10px"></p></div>';
+    return '<div class="page"><div class="phead tight"><h1>Ingredient list</h1>' +
+      '<p>Every recipe price comes from here. Edit one and all ' + H.all().length +
+      ' recipes recost.' + (edited ? ' ' + edited + ' edited so far.' : '') + '</p></div>' +
+      H.actionBar('ing', [
+        { label: 'Add an ingredient', primary: true, run: H.act.ingNew },
+        { label: 'Back to lists', keep: true, run: function () { H.nav('shopping'); } },
+        { label: 'Export as CSV', run: H.act.ingCsv }
+      ]) +
+      '<div class="searchbar"><input class="inp" id="ingQ" type="search" ' +
+      'placeholder="Search ' + count + ' ingredients" aria-label="Search ingredients"></div>' +
+      '<p class="sm muted" id="ingCount" style="margin:12px 0"></p>' +
+      '<div id="ingBody"></div></div>';
   };
 
   /* ============================================================ TRAINING */
@@ -536,14 +669,14 @@
     var wSeries = H.weightSeries(90);
     var suggested = H.sessionsFor(d.workout);
 
-    var rows = Object.keys(H.TRAIN).map(function (k) {
+    var macroRows = Object.keys(H.TRAIN).map(function (k) {
       var tt = H.dayTarget(st.who, k);
-      return '<tr' + (d.workout === k ? ' class="hl"' : '') + '>' +
-        '<td><b>' + E(H.TRAIN[k].n) + '</b></td>' +
-        '<td class="num">' + tt.kcal + '</td><td class="num">' + tt.p + ' g</td>' +
-        '<td class="num">' + tt.c + ' g</td><td class="num">' + tt.f + ' g</td>' +
-        '<td class="sm muted">' + E(H.TRAIN[k].why.split('.')[0]) + '.</td></tr>';
-    }).join('');
+      return {
+        attrs: d.workout === k ? 'class="hl"' : '',
+        cells: ['<b>' + E(H.TRAIN[k].n) + '</b>', tt.kcal, tt.p + ' g', tt.c + ' g', tt.f + ' g',
+          '<span class="sm muted">' + E(H.TRAIN[k].why.split('.')[0]) + '.</span>']
+      };
+    });
 
     return '<div class="page"><div class="phead"><h1>Training</h1>' +
       '<p>' + H.EX.length + ' exercises, ' + H.SESS.length + ' prebuilt sessions, and the ' +
@@ -604,9 +737,10 @@
       }).join('') + '</div></div>' +
 
       '<div class="sec"><h2>Macro shift by session</h2>' +
-      '<div class="tw"><table><thead><tr><th>Session</th><th>Kcal</th><th>Protein</th>' +
-      '<th>Carbs</th><th>Fat</th><th>Why</th></tr></thead><tbody>' + rows +
-      '</tbody></table></div></div></div>';
+      '<p class="sub">What each session type does to the day\'s targets.</p>' +
+      H.table([{ h: 'Session' }, { h: 'Kcal', cls: 'num' }, { h: 'Protein', cls: 'num' },
+      { h: 'Carbs', cls: 'num' }, { h: 'Fat', cls: 'num' }, { h: 'Why' }], macroRows) +
+      '</div></div>';
   };
 
   V.exercises = function () {
@@ -707,30 +841,33 @@
       '</div></div></div>' +
 
       '<div class="sec"><div class="spread"><h2>Income lines</h2>' +
-      '<button class="b o s" id="jobAdd2">Add</button></div><div class="tw"><table>' +
-      '<thead><tr><th>Who</th><th>Name</th><th>Employer</th><th>Low</th><th>Realistic</th>' +
-      '<th>High</th><th></th></tr></thead><tbody>' +
-      st.fin.jobs.map(function (j) {
-        return '<tr><td><span class="chip">' + E(H.nameOf(j.who)) + '</span></td>' +
-          '<td><b>' + E(j.name) + '</b></td><td class="sm muted">' + E(j.employer || '') + '</td>' +
-          '<td class="num">' + money0(j.low) + '</td><td class="num"><b>' + money0(j.real) + '</b></td>' +
-          '<td class="num">' + money0(j.high) + '</td>' +
-          '<td><button class="b o s" data-jobe="' + E(j.id) + '">Edit</button></td></tr>';
-      }).join('') + '</tbody></table></div></div>' +
+      '<button class="b o s" id="jobAdd2">Add income</button></div>' +
+      '<p class="sub">What each of us brings in a month, at three levels of luck.</p>' +
+      H.table([{ h: 'Name' }, { h: 'Who' }, { h: 'Employer', hide: true },
+      { h: 'Low', cls: 'num', hide: true }, { h: 'Realistic', cls: 'num' },
+      { h: 'High', cls: 'num', hide: true }, { h: '' }],
+        st.fin.jobs.map(function (j) {
+          return ['<b>' + E(j.name) + '</b>',
+            '<span class="chip">' + E(H.nameOf(j.who)) + '</span>',
+            '<span class="sm muted">' + E(j.employer || '—') + '</span>',
+            money0(j.low), '<b>' + money0(j.real) + '</b>', money0(j.high),
+            '<button class="b o s" data-jobe="' + E(j.id) + '">Edit</button>'];
+        }), { emptyTitle: 'No income lines yet.', limit: 12 }) + '</div>' +
 
       '<div class="sec"><div class="spread"><h2>Cost lines</h2>' +
-      '<button class="b o s" id="costAdd">Add</button></div><div class="tw"><table>' +
-      '<thead><tr><th>Section</th><th>Cost</th><th>Who</th><th>Low</th><th>Realistic</th>' +
-      '<th>High</th><th>Actual</th><th></th></tr></thead><tbody>' +
-      st.fin.costs.map(function (c) {
-        return '<tr><td class="sm muted">' + E(c.section) + '</td>' +
-          '<td><b>' + E(c.name) + '</b></td>' +
-          '<td><span class="chip">' + E(H.nameOf(c.who)) + '</span></td>' +
-          '<td class="num">' + money0(c.low) + '</td><td class="num"><b>' + money0(c.real) + '</b></td>' +
-          '<td class="num">' + money0(c.high) + '</td>' +
-          '<td class="num">' + (c.actual ? money0(c.actual) : '—') + '</td>' +
-          '<td><button class="b o s" data-coste="' + E(c.id) + '">Edit</button></td></tr>';
-      }).join('') + '</tbody></table></div></div></div>';
+      '<button class="b o s" id="costAdd">Add cost</button></div>' +
+      '<p class="sub">Every recurring bill, by section.</p>' +
+      H.table([{ h: 'Cost' }, { h: 'Section', hide: true }, { h: 'Who' },
+      { h: 'Low', cls: 'num', hide: true }, { h: 'Realistic', cls: 'num' },
+      { h: 'High', cls: 'num', hide: true }, { h: 'Actual', cls: 'num' }, { h: '' }],
+        st.fin.costs.map(function (c) {
+          return ['<b>' + E(c.name) + '</b>',
+            '<span class="sm muted">' + E(c.section) + '</span>',
+            '<span class="chip">' + E(H.nameOf(c.who)) + '</span>',
+            money0(c.low), '<b>' + money0(c.real) + '</b>', money0(c.high),
+            c.actual ? money0(c.actual) : '—',
+            '<button class="b o s" data-coste="' + E(c.id) + '">Edit</button>'];
+        }), { emptyTitle: 'No cost lines yet.', limit: 12 }) + '</div></div>';
   };
 
   V.actual = function () {
@@ -747,10 +884,11 @@
     return '<div class="page"><div class="phead"><h1>Actual earnings</h1>' +
       '<p>Log real shifts. Averages, effective hourly and after-tax rate all come from ' +
       'what actually landed, not the plan.</p></div>' +
-      '<div class="row" style="margin-bottom:14px">' +
-      '<button class="b" id="shAdd">Log a shift</button>' +
-      '<button class="b o" id="shCsv">Export shifts</button>' +
-      '<button class="b o" data-nav="financial">&larr; Plan</button></div>' +
+      H.actionBar('act', [
+        { label: 'Log a shift', primary: true, run: H.act.shAdd },
+        { label: 'Back to the plan', keep: true, run: function () { H.nav('financial'); } },
+        { label: 'Export shifts as CSV', run: H.act.shCsv }
+      ]) +
 
       '<div class="sec"><h2>Last 90 days</h2><div class="grid g2">' +
       ['Jaron', 'Aaliyah'].map(function (w) {
@@ -787,20 +925,24 @@
         : '') +
 
       '<div class="sec"><h2>Shifts</h2>' +
-      (shifts.length
-        ? '<div class="tw"><table><thead><tr><th>Date</th><th>Job</th><th>Hours</th>' +
-        '<th>Gross</th><th>Net</th><th>Note</th><th></th></tr></thead><tbody>' +
-        shifts.slice(0, 80).map(function (s) {
+      H.table([{ h: 'Date' }, { h: 'Job' }, { h: 'Hours', cls: 'num' },
+      { h: 'Gross', cls: 'num', hide: true }, { h: 'Net', cls: 'num' },
+      { h: 'Note', hide: true }, { h: '' }],
+        shifts.slice(0, 80).map(function (sh) {
           var j = null;
-          st.fin.jobs.forEach(function (x) { if (x.id === s.jobId) j = x; });
-          return '<tr><td>' + E(H.shortD(s.date)) + '</td>' +
-            '<td>' + E(j ? j.name : '?') + '</td><td class="num">' + s.hours + '</td>' +
-            '<td class="num">' + money0(s.gross) + '</td><td class="num">' + money0(s.net) + '</td>' +
-            '<td class="sm muted">' + E(s.note || '') + '</td>' +
-            '<td><button class="x" data-shd="' + E(s.id) + '" aria-label="Delete">&times;</button></td></tr>';
-        }).join('') + '</tbody></table></div>'
-        : H.empty('No shifts logged.', 'Log one and the numbers above start coming from real data.',
-          '<button class="b" id="shAdd2">Log a shift</button>')) +
+          st.fin.jobs.forEach(function (x) { if (x.id === sh.jobId) j = x; });
+          return ['<b>' + E(H.shortD(sh.date)) + '</b>',
+            E(j ? j.name : '?'), sh.hours, money0(sh.gross), money0(sh.net),
+            '<span class="sm muted">' + E(sh.note || '—') + '</span>',
+            '<button class="x" data-shd="' + E(sh.id) + '" aria-label="Delete">&times;</button>'];
+        }), {
+        limit: 12,
+        emptyTitle: 'No shifts logged.',
+        emptySub: 'Log one and the numbers above start coming from real data.',
+        emptyAction: '<button class="b" id="shAdd2">Log a shift</button>'
+      }) +
+      (shifts.length > 80 ? '<p class="sm muted" style="margin-top:10px">Showing the most ' +
+        'recent 80 of ' + shifts.length + '.</p>' : '') +
       '</div></div>';
   };
 
