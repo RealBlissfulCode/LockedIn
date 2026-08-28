@@ -1,78 +1,90 @@
-# The Meal Handbook
+# The Handbook
 
-A gluten-free meal system for two people. 251 recipes with computed macros and Fort Collins
-pricing, a live calculator, a training-aware recommender, a grocery list builder, and a daily log.
+Meals, training, shopping, money and schedule for two people, in one static site.
+No framework, no build step, no backend, no accounts.
 
-Static site. No framework, no build step, no dependencies. Three files do the work.
+- **251 recipes**, all gluten-free, macros computed from gram weights
+- **168 ingredients** with Walmart Fort Collins and Costco Timnath prices, fully editable
+- **211 exercises** and 32 prebuilt sessions
+- **Financial** planning and real earnings tracking, seeded from the Moving In workbook
+- **Schedule** with a weekly template and a shared calendar
 
 ## Deploy to Netlify
 
-**Option A, drag and drop.** Go to app.netlify.com, drag this folder onto the deploy area. Live in
-about ten seconds. Fine for a first look, but you lose git history.
+**Drag and drop.** Drop this folder onto app.netlify.com. Live in seconds.
 
-**Option B, connect the repo.** This is the one worth doing.
-
-1. Create an empty repo on GitHub, then from this folder:
-   ```
-   git init
-   git add .
-   git commit -m "Meal handbook"
-   git branch -M main
-   git remote add origin git@github.com:YOURNAME/meal-handbook.git
-   git push -u origin main
-   ```
-2. In Netlify: Add new site, Import an existing project, pick the repo.
-3. Build command: leave empty. Publish directory: `.`
-4. Deploy.
-
-Every push to `main` redeploys automatically. `netlify.toml` already sets the caching and
-security headers, so there is nothing to configure in the dashboard.
-
-## Repository layout
+**From the repo.** Better, because every push redeploys.
 
 ```
-index.html               shell, meta tags, service worker registration
-assets/app.css           the whole design system
-assets/app.js            router, views, calculator, recommender, downloads
-assets/data.js           251 recipes + 167 ingredients as window.MH_DATA
-manifest.webmanifest     makes it installable on a phone
+git init
+git add .
+git commit -m "Handbook"
+git branch -M main
+git remote add origin https://github.com/YOURNAME/Meal-App.git
+git push -u origin main
+```
+
+Then Netlify: Add new site, Import an existing project, pick the repo.
+Build command **empty**, publish directory `.` — `netlify.toml` already sets headers,
+caching and the SPA fallback.
+
+## Layout
+
+```
+index.html               shell and meta
+assets/app.css           the design system
+assets/app.js            state, router, all five sections
+assets/data.js           recipes, ingredients, exercises, sessions, seed budget
+manifest.webmanifest     installable on a phone
 sw.js                    offline cache
 icons/                   app icons
-netlify.toml             headers, caching, SPA fallback
-src/                     Python that generates assets/data.js (optional)
+netlify.toml             headers, caching, redirects
+src/                     Python that regenerates assets/data.js
 ```
+
+## Your data
+
+Everything lives in this browser's localStorage on this device. Nothing is uploaded,
+there is no backend and no analytics.
+
+**Save** in the top bar downloads the whole state as `handbook-data-YYYY-MM-DD.json`:
+profiles, ingredient edits, every shopping list, favourites, custom recipes, photos,
+every logged day, shifts, costs, scenarios and the schedule. **Load** restores it.
+
+That file is also how you hand the data back for changes. Send the JSON and the next
+version can be built on top of exactly what is in it, rather than starting clean.
+
+Because storage is per browser and per device, it does not sync between a phone and a
+laptop by itself. Save on one, Load on the other.
+
+Storage caps at roughly 5 MB. Photos are the only thing big enough to matter; they are
+downscaled to 900 px and compressed on the way in.
 
 ## Editing
 
-**Change how it looks** -> `assets/app.css`.
-**Change how it behaves** -> `assets/app.js`. Views are `vHome`, `vRecipes`, `vRecipe`,
-`vGrocery`, `vTraining`, `vCalendar`, `vLearn`. Each returns an HTML string.
-**Change a recipe or a price** -> `assets/data.js` is generated, so edit the Python in `src/`
-and re-run, or hand-edit the JSON if it is a one-off. Prices live in `src/prices.py` as dollars
-per 100 g, two columns, Walmart and Costco.
+- **Look** -> `assets/app.css`
+- **Behaviour** -> `assets/app.js`. Views are `vMeals`, `vRecipe`, `vShopping`,
+  `vIngredients`, `vTraining`, `vExercises`, `vFinancial`, `vActual`, `vPurchases`,
+  `vSchedule`, `vWeekTemplate`. Each returns an HTML string.
+- **Recipes, prices, exercises** -> `assets/data.js` is generated. Edit the Python in
+  `src/` and re-run, or edit an ingredient price directly in the app, which is easier
+  and updates every recipe that uses it.
 
 Regenerate the data file:
+
 ```
-cd src && python3 repo.py
+cd src && python3 repo2.py
 ```
 
-## Data and privacy
+## Downloads the app can produce
 
-Everything the app saves stays in the browser's localStorage on the device. Favourites, lists,
-photos, the daily log, both profiles. Nothing is sent anywhere, there is no backend and no
-analytics. That also means it does not sync between phone and laptop. Use Export backup on the
-Learn page to move it.
-
-Storage limit is around 5 MB, and photos are the only thing large enough to matter. They are
-downscaled to 900 px and compressed on the way in, so a few dozen is fine.
-
-## Installing on a phone
-
-Open the site in Chrome or Safari, then Add to Home Screen. It runs full screen without browser
-chrome and works offline after the first load.
+Recipe cards as PNG, shopping checklists as TXT, shopping lists as CSV, a single
+shopping list as JSON that can be loaded back, the ingredient list as CSV, shifts as
+CSV, the daily log as CSV, and the whole state as JSON.
 
 ## Known limits
 
-- localStorage is per browser and per device. No sync by design.
-- Prices are Aug 2026 estimates for Fort Collins and drift. They are one file to update.
-- Leucine values are estimates within about 10 percent where USDA has no amino acid profile.
+- No sync between devices. By design, since there is no server.
+- Prices are Aug 2026 estimates for Fort Collins and drift. Edit them in the app.
+- Leucine is an estimate within about 10 percent where USDA has no amino acid profile.
+- Recipe photos are yours to add. No stock imagery is bundled.

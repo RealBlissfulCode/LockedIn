@@ -1,13 +1,12 @@
 {
-  "name": "The Meal Handbook",
-  "short_name": "Meals",
-  "description": "Gluten-free meal system, calculator, grocery builder and daily log.",
+  "name": "The Handbook",
+  "short_name": "Handbook",
+  "description": "Meals, training, shopping, money and schedule.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "orientation": "portrait",
-  "background_color": "#F6F9FC",
-  "theme_color": "#0A1A2F",
+  "background_color": "#FBFAF7",
+  "theme_color": "#1F4D3A",
   "icons": [
     {
       "src": "/icons/icon-192.png",
@@ -30,16 +29,20 @@
   ],
   "shortcuts": [
     {
-      "name": "Today",
-      "url": "/#/"
+      "name": "Meals",
+      "url": "/#/meals"
     },
     {
-      "name": "Recipes",
-      "url": "/#/recipes"
+      "name": "Shopping",
+      "url": "/#/shopping"
     },
     {
-      "name": "Grocery list",
-      "url": "/#/grocery"
+      "name": "Financial",
+      "url": "/#/financial"
+    },
+    {
+      "name": "Schedule",
+      "url": "/#/schedule"
     }
   ]
 }
