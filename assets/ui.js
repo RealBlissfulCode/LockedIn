@@ -21,7 +21,7 @@
     if (html != null) n.innerHTML = html;
     return n;
   }
-  H.$ = $; H.$$ = $$; H.on = on; H.el = el;
+  H.$ = $; H.$$ = $$; H.on = on;
 
   function setText(sel, v) { var e = $(sel); if (e) e.textContent = v; }
   H.setText = setText;
@@ -217,16 +217,6 @@
   }
   H.form = form;
 
-  function readForm(m, fields) {
-    var out = {};
-    fields.forEach(function (f) {
-      var n = $('#' + f.id, m);
-      if (!n) return;
-      out[f.id] = f.t === 'number' ? H.num(n.value, f.v == null ? 0 : f.v) : n.value;
-    });
-    return out;
-  }
-  H.readForm = readForm;
 
   function switchRow(id, title, sub, checked) {
     return '<div class="swrow"><div class="t"><b>' + E(title) + '</b>' +
@@ -421,8 +411,9 @@
   }
   H.bar = bar;
 
-  function stat(value, label, cls) {
-    return '<div class="stat' + (cls ? ' ' + cls : '') + '"><b>' + value + '</b>' +
+  function stat(value, label, cls, id) {
+    return '<div class="stat' + (cls ? ' ' + cls : '') + '">' +
+      '<b' + (id ? ' id="' + id + '"' : '') + '>' + value + '</b>' +
       '<span>' + E(label) + '</span></div>';
   }
   H.stat = stat;

@@ -1992,11 +1992,9 @@
 
   function updateShopTotals() {
     var tot = H.listTotals(H.curList().items);
-    var stats = $$('.stats .stat b');
-    if (stats.length >= 4) {
-      stats[0].textContent = money0(tot.todo);
-      stats[2].textContent = money0(tot.got);
-    }
+    H.setText('#shopTodo', money0(tot.todo));
+    H.setText('#shopGot', money0(tot.got));
+    H.setText('#shopCount', tot.n);
   }
 
   /* Recipe cards are links, so they answer to Enter and Space as well as a click. */

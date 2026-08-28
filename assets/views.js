@@ -415,9 +415,9 @@
       '<button class="b o s dz" id="listDel">Delete</button></div></div>' +
 
       '<div class="stats" style="margin:12px 0">' +
-      H.stat(money0(tot.todo), 'Still to buy', 'acc') +
-      H.stat(tot.n, 'Items') +
-      H.stat(money0(tot.got), 'In the cart') +
+      H.stat(money0(tot.todo), 'Still to buy', 'acc', 'shopTodo') +
+      H.stat(tot.n, 'Items', '', 'shopCount') +
+      H.stat(money0(tot.got), 'In the cart', '', 'shopGot') +
       H.stat(tot.aisles, 'Aisles') + '</div>' +
 
       '<div class="row" style="margin-bottom:14px">' +

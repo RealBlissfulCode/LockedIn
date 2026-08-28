@@ -30,6 +30,17 @@ function ok(name, cond, detail) {
 }
 
 function group(name) { console.log('\n' + name); }
+
+/* Poll a page-side predicate instead of guessing at a timeout. Every assertion
+   that follows a click goes through this, so the suite is deterministic. */
+async function okEventually(page, name, fn, arg, detail) {
+  try {
+    await page.waitForFunction(fn, arg, { timeout: 4000, polling: 60 });
+    ok(name, true);
+  } catch (e) {
+    ok(name, false, detail || 'still false after 4s');
+  }
+}
 function read(rel) { return fs.readFileSync(path.join(ROOT, rel), 'utf8'); }
 
 /* ---------------------------------------------------------- static */
@@ -365,9 +376,8 @@ async function browserTests() {
     await page.waitForTimeout(150);
     await page.click('#pGen');
     await page.waitForTimeout(900);
-    const planned = await page.evaluate(() =>
-      Object.keys(window.Handbook.state().plan).length);
-    ok('generating a plan fills days', planned >= 7, 'planned ' + planned + ' days');
+    await okEventually(page, 'generating a plan fills days',
+      () => Object.keys(window.Handbook.state().plan).length >= 7);
     ok('the plan hits the protein target within 15%', await page.evaluate(() => {
       const H = window.Handbook;
       const days = Object.keys(H.state().plan).slice(0, 7);
@@ -383,18 +393,19 @@ async function browserTests() {
     await page.click('#pShop');
     await page.waitForTimeout(200);
     await page.click('#blGo');
-    await page.waitForTimeout(400);
-    const items = await page.evaluate(() => window.Handbook.curList().items.length);
-    ok('the plan builds a shopping list', items > 5, items + ' items');
+    await okEventually(page, 'the plan builds a shopping list',
+      () => window.Handbook.curList().items.length > 5);
 
     // Ticking an item must not scroll the page.
-    await page.evaluate(() => window.scrollTo({ top: 400, behavior: 'instant' }));
-    await page.waitForTimeout(120);
-    const before = await page.evaluate(() => window.scrollY);
     const box = page.locator('[data-gt]').first();
     if (await box.count()) {
+      await page.evaluate(() => window.scrollTo({ top: 400, behavior: 'instant' }));
+      await page.waitForFunction(() => Math.abs(window.scrollY - 400) < 5, null,
+        { timeout: 3000 }).catch(() => { });
+      const before = await page.evaluate(() => window.scrollY);
       await box.check();
-      await page.waitForTimeout(200);
+      await page.waitForFunction(() => !!document.querySelector('.gitem.done'), null,
+        { timeout: 3000 }).catch(() => { });
       const after = await page.evaluate(() => window.scrollY);
       ok('checking a shopping item keeps the scroll position',
         Math.abs(after - before) < 40, before + ' -> ' + after);
@@ -405,22 +416,19 @@ async function browserTests() {
     await page.evaluate(() => window.Handbook.openPalette());
     await page.waitForTimeout(150);
     await page.fill('#cmdq', 'oat');
-    await page.waitForTimeout(150);
-    const rows = await page.locator('.cmdrow').count();
-    ok('the command palette finds things', rows > 0, rows + ' rows');
+    await okEventually(page, 'the command palette finds things',
+      () => document.querySelectorAll('.cmdrow').length > 0);
     await page.keyboard.press('Escape');
 
     await page.evaluate(() => {
       window.Handbook.state().theme = 'dark';
       window.Handbook.applyTheme();
     });
-    await page.waitForTimeout(120);
-    const theme = await page.evaluate(() =>
-      document.documentElement.getAttribute('data-theme'));
-    ok('dark theme applies', theme === 'dark');
-    const bodyBg = await page.evaluate(() =>
-      getComputedStyle(document.body).backgroundColor);
-    ok('dark theme actually repaints the page', bodyBg !== 'rgb(251, 250, 247)', bodyBg);
+    await okEventually(page, 'dark theme applies',
+      () => document.documentElement.getAttribute('data-theme') === 'dark');
+    // body has a colour transition, so poll past it rather than sampling mid-fade.
+    await okEventually(page, 'dark theme actually repaints the page',
+      () => getComputedStyle(document.body).backgroundColor !== 'rgb(251, 250, 247)');
 
     // A saved file must survive a round trip.
     const roundTrip = await page.evaluate(() => {
@@ -472,15 +480,15 @@ async function browserTests() {
         ok('  profile editor previews the new targets', /Kcal/i.test(preview));
         await page.click('#pfSave');
       });
-    ok('saving the profile persisted the weight',
-      await page.evaluate(() => window.Handbook.state().prof.j.w === 158));
+    await okEventually(page, 'saving the profile persisted the weight',
+      () => window.Handbook.state().prof.j.w === 158);
 
     await goto('#/training');
     await dialog('split generator opens and writes the calendar',
       () => page.click('#splitBtn'),
       () => page.click('#spGo'));
-    ok('the split reached the calendar',
-      await page.evaluate(() => window.Handbook.dayLog(window.Handbook.today()).workout !== 'rest'));
+    await okEventually(page, 'the split reached the calendar',
+      () => window.Handbook.dayLog(window.Handbook.today()).workout !== 'rest');
 
     await dialog('session detail opens', () => page.click('[data-sess]'));
 
@@ -517,8 +525,8 @@ async function browserTests() {
 
     await goto('#/financial/actual');
     await dialog('shift editor opens and saves', () => page.click('#shAdd'), () => page.click('#sSave'));
-    ok('the shift was logged',
-      await page.evaluate(() => window.Handbook.state().fin.shifts.length > 0));
+    await okEventually(page, 'the shift was logged',
+      () => window.Handbook.state().fin.shifts.length > 0);
 
     await goto('#/financial/purchases');
     await dialog('new comparison list asks for a name', () => page.click('#bpNew'));
@@ -527,11 +535,10 @@ async function browserTests() {
     await dialog('event editor opens and saves', () => page.click('#evAdd'), () => page.click('#eSave'));
     await dialog('spend editor opens and saves', () => page.click('#spAdd'), () => page.click('#spSave'));
     await dialog('meal picker opens', () => page.click('#mealAdd'));
-    ok('the event reached the day',
-      await page.evaluate(() => {
-        const H = window.Handbook;
-        return H.dayLog(H.calSel).sched.length > 0 && H.dayLog(H.calSel).spend.length > 0;
-      }));
+    await okEventually(page, 'the event reached the day', () => {
+      const H = window.Handbook;
+      return H.dayLog(H.calSel).sched.length > 0 && H.dayLog(H.calSel).spend.length > 0;
+    });
 
     await goto('#/schedule/week');
     await dialog('weekly template editor opens and saves',
@@ -546,8 +553,8 @@ async function browserTests() {
         await page.fill('#op', '30');
         await page.click('#oSave');
       });
-    ok('the custom recipe is now in the catalogue',
-      await page.evaluate(() => window.Handbook.all().some(r => r.n === 'Test recipe')));
+    await okEventually(page, 'the custom recipe is now in the catalogue',
+      () => window.Handbook.all().some(r => r.n === 'Test recipe'));
 
     await goto('#/r/B-01');
     await dialog('recipe list picker opens', () => page.click('[data-tolist]'), () => page.click('#lS'));
@@ -571,6 +578,16 @@ async function browserTests() {
     await page.keyboard.press('Escape');
     await page.waitForTimeout(200);
     ok('Escape closes it', await page.locator('.mask').count() === 0);
+    ok('toasts sit below the dialog layer, so they cannot cover its buttons',
+      await page.evaluate(() => {
+        const z = n => parseInt(getComputedStyle(n).zIndex, 10) || 0;
+        const probe = document.createElement('div');
+        probe.className = 'mask';
+        document.body.appendChild(probe);
+        const result = z(document.querySelector('#toasts')) < z(probe);
+        probe.remove();
+        return result;
+      }));
     ok('focus returns to the page behind it',
       await page.evaluate(() => !document.activeElement.closest || !document.activeElement.closest('.mask')));
 

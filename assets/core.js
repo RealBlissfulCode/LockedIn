@@ -21,7 +21,7 @@
   var SEEDCOST = _D.costs;
   var SEEDJOB = _D.jobs;
 
-  H.R = R; H.BASEING = BASEING; H.AISLES = AISLES; H.EX = EX; H.SESS = SESS;
+  H.AISLES = AISLES; H.EX = EX; H.SESS = SESS;
 
   var KEY = 'handbook.v6';
   var OLDKEY = 'handbook.v5';
@@ -80,7 +80,6 @@
     if (raw) { try { return migrate(JSON.parse(raw)); } catch (e) { } }
     return DEF();
   })();
-  H.S = S;
   H.state = function () { return S; };
 
   /* Loading a save replaces the contents of S in place rather than rebinding it,
@@ -178,9 +177,9 @@
   function csvEsc(v) { return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; }
   function toCSV(rows) { return rows.map(function (r) { return r.map(csvEsc).join(','); }).join('\n'); }
 
-  H.E = E; H.money = money; H.money0 = money0; H.p2 = p2; H.dstr = dstr;
+  H.E = E; H.money = money; H.money0 = money0; H.p2 = p2;
   H.today = today; H.dOf = dOf; H.addDays = addDays; H.pretty = pretty; H.shortD = shortD;
-  H.uid = uid; H.num = num; H.clamp = clamp; H.toCSV = toCSV;
+  H.uid = uid; H.num = num; H.toCSV = toCSV;
 
   /* ---------------------------------------------------------- people */
   /* Records seeded from the workbook store a person's name as a literal string.
@@ -195,11 +194,9 @@
   }
   function label(k) { return k === 'a' ? 'Aaliyah' : 'Jaron'; }
   function P() { return S.prof[S.who]; }
-  function meName() { return P().name; }
   function otherKey() { return S.who === 'j' ? 'a' : 'j'; }
 
-  H.personKey = personKey; H.nameOf = nameOf; H.label = label;
-  H.P = P; H.meName = meName; H.otherKey = otherKey;
+  H.nameOf = nameOf; H.label = label; H.P = P; H.otherKey = otherKey;
 
   /* ---------------------------------------------------------- ingredients */
   /* Prices are the one field where an explicit null is meaningful: it says the
@@ -242,12 +239,7 @@
     if (c != null && c > 0 && (w == null || w <= 0 || c < w)) return 'Costco';
     return 'Walmart';
   }
-  function aisleOf(k) {
-    var g = ING(k);
-    return (g && g.a) || 'Other';
-  }
   H.ING = ING; H.allIngKeys = allIngKeys; H.best = best; H.bestStore = bestStore;
-  H.aisleOf = aisleOf;
 
   /* Recipe cost is always recomputed from live ingredient prices, so editing one
      price flows straight through to every recipe that uses it. Memoised per
@@ -274,7 +266,7 @@
   }
   function cps(r) { return rcost(r).per; }
   function ctot(r) { return rcost(r).tot; }
-  H.rcost = rcost; H.cps = cps; H.ctot = ctot;
+  H.cps = cps; H.ctot = ctot;
 
   var allCache = null;
   function all() {
@@ -467,7 +459,6 @@
     { key: 'dinner', label: 'Dinner', cats: ['Lunch/Dinner', 'SDA Meat/Fish'], share: 0.32 },
     { key: 'snack', label: 'Snack', cats: ['Snack', 'Drink'], share: 0.14 }
   ];
-  H.SLOTS = SLOTS;
 
   function mulberry(seed) {
     var a = seed >>> 0;
