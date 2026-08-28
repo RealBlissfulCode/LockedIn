@@ -560,6 +560,28 @@ async function browserTests() {
     await dialog('recipe list picker opens', () => page.click('[data-tolist]'), () => page.click('#lS'));
     await dialog('put-on-a-day picker opens', () => page.click('[data-plan]'));
 
+    group('Offline and motion');
+    await page.context().setOffline(true);
+    await page.evaluate(() => window.dispatchEvent(new Event('offline')));
+    await okEventually(page, 'going offline says so without breaking anything',
+      () => !!document.querySelector('.banner'));
+    await page.context().setOffline(false);
+    await page.evaluate(() => window.dispatchEvent(new Event('online')));
+    await okEventually(page, 'coming back online clears the note',
+      () => !document.querySelector('.banner'));
+
+    await goto('#/meals');
+    ok('progress bars are rendered for animation, not painted full',
+      await page.evaluate(() => {
+        const b = document.querySelector('.bar i[data-w]');
+        return !!b && b.getAttribute('data-w') !== null;
+      }));
+    await okEventually(page, 'and then actually get their width',
+      () => {
+        const b = document.querySelector('.bar i[data-w]');
+        return !!b && b.style.width !== '';
+      });
+
     group('Accessibility');
     await goto('#/meals');
     ok('recipe cards are reachable from the keyboard',

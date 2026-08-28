@@ -406,9 +406,21 @@
     var over = pct > 108;
     return '<div class="mrow"><div class="spread"><span>' + E(label) + '</span>' +
       '<em>' + Math.round(have) + ' / ' + Math.round(need) + '</em></div>' +
-      '<div class="bar"><i class="' + (over ? 'pbad over' : cls) +
-      '" style="width:' + Math.min(100, pct).toFixed(1) + '%"></i></div></div>';
+      '<div class="bar" role="img" aria-label="' + E(label) + ', ' + Math.round(pct) +
+      ' percent of target"><i class="' + (over ? 'pbad over' : cls) +
+      '" data-w="' + Math.min(100, pct).toFixed(1) + '"></i></div></div>';
   }
+
+  /* Bars are rendered at zero width and given their real width on the next
+     frame, which is what lets the CSS transition actually run. */
+  function fillBars(root) {
+    var bars = $$('.bar i[data-w]', root || document);
+    if (!bars.length) return;
+    requestAnimationFrame(function () {
+      bars.forEach(function (n) { n.style.width = n.getAttribute('data-w') + '%'; });
+    });
+  }
+  H.fillBars = fillBars;
   H.bar = bar;
 
   function stat(value, label, cls, id) {
@@ -546,6 +558,34 @@
     input.focus();
   }
   H.openPalette = openPalette;
+
+  /* ---------------------------------------------------------- connection */
+  /* The app works entirely offline, so losing the connection is worth a quiet
+     note rather than an error: the only thing that stops is picking up a new
+     deploy. */
+  var offlineNote = null;
+
+  function showOffline() {
+    if (offlineNote || navigator.onLine !== false) return;
+    offlineNote = el('div', 'banner');
+    offlineNote.style.background = 'var(--ink)';
+    offlineNote.style.color = 'var(--paper)';
+    offlineNote.innerHTML = '<span>Offline. Everything still works — it all lives here.</span>';
+    document.body.appendChild(offlineNote);
+  }
+
+  function hideOffline() {
+    if (!offlineNote) return;
+    offlineNote.remove();
+    offlineNote = null;
+  }
+
+  global.addEventListener('offline', showOffline);
+  global.addEventListener('online', function () {
+    hideOffline();
+    toast('Back online');
+  });
+  if (navigator.onLine === false) showOffline();
 
   /* ---------------------------------------------------------- update prompt */
   var updateBanner = null;

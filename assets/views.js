@@ -689,7 +689,7 @@
           var p = cost ? bySection[k] / cost * 100 : 0;
           return '<div class="mrow"><div class="spread"><span>' + E(k) + '</span>' +
             '<em>' + money0(bySection[k]) + '</em></div>' +
-            '<div class="bar"><i class="pk" style="width:' + p.toFixed(1) + '%"></i></div></div>';
+            '<div class="bar"><i class="pk" data-w="' + p.toFixed(1) + '"></i></div></div>';
         }).join('') + '</div>' +
 
       '<div class="card pad"><h3 style="font-size:15px;margin-bottom:12px">Income by person</h3>' +
@@ -701,7 +701,7 @@
         return '<div class="mrow"><div class="spread">' +
           '<span>' + E(w === 'Both' ? 'Shared / gig' : H.nameOf(w)) + '</span>' +
           '<em>' + money0(v) + '</em></div>' +
-          '<div class="bar"><i class="pp" style="width:' + p.toFixed(1) + '%"></i></div></div>';
+          '<div class="bar"><i class="pp" data-w="' + p.toFixed(1) + '"></i></div></div>';
       }).join('') +
       '<button class="b o s" id="jobAdd" style="margin-top:10px">Add a job or income</button>' +
       '</div></div></div>' +
@@ -1058,7 +1058,7 @@
       '<div class="mrow" style="margin-top:14px"><div class="spread">' +
       '<span>Used</span><em>' + use.mb.toFixed(2) + ' MB of about 5</em></div>' +
       '<div class="bar"><i class="' + (use.pct > 80 ? 'pbad' : 'pk') +
-      '" style="width:' + use.pct.toFixed(1) + '%"></i></div></div>' +
+      '" data-w="' + use.pct.toFixed(1) + '"></i></div></div>' +
       '<div class="stats" style="margin-top:14px">' +
       H.stat(Object.keys(st.photos).length, 'Photos') +
       H.stat(Object.keys(st.days).length, 'Logged days') +

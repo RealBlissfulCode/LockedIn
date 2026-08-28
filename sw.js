@@ -1,13 +1,13 @@
 /* Offline cache. The version string is stamped by src/build_data.py, so a rebuild
    always produces a new cache name and the old one is dropped on activate. */
-var CACHE='handbook-d1ddefe7';
+var CACHE='handbook-7030b5e9';
 var CORE=['/','/index.html',
-          '/assets/app.css?v=d1ddefe7',
-          '/assets/core.js?v=d1ddefe7',
-          '/assets/ui.js?v=d1ddefe7',
-          '/assets/views.js?v=d1ddefe7',
-          '/assets/app.js?v=d1ddefe7',
-          '/assets/data.js?v=d1ddefe7',
+          '/assets/app.css?v=7030b5e9',
+          '/assets/core.js?v=7030b5e9',
+          '/assets/ui.js?v=7030b5e9',
+          '/assets/views.js?v=7030b5e9',
+          '/assets/app.js?v=7030b5e9',
+          '/assets/data.js?v=7030b5e9',
           '/manifest.webmanifest',
           '/icons/icon.svg','/icons/icon-192.png','/icons/icon-512.png'];
 

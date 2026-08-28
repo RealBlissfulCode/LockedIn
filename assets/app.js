@@ -137,6 +137,7 @@
       b.setAttribute('aria-pressed', b.dataset.w === S().who);
     });
     $$('[data-stagger]').forEach(H.stagger);
+    H.fillBars(main);
 
     if (keepScroll) jump(y);
     bind(r);
