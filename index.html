@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>The Meal Handbook</title>
+<meta name="description" content="Gluten-free meal system, calculator, grocery builder and daily log for two people.">
+<meta name="theme-color" content="#0A1A2F">
+<meta name="color-scheme" content="light">
+
+<!-- installable on a phone home screen -->
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Meal Handbook">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+<link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+<link rel="icon" href="/icons/icon-192.png" sizes="192x192">
+
+<meta property="og:title" content="The Meal Handbook">
+<meta property="og:description" content="251 gluten-free recipes, live calculator, grocery builder, daily log.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="/icons/icon-512.png">
+
+<link rel="stylesheet" href="/assets/app.css?v=027be106">
+</head>
+<body>
+<header class="top"><div class="topin">
+  <div class="brand">The Meal <em>Handbook</em></div>
+  <div class="whoswitch" id="who"></div>
+  <button class="tab" id="store" title="Switch store pricing"></button>
+  <nav class="tabs" id="tabs"></nav>
+</div></header>
+
+<main class="wrap" id="view">
+  <noscript>
+    <div style="padding:40px 0">
+      <h1>JavaScript is switched off</h1>
+      <p>This is an app rather than a document, so it needs JavaScript. The printable PDF
+      version of the same content does not.</p>
+    </div>
+  </noscript>
+</main>
+<nav class="btmnav" id="btm"></nav>
+
+<script src="/assets/data.js?v=027be106"></script>
+<script src="/assets/app.js?v=027be106"></script>
+<script>
+if('serviceWorker' in navigator){
+  window.addEventListener('load',function(){
+    navigator.serviceWorker.register('/sw.js').catch(function(){});
+  });
+}
+</script>
+</body>
+</html>
