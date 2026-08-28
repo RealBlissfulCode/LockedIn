@@ -126,8 +126,10 @@ hr{border:0;height:1px;background:var(--line);margin:34px 0}
 
 .grid{display:grid;gap:16px}
 .g2{grid-template-columns:repeat(auto-fit,minmax(340px,1fr))}
-/* Six stats inside a half-width card need three across, not a ragged 4 + 2. */
-@media (max-width:1100px){.stats.s6{grid-template-columns:repeat(3,1fr)}}
+/* Six stats read as one block at three across, and the auto-fit floor is low
+   enough that they never push past the card they sit in. */
+.stats.s6{grid-template-columns:repeat(3,1fr)}
+@media (min-width:1240px){.wrap>.sec>.stats.s6{grid-template-columns:repeat(6,1fr)}}
 .g3{grid-template-columns:repeat(auto-fill,minmax(252px,1fr))}
 .g4{grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}
 
@@ -184,6 +186,8 @@ hr{border:0;height:1px;background:var(--line);margin:34px 0}
 .page{animation:rise var(--t-3) var(--ez-out) both}
 @keyframes rise{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:none}}
 .phead{padding:38px 0 22px;max-width:66ch}
+.phead.tight{padding-bottom:14px}
+.phead.tight p{font-size:15px;margin-top:8px}
 .phead h1{font-size:clamp(30px,4.4vw,46px);letter-spacing:-.035em}
 .phead p{color:var(--ink-3);margin:11px 0 0;font-size:16.5px;line-height:1.55}
 
@@ -206,17 +210,17 @@ hr{border:0;height:1px;background:var(--line);margin:34px 0}
 .empty .b{margin-top:12px}
 
 /* ---------------------------------------------------------- stats */
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(104px,1fr));
   background:var(--card);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
-.stat{padding:18px 16px;border-right:1px solid var(--line)}
+.stat{padding:18px 14px;border-right:1px solid var(--line);min-width:0}
 .stat:last-child{border-right:0}
-.stat b{display:block;font-family:var(--fd);font-size:28px;font-weight:600;letter-spacing:-.035em;
-  line-height:1;color:var(--ink);font-variant-numeric:tabular-nums}
+.stat b{display:block;font-family:var(--fd);font-size:clamp(21px,2.1vw,28px);font-weight:600;
+  letter-spacing:-.035em;line-height:1.05;color:var(--ink);font-variant-numeric:tabular-nums;
+  overflow-wrap:anywhere}
 .stat span{display:block;font:700 9.5px/1 var(--ff);letter-spacing:.15em;text-transform:uppercase;
   color:var(--ink-4);margin-top:8px}
-.stats.s6{grid-template-columns:repeat(6,1fr)}
 .stat.acc{background:var(--forest)}
-.stat.acc b{color:var(--on-forest);font-size:34px}
+.stat.acc b{color:var(--on-forest);font-size:clamp(24px,2.6vw,34px)}
 .stat.acc span{color:var(--on-forest-dim)}
 .stat.bad{background:var(--clay)}
 .stat.bad b{color:#fff}
@@ -267,6 +271,38 @@ hr{border:0;height:1px;background:var(--line);margin:34px 0}
   transition:all var(--t-1) var(--ez)}
 .x:hover{background:var(--line);color:var(--ink);transform:rotate(90deg)}
 
+/* A bigger primary button where a page has one obvious next step. */
+.b.lg{padding:13px 24px;font-size:15px}
+.b.icon{gap:7px}
+.b .lbl-inline{display:inline}
+@media (max-width:560px){.b .lbl-inline{display:none}}
+
+/* Segmented control: one row, no wrapping, obvious current value. */
+.seg{display:inline-flex;background:var(--sand);border:1px solid var(--line);
+  border-radius:999px;padding:3px;gap:2px;margin-bottom:14px;max-width:100%;overflow:auto}
+.seg button{flex:1 0 auto;background:none;border:0;color:var(--ink-3);cursor:pointer;
+  font:700 13px/1 var(--ff);padding:9px 15px;border-radius:999px;white-space:nowrap;
+  min-height:36px;transition:all var(--t-2) var(--ez)}
+.seg button:hover{color:var(--ink)}
+.seg button.on{background:var(--card);color:var(--forest);box-shadow:var(--sh-1)}
+
+/* The one-line summary above a primary action. */
+.card.hero{border-color:var(--line-2);box-shadow:var(--sh-2)}
+.card.hero .summary{margin:0 0 14px;font-size:15px;color:var(--ink-2);font-weight:500}
+
+/* The headline number on a card that exists to answer one question. */
+.bignum{font-family:var(--fd);font-size:clamp(34px,5vw,44px);font-weight:600;
+  letter-spacing:-.04em;line-height:1;color:var(--forest);margin-top:12px;
+  font-variant-numeric:tabular-nums}
+.bignum span{display:block;font:600 12px/1 var(--ff);letter-spacing:.04em;
+  color:var(--ink-4);margin-top:9px;font-variant-numeric:normal}
+
+/* Count badge on the Filter button. */
+.cnt{display:inline-grid;place-items:center;min-width:19px;height:19px;padding:0 5px;
+  border-radius:999px;background:var(--forest);color:var(--on-forest);
+  font:700 11px/1 var(--ff);margin-left:2px}
+.b.o .cnt{background:var(--forest);color:var(--on-forest)}
+
 /* ---------------------------------------------------------- forms */
 .f{display:block;margin-bottom:15px}
 .f>span{display:block;font:700 10px/1 var(--ff);letter-spacing:.16em;text-transform:uppercase;
@@ -290,6 +326,7 @@ hr{border:0;height:1px;background:var(--line);margin:34px 0}
 .swrow .t span{display:block;color:var(--ink-3);font-size:12.5px;margin-top:2px}
 .sw{position:relative;width:44px;height:26px;flex:none;border:0;padding:0;cursor:pointer;
   border-radius:999px;background:var(--line-2);transition:background-color var(--t-2) var(--ez)}
+.sw:before{content:"";position:absolute;left:-8px;right:-8px;top:-10px;bottom:-10px}
 .sw:after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;
   background:#fff;box-shadow:var(--sh-1);transition:transform var(--t-2) var(--spring)}
 .sw[aria-checked="true"]{background:var(--forest)}
@@ -387,6 +424,33 @@ tr.hl td{background:var(--moss)}
 .tw{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);
   border-radius:var(--r);background:var(--card)}
 
+/* Below this width a table stops being a table. Each row becomes a card with
+   every value labelled, because the alternative is columns that scroll off the
+   edge with nothing to say they exist. */
+@media (max-width:720px){
+  .tw{overflow-x:visible;border:0;background:none;border-radius:0}
+  .tw table,.tw tbody,.tw tr,.tw td{display:block;width:100%}
+  .tw thead{display:none}
+  .tw tr{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
+    margin-bottom:10px;padding:6px 4px;box-shadow:var(--sh-1)}
+  .tw tr.hl{border-color:var(--forest);box-shadow:inset 0 0 0 1px var(--forest)}
+  .tw tbody tr:hover td{background:none}
+  .tw td{border:0;padding:7px 14px;display:flex;gap:14px;align-items:center;
+    justify-content:space-between;text-align:right;min-height:0}
+  .tw td[data-hide]{display:none}
+  .tw td:before{content:attr(data-l);flex:none;text-align:left;
+    font:700 9.5px/1.3 var(--ff);letter-spacing:.14em;text-transform:uppercase;
+    color:var(--ink-4)}
+  .tw td:not([data-l]):before{display:none}
+  .tw td:not([data-l]){justify-content:flex-end}
+  /* The first cell is the row's title, so it gets the weight and no label. */
+  .tw td:first-child{padding-top:12px;font-size:16px;text-align:left;
+    border-bottom:1px solid var(--line);margin-bottom:4px;padding-bottom:12px}
+  .tw td:first-child:before{display:none}
+  .tw td:last-child{padding-bottom:12px}
+  .tw td .b,.tw td .x{flex:none}
+}
+
 /* ---------------------------------------------------------- calendar */
 .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:7px}
 .cal .dow{text-align:center;font:700 9.5px/1 var(--ff);letter-spacing:.14em;color:var(--ink-4);padding:7px 0}
@@ -407,22 +471,78 @@ tr.hl td{background:var(--moss)}
 .dot.w{background:var(--amber)}
 .dot.e{background:var(--plum)}
 
-/* ---------------------------------------------------------- shopping */
-.aisle{background:var(--ink);color:var(--paper);padding:11px 18px;
-  font:700 10px/1 var(--ff);letter-spacing:.16em;text-transform:uppercase;
-  display:flex;justify-content:space-between}
-.aisle span{color:color-mix(in srgb,var(--paper) 60%,transparent);font-variant-numeric:tabular-nums}
-.gitem{display:flex;align-items:center;gap:13px;padding:12px 18px;border-bottom:1px solid var(--line);
-  transition:opacity var(--t-2) var(--ez),background-color var(--t-2) var(--ez)}
-.gitem:last-child{border-bottom:0}
-.gitem.done{opacity:.42}
-.gitem.done .gn{text-decoration:line-through}
-.gitem input[type=checkbox]{width:19px;height:19px;accent-color:var(--forest);flex:none;cursor:pointer}
-.gn{flex:1;min-width:0;font-size:14.5px;font-weight:600;color:var(--ink)}
-.gq{font-size:12px;color:var(--ink-4);font-weight:400;margin-top:2px}
-.gp{font-variant-numeric:tabular-nums;font-weight:600;color:var(--forest);font-size:14px}
+/* A list of short rows should not stretch to 1180px; the price ends up a hand's
+   width from the name it belongs to. */
+.col{max-width:900px}
 
-/* ---------------------------------------------------------- plan grid */
+/* ---------------------------------------------------------- shopping */
+/* The list picker is one horizontal strip. Stacked category sections pushed the
+   actual list below the fold before you had touched anything. */
+.listbar{display:flex;gap:8px;overflow-x:auto;padding:4px 2px 10px;
+  -webkit-overflow-scrolling:touch;scrollbar-width:thin;scroll-snap-type:x proximity}
+.listbar::-webkit-scrollbar{height:5px}
+.listbar::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:9px}
+.listchip{flex:none;scroll-snap-align:start;background:var(--card);border:1px solid var(--line-2);
+  border-radius:var(--r);padding:10px 15px;cursor:pointer;text-align:left;min-width:132px;
+  transition:all var(--t-2) var(--ez)}
+.listchip:hover{border-color:var(--forest)}
+.listchip .nm{display:block;font-weight:700;font-size:13.5px;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;max-width:190px}
+.listchip .mt{display:block;font:600 11.5px/1 var(--ff);color:var(--ink-4);margin-top:5px;
+  font-variant-numeric:tabular-nums}
+.listchip.on{background:var(--forest);border-color:var(--forest);color:var(--on-forest)}
+.listchip.on .mt{color:var(--on-forest-dim)}
+.listchip.add{min-width:0;font-size:20px;font-weight:400;color:var(--ink-4);
+  display:grid;place-items:center;padding:10px 18px}
+
+.aislegrp{margin-bottom:12px;border:1px solid var(--line);border-radius:var(--r);
+  overflow:hidden;background:var(--card)}
+.aisle{background:var(--ink);color:var(--paper);padding:13px 16px;width:100%;border:0;
+  font:700 10px/1 var(--ff);letter-spacing:.16em;text-transform:uppercase;cursor:pointer;
+  display:flex;align-items:center;gap:12px;text-align:left;min-height:46px}
+.aisle .an{flex:1;min-width:0}
+.aisle .ac{color:color-mix(in srgb,var(--paper) 62%,transparent);font-variant-numeric:tabular-nums;
+  letter-spacing:.06em;text-transform:none;font-size:11px;flex:none}
+.aisle .ar{width:8px;height:8px;flex:none;border-right:2px solid currentColor;
+  border-bottom:2px solid currentColor;transform:rotate(45deg) translate(-2px,-2px);
+  transition:transform var(--t-2) var(--ez);opacity:.7}
+.aislegrp.shut .ar{transform:rotate(-45deg) translate(-2px,2px)}
+.aislegrp.shut .aisleitems{display:none}
+
+.gitem{display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--line);
+  transition:opacity var(--t-2) var(--ez)}
+.gitem:last-child{border-bottom:0}
+.gitem.done{opacity:.45}
+.gitem.done .gn{text-decoration:line-through}
+/* The whole label is the tick target. */
+.gtick{flex:1;min-width:0;display:flex;align-items:center;gap:14px;padding:13px 4px 13px 16px;
+  cursor:pointer;-webkit-tap-highlight-color:transparent}
+.gtick input{position:absolute;opacity:0;width:0;height:0}
+.gtick .box{flex:none;width:23px;height:23px;border-radius:7px;border:2px solid var(--line-2);
+  background:var(--card);position:relative;transition:all var(--t-1) var(--ez)}
+.gtick .box:after{content:"";position:absolute;left:7px;top:2.5px;width:5px;height:11px;
+  border-right:2.5px solid var(--on-forest);border-bottom:2.5px solid var(--on-forest);
+  transform:rotate(45deg) scale(.4);opacity:0;transition:all var(--t-2) var(--spring)}
+.gtick input:checked+.box{background:var(--forest);border-color:var(--forest)}
+.gtick input:checked+.box:after{opacity:1;transform:rotate(45deg) scale(1)}
+.gtick input:focus-visible+.box{box-shadow:var(--ring);border-color:var(--forest)}
+.gtick:hover .box{border-color:var(--forest)}
+.gtext{flex:1;min-width:0}
+.gn{display:block;font-size:14.5px;font-weight:600;color:var(--ink);line-height:1.3}
+.gq{display:block;font-size:12px;color:var(--ink-4);font-weight:400;margin-top:2px}
+.gp{font-variant-numeric:tabular-nums;font-weight:600;color:var(--forest);font-size:14px;
+  flex:none;white-space:nowrap}
+.rowmenu{flex:none;width:40px;height:40px;margin-right:6px;border:0;background:none;
+  color:var(--ink-4);cursor:pointer;border-radius:50%;display:grid;place-items:center;
+  transition:all var(--t-1) var(--ez)}
+.rowmenu:hover{background:var(--sand);color:var(--ink)}
+.rowmenu svg{width:17px;height:17px}
+
+.searchbar{position:sticky;top:var(--top-h);z-index:30;padding:10px 0;
+  background:color-mix(in srgb,var(--paper) 92%,transparent);
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+
+/* ---------------------------------------------------------- plan grid *//* ---------------------------------------------------------- plan grid */
 .plan{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
 .pday{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px;
   display:flex;flex-direction:column;gap:8px;min-height:150px}
@@ -506,6 +626,34 @@ tr.hl td{background:var(--moss)}
 kbd{font:700 11px/1 var(--ff);background:var(--sand);border:1px solid var(--line);
   border-bottom-width:2px;border-radius:5px;padding:4px 6px;color:var(--ink-3)}
 
+/* ---------------------------------------------------------- menus */
+.menumask{position:fixed;inset:0;z-index:210;background:transparent}
+.menu{background:var(--card);border:1px solid var(--line-2);border-radius:var(--r);
+  box-shadow:var(--sh-3);padding:7px;overflow:auto;min-width:210px;
+  animation:pop var(--t-2) var(--ez-out)}
+.menuitem{display:flex;align-items:center;justify-content:space-between;gap:14px;width:100%;
+  background:none;border:0;text-align:left;font:600 14.5px/1.3 var(--ff);color:var(--ink);
+  padding:12px 13px;border-radius:var(--r-s);cursor:pointer;min-height:44px;
+  transition:background-color var(--t-1) var(--ez)}
+.menuitem:hover,.menuitem:focus-visible{background:var(--sand)}
+.menuitem em{font-style:normal;font-weight:500;font-size:12.5px;color:var(--ink-4)}
+.menuitem.danger{color:var(--clay)}
+.menusep{height:1px;background:var(--line);margin:6px 9px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+.actions .more{gap:4px;padding-right:14px}
+.actions .more svg{width:14px;height:14px;opacity:.6}
+
+/* On a phone the menu is a bottom sheet, which is both reachable one-handed and
+   impossible to mis-tap. */
+@media (max-width:700px){
+  .menumask{background:var(--scrim);backdrop-filter:blur(3px);display:flex;align-items:flex-end}
+  .menu{width:100%;max-height:70vh;border-radius:var(--r-l) var(--r-l) 0 0;
+    border-width:1px 0 0;padding:10px 10px calc(14px + env(safe-area-inset-bottom));
+    animation:sheetin var(--t-3) var(--ez-out)}
+  .menuitem{font-size:15.5px;min-height:50px}
+}
+@keyframes sheetin{from{transform:translateY(100%)}to{transform:none}}
+
 /* ---------------------------------------------------------- toasts */
 .toasts{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom));
   transform:translateX(-50%);z-index:190;display:flex;flex-direction:column-reverse;
@@ -516,7 +664,8 @@ kbd{font:700 11px/1 var(--ff);background:var(--sand);border:1px solid var(--line
   animation:toastin var(--t-3) var(--ez-out)}
 .toast.out{animation:toastout var(--t-2) var(--ez) forwards}
 .toast button{background:none;border:0;color:var(--forest-3);font-weight:700;cursor:pointer;
-  padding:0;font-size:13.5px;white-space:nowrap}
+  padding:0 4px;min-height:38px;font-size:13.5px;white-space:nowrap;border-radius:8px}
+.toast button:hover{background:rgba(255,255,255,.1)}
 @keyframes toastin{from{opacity:0;transform:translateY(14px) scale(.96)}to{opacity:1;transform:none}}
 @keyframes toastout{to{opacity:0;transform:translateY(8px) scale(.97)}}
 
@@ -563,29 +712,72 @@ details .dc ul{margin:0 0 12px;padding-left:20px}
   .g2,.g3{grid-template-columns:1fr}
   .g4{grid-template-columns:1fr 1fr}
   .stats,.stats.s6{grid-template-columns:repeat(2,1fr)}
+  .stat{padding:15px 12px}
   .stat{border-bottom:1px solid var(--line)}
   .stat:nth-child(odd){border-right:1px solid var(--line)}
   .stat:nth-child(even){border-right:0}
   .dhero{min-height:210px;padding:22px;border-radius:var(--r)}
   .cal{gap:4px}
-  .day{padding:5px;border-radius:7px;aspect-ratio:1;min-height:0}
+  .day{padding:5px;border-radius:7px;min-height:54px}
   .pad{padding:18px}
   ol.stp li{padding-left:40px}
-  .filterbar{position:static}
+  .filterbar,.searchbar{position:static}
   .modal{max-height:92vh}
   .cmdmask{padding-top:6vh}
 }
+/* Anything you tap on a phone gets a comfortable hit area even where the painted
+   control is smaller. Keyed off width as well as pointer, because a narrow
+   window on a laptop has the same cramped layout. */
+@media (pointer:coarse),(max-width:700px){
+  .icobtn{width:40px;height:40px}
+  .icobtn svg{width:18px;height:18px}
+  .pill{min-height:38px;padding:9px 16px}
+  .b.s{min-height:38px;padding:9px 15px}
+  .x{width:38px;height:38px}
+  .sw{width:50px;height:30px}
+  .sw:after{width:24px;height:24px}
+  .sw[aria-checked="true"]:after{transform:translateX(20px)}
+  .gitem input[type=checkbox]{width:24px;height:24px}
+  .whoswitch button{min-height:38px}
+  /* The wordmark shrinks to its dot on a phone; the button keeps a real target. */
+  .brand{min-width:40px;min-height:40px;justify-content:center}
+  .seg button{min-height:40px}
+}
+
 @media (max-width:560px){
   .topin{gap:8px;padding:10px 14px}
   .brand{font-size:0;gap:0}
   .brand:before{margin-right:0}
-  .icobtn{width:32px;height:32px}
-  .icobtn svg{width:15px;height:15px}
+  .icobtn{width:38px;height:38px}
+  .icobtn svg{width:16px;height:16px}
   .whoswitch button{padding:6px 11px;font-size:12px}
 }
+/* On a phone a recipe is a row, not a poster. The tall card made a filtered
+   list twenty thousand pixels long and you could see three at a time. */
+@media (max-width:560px){
+  .rc{flex-direction:row;align-items:stretch}
+  .rcart{width:96px;height:auto;flex:none;align-self:stretch}
+  .rcart .plate{display:none}
+  .rcart .ring{position:absolute;inset:0;width:100%;height:100%;padding:16px;
+    right:auto;bottom:auto}
+  .rcart img{height:100%}
+  .rcbadge{left:6px;top:6px;padding:3px 5px;font-size:8px;letter-spacing:.1em}
+  .rcb{padding:12px 14px 11px}
+  .rcn{font-size:15.5px;margin-bottom:7px}
+  .chips{gap:4px;margin-bottom:9px}
+  .chip{font-size:10.5px;padding:4px 7px}
+  /* The macros are two lines below; this chip only earns its wrap on a big card. */
+  .rc .chip.bestfor{display:none}
+  .rc .rcm{border-top:0;padding-top:0;display:flex;gap:12px;justify-content:flex-start}
+  .rc .rcm div{border:0;text-align:left;display:flex;align-items:baseline;gap:3px}
+  .rc .rcm b{font-family:var(--ff);font-size:12.5px;font-weight:700}
+  .rc .rcm span{margin-top:0;font-size:9px;letter-spacing:.06em;color:var(--ink-4)}
+  .fav{right:8px;top:8px;width:38px;height:38px}
+  .rc:hover,.rc:focus-visible{transform:none}
+}
+
 @media (max-width:440px){
   .g4{grid-template-columns:1fr}
-  .rcm b{font-size:14px}
   .plan{grid-template-columns:1fr}
 }
 

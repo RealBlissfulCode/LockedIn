@@ -31,7 +31,6 @@
 
   var SUN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
   var MOON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></svg>';
-  var AUTO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v18" /><path d="M12 3a9 9 0 010 18z" fill="currentColor" stroke="none"/></svg>';
 
   function chrome() {
     $('#tabs').innerHTML = NAV.map(function (t) {
@@ -74,9 +73,11 @@
   function drawTheme() {
     var btn = $('#themeBtn');
     if (!btn) return;
-    var pref = S().theme || 'auto';
-    btn.innerHTML = pref === 'dark' ? MOON : pref === 'light' ? SUN : AUTO;
-    btn.title = 'Theme: ' + (pref === 'auto' ? 'matching the system' : pref);
+    // The icon shows what a tap will give you, not what you already have.
+    var dark = document.documentElement.getAttribute('data-theme') === 'dark';
+    btn.innerHTML = dark ? SUN : MOON;
+    btn.title = dark ? 'Switch to light' : 'Switch to dark';
+    btn.setAttribute('aria-label', btn.title);
   }
 
   if (global.matchMedia) {
@@ -205,21 +206,36 @@
   }
 
   /* ---------------------------------------------------------- meals */
+  /* A phone shows fewer per page: the same 48 cards is several screens of
+     scrolling before the button that loads more. */
+  function pageSize() { return global.innerWidth <= 560 ? 24 : 48; }
+
   function drawGrid() {
     var g = $('#fgrid');
     if (!g) return;
     var L = H.filtered();
-    var shown = L.slice(0, H.flt.page * 48);
+    var per = pageSize();
+    var shown = L.slice(0, H.flt.page * per);
     g.innerHTML = shown.length
       ? shown.map(H.rcard).join('')
-      : '<p class="empty">Nothing matches those filters.</p>';
+      : H.empty('Nothing matches.',
+        H.flt.q ? 'No recipe mentions “' + E(H.flt.q) + '”.' : 'Try loosening the filters.',
+        '<button class="b o" id="fReset">Clear the search and filters</button>');
     H.stagger(g);
-    H.setText('#fcount', L.length + ' recipe' + (L.length === 1 ? '' : 's'));
+    var reset = $('#fReset');
+    if (reset) {
+      reset.onclick = function () {
+        H.flt = { q: '', cat: '', tag: '', sort: 'rec', page: 1 };
+        refresh();
+      };
+    }
+    H.setText('#fcount', L.length + ' recipe' + (L.length === 1 ? '' : 's') +
+      (shown.length < L.length ? ', showing ' + shown.length : ''));
     var more = $('#fmore');
     if (more) {
       more.innerHTML = shown.length < L.length
         ? '<button class="b o" id="fmoreBtn">Show ' +
-        Math.min(48, L.length - shown.length) + ' more of ' + L.length + '</button>'
+        Math.min(per, L.length - shown.length) + ' more of ' + L.length + '</button>'
         : '';
       var b = $('#fmoreBtn');
       if (b) b.onclick = function () { H.flt.page++; drawGrid(); };
@@ -231,29 +247,49 @@
     on('#fq', 'input', debounce(function () {
       H.flt.q = this.value; H.flt.page = 1; drawGrid();
     }, 140));
-    ['fcat', 'ftag', 'fsort'].forEach(function (id) {
-      on('#' + id, 'change', function () {
-        H.flt[id.slice(1)] = this.value; H.flt.page = 1; drawGrid();
-      });
-    });
-    on('#clearFlt', 'click', function () {
-      H.flt = { q: '', cat: '', tag: '', sort: 'rec', page: 1 };
-      refresh();
-    });
-    on('#costMode', 'change', function () {
-      S().prefs.costMode = this.value; H.save(); refresh();
-    });
-    on('#bothCost', 'click', function () {
-      var w = H.dayLog(H.today()).workout;
-      var a = H.estDayCost(H.dayTarget('j', w), S().prefs.costMode);
-      var b = H.estDayCost(H.dayTarget('a', w), S().prefs.costMode);
-      $('#bothOut').innerHTML = '<div class="note" style="margin-bottom:0"><b>Both of us.</b> ' +
-        money(a.byKcal) + ' for ' + E(S().prof.j.name) + ' plus ' + money(b.byKcal) + ' for ' +
-        E(S().prof.a.name) + ' is <b>' + money(a.byKcal + b.byKcal) + ' a day</b>, ' +
-        money((a.byKcal + b.byKcal) * 30) + ' a month.</div>';
-    });
+    on('#fOpen', 'click', filterSheet);
     on('#addOwn', 'click', ownRecipe);
     on('#logPlanned', 'click', function () { logPlanned(H.today()); });
+    on('#quickLog', 'click', function () { mealPicker(H.today()); });
+
+    $$('[data-unflt]').forEach(function (b) {
+      b.onclick = function () {
+        var k = b.dataset.unflt;
+        H.flt[k] = k === 'sort' ? 'rec' : '';
+        H.flt.page = 1;
+        refresh();
+      };
+    });
+
+    on('#costMenu', 'click', function () {
+      var modes = [['all', 'Every recipe, averaged'], ['cheap', 'The cheapest 40 per calorie'],
+      ['fav', 'My favourites only'], ['logged', 'What we actually logged']];
+      H.menu(this, modes.map(function (m) {
+        return {
+          label: m[1],
+          hint: S().prefs.costMode === m[0] ? 'current' : '',
+          run: function () { S().prefs.costMode = m[0]; H.save(true); refresh(); }
+        };
+      }));
+    });
+  }
+
+  function filterSheet() {
+    var m = modal('Filter recipes', V.filterBody(),
+      '<button class="b o" id="fClear">Clear all</button>' +
+      '<button class="b" id="fApply">Show them</button>', { focus: '#fcat' });
+
+    $('#fClear', m).onclick = function () {
+      H.flt = { q: H.flt.q, cat: '', tag: '', sort: 'rec', page: 1 };
+      m.close(); refresh();
+    };
+    $('#fApply', m).onclick = function () {
+      H.flt.cat = $('#fcat', m).value;
+      H.flt.tag = $('#ftag', m).value;
+      H.flt.sort = $('#fsort', m).value;
+      H.flt.page = 1;
+      m.close(); refresh();
+    };
   }
 
   function logPlanned(ds) {
@@ -304,10 +340,32 @@
     drawIng(r, 1);
     $$('[data-scale]').forEach(function (b) {
       b.onclick = function () {
-        $$('[data-scale]').forEach(function (x) { x.classList.remove('on'); });
+        $$('[data-scale]').forEach(function (x) {
+          x.classList.remove('on');
+          x.setAttribute('aria-pressed', 'false');
+        });
         b.classList.add('on');
+        b.setAttribute('aria-pressed', 'true');
         drawIng(r, parseFloat(b.dataset.scale));
       };
+    });
+
+    on('#recipeMore', 'click', function () {
+      var ph = S().photos[id];
+      var items = [
+        { label: 'Put it on a day', hint: 'meal plan', run: function () { planPicker(id); } },
+        { label: 'Add to a recipe list', run: function () { listModal(id); } },
+        { label: ph ? 'Change the photo' : 'Add a photo', run: function () { pickPhoto(id); } },
+        { label: 'Save a recipe card', hint: 'PNG', run: function () { cardPNG(H.byId(id)); } }
+      ];
+      if (ph) {
+        items.push({ sep: true });
+        items.push({
+          label: 'Remove the photo', danger: true,
+          run: function () { delete S().photos[id]; H.save(true); refresh(); toast('Photo removed'); }
+        });
+      }
+      H.menu(this, items);
     });
     // Ticking steps is per-visit rather than stored: it is a cooking aid, not data.
     var list = $('#stepList');
@@ -320,19 +378,8 @@
   }
 
   /* ---------------------------------------------------------- plan */
-  function readPlanOpts() {
-    var o = H.planOpts;
-    if ($('#pFrom')) H.planCursor = $('#pFrom').value || H.today();
-    if ($('#pDays')) o.days = +$('#pDays').value;
-    if ($('#pSlots')) o.slots = +$('#pSlots').value;
-    if ($('#pBudget')) o.budget = $('#pBudget').value;
-    if ($('#pMax')) o.maxMinutes = $('#pMax').value;
-    if ($('#pVar')) o.variety = +$('#pVar').value;
-    return o;
-  }
-
   function generate() {
-    var o = readPlanOpts();
+    var o = H.planOpts;
     var res = H.generatePlan({
       from: H.planCursor,
       days: o.days,
@@ -348,39 +395,46 @@
     H.save(true);
     refresh();
 
-    var missed = res.report.filter(function (d) { return d.err > 55; }).length;
     var over = res.report.filter(function (d) { return d.overBudget; }).length;
+    var missed = res.report.filter(function (d) { return d.err > 55; }).length;
     var msg = o.days + ' days planned';
     if (over) msg += ', ' + over + ' over budget';
     else if (missed) msg += ', ' + missed + ' a way off target';
-    else msg += ', all on target';
-    toast(msg);
+    else msg += ', every day on target';
+    toast(msg, { action: 'Shopping list', onAction: buildListFromPlan });
+  }
+
+  function planOptions() {
+    var m = modal('Plan settings', V.planOptionsBody(),
+      '<button class="b o" data-close>Cancel</button>' +
+      '<button class="b" id="poGo">Generate with these</button>', { focus: '#pDays' });
+
+    var fav = $('#pFav', m);
+    fav.onclick = function () {
+      var next = fav.getAttribute('aria-checked') !== 'true';
+      fav.setAttribute('aria-checked', next);
+    };
+    $('#poGo', m).onclick = function () {
+      var o = H.planOpts;
+      H.planCursor = $('#pFrom', m).value || H.today();
+      o.days = +$('#pDays', m).value;
+      o.slots = +$('#pSlots', m).value;
+      o.budget = $('#pBudget', m).value;
+      o.maxMinutes = $('#pMax', m).value;
+      o.variety = +$('#pVar', m).value;
+      o.favOnly = fav.getAttribute('aria-checked') === 'true';
+      S().prefs.planSlots = o.slots;
+      S().prefs.dayBudget = o.budget === '' ? null : H.num(o.budget);
+      H.save(true);
+      m.close();
+      generate();
+    };
   }
 
   function bindPlan() {
     on('#pGen', 'click', generate);
     on('#pGen2', 'click', generate);
-    on('#pFav', 'click', function () {
-      H.planOpts.favOnly = !H.planOpts.favOnly;
-      this.classList.toggle('on');
-    });
-    ['#pFrom', '#pDays', '#pSlots', '#pBudget', '#pMax', '#pVar'].forEach(function (s) {
-      on(s, 'change', function () { readPlanOpts(); refresh(); });
-    });
-    on('#pClear', 'click', function () {
-      H.confirmDanger({
-        title: 'Clear the plan?',
-        text: 'This removes the planned meals for these ' + H.planOpts.days +
-          ' days. Anything already logged stays.',
-        ok: 'Clear'
-      }).then(function (ok) {
-        if (!ok) return;
-        for (var i = 0; i < H.planOpts.days; i++) delete S().plan[H.addDays(H.planCursor, i)];
-        H.save(true);
-        refresh();
-        toast('Plan cleared');
-      });
-    });
+    on('#pOpts', 'click', planOptions);
     on('#pShop', 'click', buildListFromPlan);
     on('#pCsv', 'click', function () {
       var rows = [['Date', 'Slot', 'Recipe', 'Servings', 'Kcal', 'Protein', 'Cost']];
@@ -395,6 +449,19 @@
       });
       H.dl('meal-plan-' + H.planCursor + '.csv', H.toCSV(rows), 'text/csv');
       toast('Plan exported');
+    });
+    on('#pClear', 'click', function () {
+      H.confirmDanger({
+        title: 'Clear these ' + H.planOpts.days + ' days?',
+        text: 'The planned meals go. Anything already logged stays.',
+        ok: 'Clear'
+      }).then(function (okd) {
+        if (!okd) return;
+        for (var i = 0; i < H.planOpts.days; i++) delete S().plan[H.addDays(H.planCursor, i)];
+        H.save(true);
+        refresh();
+        toast('Plan cleared');
+      });
     });
 
     $$('[data-swap]').forEach(function (b) {
@@ -512,114 +579,229 @@
   }
 
   /* ---------------------------------------------------------- shopping */
-  function bindShop() {
-    on('#newList', 'click', function () {
-      H.ask({ title: 'New list', label: 'Name', placeholder: 'Costco run' }).then(function (n) {
-        if (!n) return;
-        H.ask({
-          title: 'Category', label: 'Category', value: 'Groceries',
-          text: 'Lists are grouped by this on the Shopping page.'
-        }).then(function (c) {
-          S().shop.lists[n] = { cat: c || 'Lists', fav: false, items: [] };
-          S().shop.active = n;
+  /* Named actions the views reference by name when they build an action bar.
+     Keeping them here means a view describes what it offers, not how it works. */
+  H.act = {};
+
+  H.act.gAdd = function () {
+    ingPicker(function (it) { H.curList().items.push(it); H.save(true); refresh(); });
+  };
+  H.act.gRecipe = function () { recipePicker(); };
+  H.act.gPlan = function () { buildListFromPlan(); };
+  H.act.gTxt = function () { shopTxt(); };
+  H.act.gCsv = function () { shopCsv(); };
+
+  H.act.gSave = function () {
+    H.dl('list-' + S().shop.active.replace(/[^a-z0-9]+/gi, '-').toLowerCase() + '.json',
+      JSON.stringify({ app: 'handbook-list', name: S().shop.active, list: H.curList() }, null, 1),
+      'application/json');
+    toast('List saved to a file');
+  };
+
+  H.act.gLoad = function () {
+    H.pickFile('.json', function (f) {
+      var fr = new FileReader();
+      fr.onload = function () {
+        try {
+          var o = JSON.parse(fr.result);
+          var nm = o.name || 'Imported list';
+          while (S().shop.lists[nm]) nm += ' 2';
+          S().shop.lists[nm] = o.list || o;
+          S().shop.active = nm;
           H.save(true); refresh();
-        });
-      });
+          toast('Loaded "' + nm + '"');
+        } catch (e) {
+          toast('That is not a saved list file');
+        }
+      };
+      fr.readAsText(f);
     });
-    on('#listRename', 'click', function () {
-      H.ask({ title: 'Rename list', label: 'Name', value: S().shop.active }).then(function (n) {
-        if (!n || n === S().shop.active) return;
-        var L = S().shop.lists;
-        L[n] = L[S().shop.active];
-        delete L[S().shop.active];
-        S().shop.active = n;
-        H.save(true); refresh();
-      });
+  };
+
+  H.act.gStock = function () {
+    var n = H.stockFromList();
+    if (!n) { toast('Tick things off first, then move them'); return; }
+    refresh();
+    toast(n + ' moved into the pantry');
+  };
+
+  H.act.gClear = function () {
+    var L = H.curList();
+    var removed = L.items.filter(function (i) { return i.done; });
+    if (!removed.length) { toast('Nothing is checked'); return; }
+    var before = L.items.slice();
+    L.items = L.items.filter(function (i) { return !i.done; });
+    H.save(true); refresh();
+    toast(removed.length + ' cleared', {
+      action: 'Undo',
+      onAction: function () { H.curList().items = before; H.save(true); refresh(); }
     });
-    on('#listDup', 'click', function () {
-      var n = S().shop.active + ' copy';
-      while (S().shop.lists[n]) n += ' 2';
-      S().shop.lists[n] = JSON.parse(JSON.stringify(H.curList()));
+  };
+
+  H.act.newList = function () {
+    H.ask({
+      title: 'New list', label: 'Name', placeholder: 'Costco run',
+      text: 'Lists keep separate shops apart — a weekly grocery run, a party, a Costco trip.'
+    }).then(function (n) {
+      if (!n) return;
+      var lists = S().shop.lists;
+      while (lists[n]) n += ' 2';
+      lists[n] = { cat: 'Lists', fav: false, items: [] };
       S().shop.active = n;
       H.save(true); refresh();
-      toast('Duplicated');
+      toast('Started "' + n + '"');
     });
-    on('#listFav', 'click', function () {
-      H.curList().fav = !H.curList().fav;
-      H.save(); refresh();
-    });
-    on('#listDel', 'click', function () {
-      if (Object.keys(S().shop.lists).length < 2) { toast('Keep at least one list'); return; }
-      var name = S().shop.active;
-      H.confirmDanger({
-        title: 'Delete "' + name + '"?',
-        text: 'The ' + H.curList().items.length + ' items on it go too.'
-      }).then(function (ok) {
-        if (!ok) return;
-        var backup = S().shop.lists[name];
-        delete S().shop.lists[name];
-        S().shop.active = Object.keys(S().shop.lists)[0];
-        H.save(true); refresh();
-        toast('Deleted "' + name + '"', {
-          action: 'Undo',
-          onAction: function () {
-            S().shop.lists[name] = backup;
-            S().shop.active = name;
-            H.save(true); refresh();
-          }
-        });
-      });
-    });
-    on('#gClear', 'click', function () {
-      var L = H.curList();
-      var removed = L.items.filter(function (i) { return i.done; });
-      if (!removed.length) { toast('Nothing checked'); return; }
-      var before = L.items.slice();
-      L.items = L.items.filter(function (i) { return !i.done; });
+  };
+
+  H.act.listRename = function () {
+    H.ask({ title: 'Rename list', label: 'Name', value: S().shop.active }).then(function (n) {
+      if (!n || n === S().shop.active) return;
+      var L = S().shop.lists;
+      L[n] = L[S().shop.active];
+      delete L[S().shop.active];
+      S().shop.active = n;
       H.save(true); refresh();
-      toast(removed.length + ' cleared', {
+    });
+  };
+
+  H.act.listDup = function () {
+    var n = S().shop.active + ' copy';
+    while (S().shop.lists[n]) n += ' 2';
+    S().shop.lists[n] = JSON.parse(JSON.stringify(H.curList()));
+    S().shop.active = n;
+    H.save(true); refresh();
+    toast('Duplicated as "' + n + '"');
+  };
+
+  H.act.listFav = function () {
+    H.curList().fav = !H.curList().fav;
+    H.save(); refresh();
+  };
+
+  H.act.listDel = function () {
+    if (Object.keys(S().shop.lists).length < 2) { toast('Keep at least one list'); return; }
+    var name = S().shop.active;
+    H.confirmDanger({
+      title: 'Delete "' + name + '"?',
+      text: 'The ' + H.curList().items.length + ' items on it go too.'
+    }).then(function (okd) {
+      if (!okd) return;
+      var backup = S().shop.lists[name];
+      delete S().shop.lists[name];
+      S().shop.active = Object.keys(S().shop.lists)[0];
+      H.save(true); refresh();
+      toast('Deleted "' + name + '"', {
         action: 'Undo',
-        onAction: function () { H.curList().items = before; H.save(true); refresh(); }
+        onAction: function () {
+          S().shop.lists[name] = backup;
+          S().shop.active = name;
+          H.save(true); refresh();
+        }
       });
     });
-    on('#gStock', 'click', function () {
-      var n = H.stockFromList();
-      if (!n) { toast('Nothing checked to move'); return; }
-      toast(n + ' moved into the pantry');
-      refresh();
+  };
+
+  H.act.ingNew = function () { ingEditor(null); };
+  H.act.ingCsv = function () {
+    var rows = [['Ingredient', 'Aisle', 'Walmart/100g', 'Costco/100g', 'Cheaper',
+      'CheaperStore', 'UsedIn', 'Edited']];
+    H.allIngKeys().forEach(function (k) {
+      var g = H.ING(k);
+      rows.push([g.n, g.a || '', g.w, g.c, H.best(g).toFixed(3),
+      H.bestStore(g), H.ingUsage(k), S().ingOv[k] ? 'yes' : '']);
     });
-    on('#gAdd', 'click', function () {
-      ingPicker(function (it) { H.curList().items.push(it); H.save(true); refresh(); });
-    });
-    on('#gRecipe', 'click', recipePicker);
-    on('#gPlan', 'click', buildListFromPlan);
-    on('#gPlan2', 'click', buildListFromPlan);
-    on('#gTxt', 'click', shopTxt);
-    on('#gCsv', 'click', shopCsv);
-    on('#gSave', 'click', function () {
-      H.dl('list-' + S().shop.active.replace(/[^a-z0-9]+/gi, '-').toLowerCase() + '.json',
-        JSON.stringify({ app: 'handbook-list', name: S().shop.active, list: H.curList() }, null, 1),
-        'application/json');
-      toast('List saved');
-    });
-    on('#gLoad', 'click', function () {
-      H.pickFile('.json', function (f) {
-        var fr = new FileReader();
-        fr.onload = function () {
-          try {
-            var o = JSON.parse(fr.result);
-            var nm = o.name || 'Imported list';
-            while (S().shop.lists[nm]) nm += ' 2';
-            S().shop.lists[nm] = o.list || o;
-            S().shop.active = nm;
-            H.save(true); refresh();
-            toast('List loaded');
-          } catch (e) {
-            toast('That is not a saved list file');
-          }
-        };
-        fr.readAsText(f);
+    H.dl('ingredients-' + H.today() + '.csv', H.toCSV(rows), 'text/csv');
+    toast('Ingredient list exported');
+  };
+
+  H.act.panAdd = function () {
+    ingPicker(function (it) {
+      H.ask({
+        title: 'How much ' + it.name + '?',
+        label: 'Grams', value: '500',
+        text: 'Roughly is fine. This only decides what a generated list can skip.'
+      }).then(function (v) {
+        if (v == null) return;
+        H.pantryAdd(it.key, H.num(v));
+        refresh();
+        toast(it.name + ' is in the pantry');
       });
+    });
+  };
+
+  H.act.panClear = function () {
+    if (!Object.keys(S().pantry).length) { toast('The pantry is already empty'); return; }
+    H.confirmDanger({
+      title: 'Empty the pantry?',
+      text: 'Generated shopping lists will stop skipping anything.'
+    }).then(function (okd) {
+      if (!okd) return;
+      var backup = S().pantry;
+      S().pantry = {};
+      H.save(true); refresh();
+      toast('Pantry emptied', {
+        action: 'Undo',
+        onAction: function () { S().pantry = backup; H.save(true); refresh(); }
+      });
+    });
+  };
+
+  H.act.panCsv = function () {
+    var rows = [['Ingredient', 'Aisle', 'Grams', 'Value']];
+    Object.keys(S().pantry).forEach(function (k) {
+      var g = H.ING(k);
+      if (!g) return;
+      rows.push([g.n, g.a || '', Math.round(S().pantry[k].g),
+      (S().pantry[k].g / 100 * H.best(g)).toFixed(2)]);
+    });
+    H.dl('pantry-' + H.today() + '.csv', H.toCSV(rows), 'text/csv');
+    toast('Pantry exported');
+  };
+
+  H.act.shAdd = function () { shiftEditor(); };
+  H.act.shCsv = function () {
+    var rows = [['Date', 'Who', 'Job', 'Hours', 'Gross', 'Net', 'Note']];
+    S().fin.shifts.forEach(function (sh) {
+      var j = null;
+      S().fin.jobs.forEach(function (x) { if (x.id === sh.jobId) j = x; });
+      rows.push([sh.date, j ? H.nameOf(j.who) : '', j ? j.name : '',
+      sh.hours, sh.gross, sh.net, sh.note || '']);
+    });
+    H.dl('shifts-' + H.today() + '.csv', H.toCSV(rows), 'text/csv');
+    toast('Shifts exported');
+  };
+
+  function bindShop() {
+    on('#newList', 'click', H.act.newList);
+    on('#gPlan2', 'click', H.act.gPlan);
+    on('#hideChecked', 'click', function () {
+      S().prefs.hideChecked = !S().prefs.hideChecked;
+      H.save(true); refresh();
+    });
+
+    on('#listMenu', 'click', function () {
+      var cur = H.curList();
+      H.menu(this, [
+        { label: cur.fav ? 'Remove from favourites' : 'Mark as a favourite', run: H.act.listFav },
+        { label: 'Rename this list', run: H.act.listRename },
+        { label: 'Duplicate it', run: H.act.listDup },
+        { label: 'Start a new list', run: H.act.newList },
+        { sep: true },
+        { label: 'Delete this list', danger: true, run: H.act.listDel }
+      ]);
+    });
+
+    // Collapsing an aisle is remembered, so the aisles you have finished stay shut.
+    $$('[data-aisle]').forEach(function (b) {
+      b.onclick = function () {
+        var a = b.dataset.aisle;
+        var closed = S().prefs.closedAisles;
+        var i = closed.indexOf(a);
+        if (i >= 0) closed.splice(i, 1); else closed.push(a);
+        b.closest('.aislegrp').classList.toggle('shut', i < 0);
+        b.setAttribute('aria-expanded', i >= 0);
+        H.save();
+      };
     });
   }
 
@@ -758,50 +940,15 @@
 
   /* ---------------------------------------------------------- pantry */
   function bindPantry() {
-    var add = function () {
-      ingPicker(function (it) {
-        H.ask({
-          title: 'How much of ' + it.name + '?',
-          label: 'Grams', value: '500',
-          text: 'Roughly is fine. This is only used to skip things when a list is generated.'
-        }).then(function (v) {
-          if (v == null) return;
-          H.pantryAdd(it.key, H.num(v));
-          refresh();
-          toast(it.name + ' in the pantry');
-        });
-      });
-    };
-    on('#panAdd', 'click', add);
-    on('#panAdd2', 'click', add);
-    on('#panClear', 'click', function () {
-      H.confirmDanger({
-        title: 'Empty the pantry?',
-        text: 'Generated shopping lists will stop skipping anything.'
-      }).then(function (ok) {
-        if (!ok) return;
-        var backup = S().pantry;
-        S().pantry = {};
-        H.save(true); refresh();
-        toast('Pantry emptied', {
-          action: 'Undo',
-          onAction: function () { S().pantry = backup; H.save(true); refresh(); }
-        });
-      });
-    });
-    on('#panCsv', 'click', function () {
-      var rows = [['Ingredient', 'Aisle', 'Grams', 'Value']];
-      Object.keys(S().pantry).forEach(function (k) {
-        var g = H.ING(k);
-        if (!g) return;
-        rows.push([g.n, g.a || '', Math.round(S().pantry[k].g),
-        (S().pantry[k].g / 100 * H.best(g)).toFixed(2)]);
-      });
-      H.dl('pantry-' + H.today() + '.csv', H.toCSV(rows), 'text/csv');
-    });
+    // Everything else on this view is an action-bar entry; only the empty
+    // state has a button of its own.
+    on('#panAdd2', 'click', H.act.panAdd);
   }
 
   /* ---------------------------------------------------------- ingredients */
+  var INGPAGE = 60;
+  var ingShown = INGPAGE;
+
   function drawIngTable(q) {
     var body = $('#ingBody');
     if (!body) return;
@@ -810,36 +957,40 @@
       return H.ING(k).n.toLowerCase().indexOf(q) >= 0;
     }).sort(function (a, b) { return H.ING(a).n.localeCompare(H.ING(b).n); });
 
-    body.innerHTML = keys.slice(0, 400).map(function (k) {
-      var g = H.ING(k), ov = S().ingOv[k];
-      return '<tr><td><b>' + E(g.n) + '</b>' +
-        (ov ? ' <span class="chip t">edited</span>' : '') + '</td>' +
-        '<td class="sm muted">' + E(g.a || 'Other') + '</td>' +
-        '<td class="num">' + (g.w != null ? money(g.w) : '—') + '</td>' +
-        '<td class="num">' + (g.c != null && g.c > 0 ? money(g.c) : '—') + '</td>' +
-        '<td class="num"><b>' + money(H.best(g)) + '</b> ' +
-        '<span class="xs muted">' + E(H.bestStore(g)) + '</span></td>' +
-        '<td class="sm num">' + H.ingUsage(k) + '</td>' +
-        '<td><button class="b o s" data-ie="' + E(k) + '">Edit</button></td></tr>';
-    }).join('');
-    H.setText('#ingCount', keys.length + ' shown' +
-      (keys.length > 400 ? ' (first 400 — narrow the search)' : ''));
+    var page = keys.slice(0, ingShown);
+    body.innerHTML = H.table(
+      [{ h: 'Ingredient' }, { h: 'Aisle' }, { h: 'Walmart /100g', cls: 'num', hide: true },
+      { h: 'Costco /100g', cls: 'num', hide: true }, { h: 'Cheaper', cls: 'num' },
+      { h: 'Used in', cls: 'num', hide: true }, { h: '' }],
+      page.map(function (k) {
+        var g = H.ING(k), ov = S().ingOv[k];
+        return ['<b>' + E(g.n) + '</b>' + (ov ? ' <span class="chip t">edited</span>' : ''),
+          '<span class="sm muted">' + E(g.a || 'Other') + '</span>',
+          g.w != null ? money(g.w) : '—',
+          g.c != null && g.c > 0 ? money(g.c) : '—',
+          '<b>' + money(H.best(g)) + '</b> <span class="xs muted">' + E(H.bestStore(g)) + '</span>',
+          H.ingUsage(k) + ' recipes',
+          '<button class="b o s" data-ie="' + E(k) + '">Edit</button>'];
+      }), { emptyTitle: 'Nothing matches that search.' }) +
+      (page.length < keys.length
+        ? '<div class="row" style="justify-content:center;margin-top:16px">' +
+        '<button class="b o" id="ingMore">Show ' +
+        Math.min(INGPAGE, keys.length - page.length) + ' more</button></div>'
+        : '');
+
+    H.setText('#ingCount', keys.length + ' ingredient' + (keys.length === 1 ? '' : 's') +
+      (page.length < keys.length ? ', showing ' + page.length : ''));
+    var more = $('#ingMore');
+    if (more) more.onclick = function () { ingShown += INGPAGE; drawIngTable(q); };
   }
 
   function bindIngredients() {
+    ingShown = INGPAGE;
     drawIngTable('');
-    on('#ingQ', 'input', debounce(function () { drawIngTable(this.value); }, 120));
-    on('#ingNew', 'click', function () { ingEditor(null); });
-    on('#ingCsv', 'click', function () {
-      var rows = [['Ingredient', 'Aisle', 'Walmart/100g', 'Costco/100g', 'Best',
-        'BestStore', 'UsedIn', 'Edited']];
-      H.allIngKeys().forEach(function (k) {
-        var g = H.ING(k);
-        rows.push([g.n, g.a || '', g.w, g.c, H.best(g).toFixed(3),
-        H.bestStore(g), H.ingUsage(k), S().ingOv[k] ? 'yes' : '']);
-      });
-      H.dl('ingredients-' + H.today() + '.csv', H.toCSV(rows), 'text/csv');
-    });
+    on('#ingQ', 'input', debounce(function () {
+      ingShown = INGPAGE;
+      drawIngTable(this.value);
+    }, 120));
   }
 
   function ingEditor(k) {
@@ -1025,12 +1176,11 @@
     var s = H.SESS[i];
     if (!s) return;
     var m = modal(s.name,
-      '<div class="tw"><table><thead><tr><th>Exercise</th><th>Sets</th><th>Reps</th>' +
-      '<th>Note</th></tr></thead><tbody>' +
-      s.ex.map(function (x) {
-        return '<tr><td><b>' + E(x.n) + '</b></td><td>' + E(x.sets) + '</td>' +
-          '<td>' + E(x.reps) + '</td><td class="sm muted">' + E(x.note) + '</td></tr>';
-      }).join('') + '</tbody></table></div>',
+      H.table([{ h: 'Exercise' }, { h: 'Sets', cls: 'num' }, { h: 'Reps', cls: 'num' }, { h: 'Note' }],
+        s.ex.map(function (x) {
+          return ['<b>' + E(x.n) + '</b>', E(x.sets), E(x.reps),
+            '<span class="sm muted">' + E(x.note || '—') + '</span>'];
+        })),
       '<button class="b o" id="sessCopy">Copy to today\'s notes</button>' +
       '<button class="b" data-close>Close</button>', { wide: true });
 
@@ -1820,17 +1970,18 @@
     { k: 'Do', nm: 'Generate a training split', run: function () { nav('training'); setTimeout(splitModal, 120); } },
     { k: 'Do', nm: 'Add my own recipe', run: ownRecipe },
     { k: 'Do', nm: 'Log a shift', run: function () { nav('financial/actual'); setTimeout(shiftEditor, 120); } },
-    { k: 'Do', nm: 'Switch theme', run: cycleTheme }
+    { k: 'Do', nm: 'Switch between light and dark', run: cycleTheme }
   ];
 
+  function isDark() {
+    return document.documentElement.getAttribute('data-theme') === 'dark';
+  }
+
   function cycleTheme() {
-    var order = ['auto', 'light', 'dark'];
-    var i = order.indexOf(S().theme || 'auto');
-    S().theme = order[(i + 1) % order.length];
+    S().theme = isDark() ? 'light' : 'dark';
     H.save(true);
     applyTheme();
     if (parse().v === 'settings') refresh();
-    toast('Theme: ' + (S().theme === 'auto' ? 'matching the system' : S().theme));
   }
 
   /* ---------------------------------------------------------- global events */
@@ -1902,25 +2053,39 @@
       if (item) {
         item.done = el.checked;
         H.save();
-        // Update just this row rather than repainting the list.
+        // Repaint just this row and the running totals; rebuilding the whole
+        // list would throw away the scroll position mid-shop.
         var row = el.closest('.gitem');
         if (row) row.classList.toggle('done', item.done);
         updateShopTotals();
+        updateAisle(el.closest('.aislegrp'));
+        if (S().prefs.hideChecked && item.done && row) {
+          row.style.display = 'none';
+        }
       }
       return;
     }
-    if (hit('[data-gd]')) {
-      var gi = +el.dataset.gd;
-      var removed = H.curList().items[gi];
-      H.curList().items.splice(gi, 1);
-      H.save(true); refresh();
-      toast('Removed ' + (removed ? removed.name : 'item'), {
-        action: 'Undo',
-        onAction: function () {
-          H.curList().items.splice(gi, 0, removed);
-          H.save(true); refresh();
+    if (hit('[data-gd]')) { removeShopItem(+el.dataset.gd); return; }
+    if (hit('[data-gm]')) {
+      var gmi = +el.dataset.gm;
+      var gmit = H.curList().items[gmi];
+      if (!gmit) return;
+      H.menu(el, [
+        { label: 'Edit ' + gmit.name, run: function () { shopItemEditor(gmi); } },
+        {
+          label: gmit.key ? 'Change its price everywhere' : 'Edit the item',
+          hint: gmit.key ? 'ingredient list' : '',
+          run: function () {
+            if (gmit.key) { nav('shopping/ingredients'); setTimeout(function () { ingEditor(gmit.key); }, 200); }
+            else shopItemEditor(gmi);
+          }
+        },
+        { sep: true },
+        {
+          label: 'Remove from the list', danger: true,
+          run: function () { removeShopItem(gmi); }
         }
-      });
+      ]);
       return;
     }
     if (hit('[data-ge]')) { shopItemEditor(+el.dataset.ge); return; }
@@ -1991,11 +2156,43 @@
     if (hit('#menuBtn')) { nav('settings'); return; }
   });
 
+  function removeShopItem(i) {
+    var removed = H.curList().items[i];
+    if (!removed) return;
+    H.curList().items.splice(i, 1);
+    H.save(true); refresh();
+    toast('Removed ' + removed.name, {
+      action: 'Undo',
+      onAction: function () {
+        H.curList().items.splice(i, 0, removed);
+        H.save(true); refresh();
+      }
+    });
+  }
+
   function updateShopTotals() {
     var tot = H.listTotals(H.curList().items);
     H.setText('#shopTodo', money0(tot.todo));
     H.setText('#shopGot', money0(tot.got));
-    H.setText('#shopCount', tot.n);
+    H.setText('#shopCount', tot.n - tot.done);
+  }
+
+  /* Keep an aisle header's "3 left · $12" honest as things are ticked off. */
+  function updateAisle(grp) {
+    if (!grp) return;
+    var head = grp.querySelector('.aisle');
+    if (!head) return;
+    var name = head.dataset.aisle;
+    var left = H.curList().items.filter(function (it) {
+      return it.aisle === name && !it.done;
+    });
+    var subtotal = left.reduce(function (a, it) { return a + it.price * it.qty; }, 0);
+    var label = grp.querySelector('.ac');
+    if (label) {
+      label.textContent = left.length
+        ? left.length + ' left · ' + money0(subtotal)
+        : 'all in the cart';
+    }
   }
 
   /* Recipe cards are links, so they answer to Enter and Space as well as a click. */

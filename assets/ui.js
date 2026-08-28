@@ -389,6 +389,162 @@
     if (box) box.classList.remove('on');
   });
 
+  /* ---------------------------------------------------------- tables */
+  /* A table wider than a phone is not a table any more: the right-hand columns
+     simply vanish with nothing to say they are there. Cells carry their column
+     name, and below 720px CSS restacks each row as a labelled card.
+
+     cols: [{h: 'Header', cls, hide}]  rows: [[cell, cell, ...]] */
+  var tableSeq = 0;
+  var tableStore = {};
+
+  function table(cols, rows, opts) {
+    opts = opts || {};
+    if (!rows.length) {
+      return empty(opts.emptyTitle || 'Nothing here yet.', opts.emptySub, opts.emptyAction);
+    }
+    /* Restacked as cards, a forty-row table becomes a very long page. Long ones
+       show a first page and a button for the rest. */
+    if (opts.limit && rows.length > opts.limit) {
+      var id = 't' + (++tableSeq);
+      tableStore[id] = { cols: cols, rows: rows, opts: opts, shown: opts.limit };
+      return '<div data-tablehost="' + id + '">' +
+        renderTable(cols, rows.slice(0, opts.limit), opts) +
+        '<div class="row" style="justify-content:center;margin-top:14px">' +
+        '<button class="b o" data-tablemore="' + id + '">Show the other ' +
+        (rows.length - opts.limit) + '</button></div></div>';
+    }
+    return renderTable(cols, rows, opts);
+  }
+
+  function renderTable(cols, rows, opts) {
+    return '<div class="tw"><table>' +
+      '<thead><tr>' + cols.map(function (c) {
+        return '<th' + (c.cls ? ' class="' + c.cls + '"' : '') + '>' + E(c.h || '') + '</th>';
+      }).join('') + '</tr></thead><tbody>' +
+      rows.map(function (r) {
+        var attrs = r.attrs || '';
+        var cells = r.cells || r;
+        return '<tr' + (attrs ? ' ' + attrs : '') + '>' + cells.map(function (cell, i) {
+          var c = cols[i] || {};
+          return '<td' + (c.cls ? ' class="' + c.cls + '"' : '') +
+            (c.h ? ' data-l="' + E(c.h) + '"' : '') +
+            (c.hide ? ' data-hide="1"' : '') + '>' + cell + '</td>';
+        }).join('') + '</tr>';
+      }).join('') +
+      '</tbody></table></div>';
+  }
+  H.table = table;
+
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('[data-tablemore]');
+    if (!b) return;
+    var st = tableStore[b.dataset.tablemore];
+    if (!st) return;
+    var host = b.closest('[data-tablehost]');
+    st.shown = st.rows.length;
+    host.innerHTML = renderTable(st.cols, st.rows, st.opts);
+  });
+
+  /* ---------------------------------------------------------- menus */
+  /* One primary button and a menu beats nine pills in a row. The menu is a
+     sheet on a phone and a popover on a pointer device. */
+  var openMenu = null;
+
+  function closeMenu() {
+    if (!openMenu) return;
+    openMenu.remove();
+    openMenu = null;
+  }
+  H.closeMenu = closeMenu;
+
+  function menu(anchor, items) {
+    closeMenu();
+    var m = el('div', 'menumask');
+    var list = el('div', 'menu');
+    list.setAttribute('role', 'menu');
+    items.forEach(function (it) {
+      if (it.sep) { list.appendChild(el('div', 'menusep')); return; }
+      var b = el('button', 'menuitem' + (it.danger ? ' danger' : ''));
+      b.type = 'button';
+      b.setAttribute('role', 'menuitem');
+      b.innerHTML = '<span>' + E(it.label) + '</span>' +
+        (it.hint ? '<em>' + E(it.hint) + '</em>' : '');
+      b.onclick = function () { closeMenu(); it.run(); };
+      list.appendChild(b);
+    });
+    m.appendChild(list);
+    m.addEventListener('click', function (e) { if (e.target === m) closeMenu(); });
+    document.body.appendChild(m);
+    openMenu = m;
+
+    // Popover next to the button when there is room; the CSS turns it into a
+    // bottom sheet on narrow screens.
+    if (anchor && global.innerWidth > 700) {
+      var r = anchor.getBoundingClientRect();
+      list.style.position = 'fixed';
+      list.style.minWidth = Math.max(r.width, 210) + 'px';
+      var top = r.bottom + 8;
+      var lh = Math.min(items.length * 44 + 16, 420);
+      if (top + lh > global.innerHeight - 12) top = Math.max(12, r.top - lh - 8);
+      list.style.top = top + 'px';
+      list.style.left = Math.min(r.left, global.innerWidth - 250) + 'px';
+      list.style.maxHeight = (global.innerHeight - top - 16) + 'px';
+    }
+    var first = list.querySelector('.menuitem');
+    if (first) setTimeout(function () { try { first.focus(); } catch (e) { } }, 20);
+    return m;
+  }
+  H.menu = menu;
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && openMenu) { e.preventDefault(); closeMenu(); }
+  });
+
+  /* ---------------------------------------------------------- action bar */
+  /* actions: [{label, id, run, primary, danger, keep}]
+     Anything without `primary` or `keep` folds into the More menu. */
+  var actionRegistry = {};
+
+  function actionBar(id, actions, opts) {
+    opts = opts || {};
+    actionRegistry[id] = actions;
+    var shown = actions.filter(function (a) { return a.primary || a.keep; });
+    var rest = actions.filter(function (a) { return !a.primary && !a.keep; });
+    return '<div class="actions" data-actions="' + id + '">' +
+      shown.map(function (a, i) {
+        return '<button class="b' + (a.primary ? '' : ' o') + (a.danger ? ' dz' : '') +
+          '" data-act="' + id + '|' + actions.indexOf(a) + '">' + E(a.label) + '</button>';
+      }).join('') +
+      (rest.length
+        ? '<button class="b o more" data-more="' + id + '" aria-haspopup="menu">' +
+        E(opts.moreLabel || 'More') +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+        'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<path d="M6 9l6 6 6-6"/></svg></button>'
+        : '') +
+      '</div>';
+  }
+  H.actionBar = actionBar;
+
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('[data-act]');
+    if (b) {
+      var p = b.dataset.act.split('|');
+      var a = (actionRegistry[p[0]] || [])[+p[1]];
+      if (a && a.run) a.run();
+      return;
+    }
+    var mb = e.target.closest && e.target.closest('[data-more]');
+    if (mb) {
+      var list = (actionRegistry[mb.dataset.more] || [])
+        .filter(function (a) { return !a.primary && !a.keep; });
+      menu(mb, list.map(function (a) {
+        return { label: a.label, hint: a.hint, danger: a.danger, run: a.run };
+      }));
+    }
+  });
+
   /* ---------------------------------------------------------- shared bits */
   function statRow(t) {
     return '<div class="stats s6">' +

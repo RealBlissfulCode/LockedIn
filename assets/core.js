@@ -49,7 +49,10 @@
       days: {},
       fin: { jobs: [], shifts: [], costs: [], scenarios: {}, purchases: {}, costMode: 'real', path: 'rent' },
       sched: { tmpl: {} },
-      prefs: { costMode: 'all', dayBudget: null, remindBackup: true, planSlots: 4 },
+      prefs: {
+        costMode: 'all', dayBudget: null, remindBackup: true, planSlots: 4,
+        hideChecked: false, closedAisles: []
+      },
       seeded: false
     };
   }
@@ -67,6 +70,7 @@
     for (k in d.fin) if (!(k in o.fin)) o.fin[k] = d.fin[k];
     for (k in d.prefs) if (!(k in o.prefs)) o.prefs[k] = d.prefs[k];
     if (!o.sched.tmpl) o.sched.tmpl = {};
+    if (!Array.isArray(o.prefs.closedAisles)) o.prefs.closedAisles = [];
     if (legacyCostMode) o.prefs.costMode = legacyCostMode;
     delete o.costMode;
     if (o.prof.j && o.prof.j.name === 'Me') o.prof.j.name = 'Jaron';
@@ -714,13 +718,16 @@
   H.addRecipeToShop = addRecipeToShop;
 
   function listTotals(items) {
-    var todo = 0, got = 0, aisles = {};
+    var todo = 0, got = 0, done = 0, aisles = {};
     (items || []).forEach(function (i) {
       var v = i.price * i.qty;
-      if (i.done) got += v; else todo += v;
+      if (i.done) { got += v; done++; } else todo += v;
       aisles[i.aisle] = 1;
     });
-    return { todo: todo, got: got, aisles: Object.keys(aisles).length, n: (items || []).length };
+    return {
+      todo: todo, got: got, done: done,
+      aisles: Object.keys(aisles).length, n: (items || []).length
+    };
   }
   H.listTotals = listTotals;
 

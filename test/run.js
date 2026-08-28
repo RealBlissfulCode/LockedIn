@@ -497,7 +497,7 @@ async function browserTests() {
       () => page.click('[data-ie]'),
       () => page.click('#ieSave'));
     await dialog('new ingredient needs a name',
-      () => page.click('#ingNew'),
+      () => page.click('[data-act="ing|0"]'),
       async () => {
         await page.click('#ieSave');
         ok('  it refuses to save a nameless ingredient',
@@ -507,13 +507,16 @@ async function browserTests() {
       });
 
     await goto('#/shopping/pantry');
-    await dialog('pantry add opens the ingredient picker', () => page.click('#panAdd'));
+    await dialog('pantry add opens the ingredient picker',
+      () => page.click('[data-act="pan|0"]'));
 
     await goto('#/shopping');
-    await dialog('shopping item editor opens',
-      () => page.click('[data-ge]'),
-      () => page.click('#seSave'));
-    await dialog('recipe picker opens', () => page.click('#gRecipe'));
+    await dialog('the row menu opens and edits an item', async () => {
+      await page.click('[data-gm]');
+      await page.waitForSelector('.menu');
+      await page.click('.menuitem');
+    }, () => page.click('#seSave'));
+    await dialog('recipe picker opens', () => page.click('[data-act="shop|1"]'));
     await dialog('new list asks for a name', () => page.click('#newList'));
 
     await goto('#/financial');
@@ -524,7 +527,8 @@ async function browserTests() {
     await dialog('scenario save asks for a name', () => page.click('#scenSave'));
 
     await goto('#/financial/actual');
-    await dialog('shift editor opens and saves', () => page.click('#shAdd'), () => page.click('#sSave'));
+    await dialog('shift editor opens and saves',
+      () => page.click('[data-act="act|0"]'), () => page.click('#sSave'));
     await okEventually(page, 'the shift was logged',
       () => window.Handbook.state().fin.shifts.length > 0);
 
@@ -545,6 +549,24 @@ async function browserTests() {
       () => page.click('[data-tadd="1"]'), () => page.click('#tSave2'));
 
     await goto('#/meals');
+    await dialog('the filter sheet opens and applies',
+      () => page.click('#fOpen'),
+      async () => {
+        await page.selectOption('#fcat', 'Breakfast');
+        await page.click('#fApply');
+      });
+    await okEventually(page, 'the filter shows up as a removable chip',
+      () => !!document.querySelector('[data-unflt="cat"]'));
+    await page.click('[data-unflt="cat"]');
+    await okEventually(page, 'and dismissing the chip clears it',
+      () => !document.querySelector('[data-unflt="cat"]') &&
+        window.Handbook.flt.cat === '');
+
+    await goto('#/plan');
+    await dialog('plan settings open and generate', () => page.click('#pOpts'),
+      () => page.click('#poGo'));
+
+    await goto('#/meals');
     await dialog('own recipe needs a name',
       () => page.click('#addOwn'),
       async () => {
@@ -557,8 +579,133 @@ async function browserTests() {
       () => window.Handbook.all().some(r => r.n === 'Test recipe'));
 
     await goto('#/r/B-01');
-    await dialog('recipe list picker opens', () => page.click('[data-tolist]'), () => page.click('#lS'));
-    await dialog('put-on-a-day picker opens', () => page.click('[data-plan]'));
+    await dialog('the recipe More menu holds the rarer actions', async () => {
+      await page.click('#recipeMore');
+      await page.waitForSelector('.menu');
+      ok('  it lists put-on-a-day, lists, photo and card',
+        await page.locator('.menuitem').count() >= 4);
+      await page.click('.menuitem:nth-child(2)');
+    }, () => page.click('#lS'));
+    await dialog('put-on-a-day picker opens', async () => {
+      await page.click('#recipeMore');
+      await page.waitForSelector('.menu');
+      await page.click('.menuitem:nth-child(1)');
+    });
+
+    group('Layout and reach');
+    /* The complaint that started this: content running off the right edge with
+       nothing to say it was there. Nothing may overflow the viewport, at any
+       width, on any route. */
+    for (const [vw, vh, label] of [[390, 844, 'phone'], [768, 1024, 'tablet'], [1280, 800, 'laptop']]) {
+      await page.setViewportSize({ width: vw, height: vh });
+      const bad = [];
+      for (const [hash] of ROUTES) {
+        await page.evaluate(h => { location.hash = h; }, hash);
+        await page.waitForTimeout(260);
+        const over = await page.evaluate(() => {
+          const vwid = document.documentElement.clientWidth;
+          const out = [];
+          if (document.documentElement.scrollWidth > vwid + 1) out.push('page scrolls sideways');
+          document.querySelectorAll('#view *').forEach(n => {
+            const cs = getComputedStyle(n);
+            if (cs.display === 'none' || cs.visibility === 'hidden') return;
+            const r = n.getBoundingClientRect();
+            if (!r.width && !r.height) return;
+            if (r.right > vwid + 2 || r.left < -2) {
+              out.push(n.tagName.toLowerCase() + '.' + String(n.className || '').split(' ')[0]);
+            }
+            // Clipped with no way to scroll to the rest.
+            if (n.scrollWidth - n.clientWidth > 2 && !/auto|scroll/.test(cs.overflowX) &&
+              cs.overflowX !== 'visible') {
+              out.push('clipped ' + n.tagName.toLowerCase() + '.' + String(n.className || '').split(' ')[0]);
+            }
+          });
+          return [...new Set(out)];
+        });
+        if (over.length) bad.push(hash + ': ' + over.slice(0, 3).join(', '));
+      }
+      ok('nothing overflows or clips on a ' + label, bad.length === 0, bad.slice(0, 4).join(' | '));
+    }
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.evaluate(() => { location.hash = '#/shopping/ingredients'; });
+    await page.waitForTimeout(400);
+    ok('a wide table becomes labelled cards on a phone',
+      await page.evaluate(() => {
+        const td = document.querySelector('.tw td[data-l]');
+        const tr = document.querySelector('.tw tbody tr');
+        if (!td || !tr) return false;
+        return getComputedStyle(td).display === 'flex' &&
+          getComputedStyle(tr).display === 'block' &&
+          getComputedStyle(document.querySelector('.tw thead')).display === 'none';
+      }));
+    ok('and every value still carries its column name',
+      await page.evaluate(() => {
+        const tds = [...document.querySelectorAll('.tw tbody tr:first-child td')];
+        return tds.length > 4 && tds.slice(1, -1).every(t => t.getAttribute('data-l'));
+      }));
+
+    await page.evaluate(() => { location.hash = '#/shopping'; });
+    await page.waitForTimeout(400);
+    ok('the whole shopping row is the tick target, not a 19px box',
+      await page.evaluate(() => {
+        const tick = document.querySelector('.gtick');
+        if (!tick) return false;
+        const r = tick.getBoundingClientRect();
+        return r.height >= 44 && r.width > 180;
+      }));
+    ok('every header control on a phone is a real target',
+      await page.evaluate(() => {
+        const small = [];
+        document.querySelectorAll('.top button').forEach(n => {
+          // The desktop tab strip is display:none at this width.
+          if (!n.offsetParent) return;
+          const r = n.getBoundingClientRect();
+          if (r.height < 36 || r.width < 36) {
+            small.push((n.id || n.className) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height));
+          }
+        });
+        return small;
+      }).then(x => { if (x.length) console.log('      ' + x.join(', ')); return x.length === 0; }));
+    ok('every control on a phone is at least 38px tall',
+      await page.evaluate(() => {
+        const small = [];
+        // A switch is a small painted control with a padded hit area, so it is
+        // measured by that area rather than by the track.
+        document.querySelectorAll('#view button,#view select,#view .gtick,#view a.b')
+          .forEach(n => {
+            const cs = getComputedStyle(n);
+            if (cs.display === 'none' || cs.visibility === 'hidden') return;
+            const r = n.getBoundingClientRect();
+            if (!r.width && !r.height) return;
+            const pad = n.classList.contains('sw') ? 20 : 0;
+            if (r.height + pad < 38 || r.width + pad < 32) {
+              small.push(n.tagName.toLowerCase() + '.' + String(n.className || '').split(' ')[0] +
+                ' ' + Math.round(r.width) + 'x' + Math.round(r.height));
+            }
+          });
+        return [...new Set(small)];
+      }).then(x => { if (x.length) console.log('      ' + x.join(', ')); return x.length === 0; }));
+
+    group('Aisles and menus');
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.evaluate(() => { location.hash = '#/shopping'; });
+    await page.waitForTimeout(400);
+    const aisle = page.locator('[data-aisle]').first();
+    if (await aisle.count()) {
+      await aisle.click();
+      await okEventually(page, 'an aisle collapses and is remembered',
+        () => document.querySelector('.aislegrp.shut') &&
+          window.Handbook.state().prefs.closedAisles.length > 0);
+      await aisle.click();
+      await okEventually(page, 'and opens again',
+        () => window.Handbook.state().prefs.closedAisles.length === 0);
+    }
+    await page.click('[data-more="shop"]');
+    await okEventually(page, 'the More menu holds the rare actions',
+      () => document.querySelectorAll('.menuitem').length >= 5);
+    await page.keyboard.press('Escape');
+    await okEventually(page, 'Escape closes the menu', () => !document.querySelector('.menu'));
 
     group('Offline and motion');
     await page.context().setOffline(true);
