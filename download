@@ -1,0 +1,57 @@
+# The Handbook - Hostinger / Apache
+# One self-contained file. No build step, no dependencies.
+
+DirectoryIndex index.html
+
+# ---- compression: the file is ~670 KB of text and gzips to about a fifth ----
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/plain text/css text/javascript
+  AddOutputFilterByType DEFLATE application/javascript application/json
+  AddOutputFilterByType DEFLATE application/manifest+json image/svg+xml
+</IfModule>
+
+# ---- caching ----
+<IfModule mod_expires.c>
+  ExpiresActive On
+  # never cache the app itself, so a re-upload is live immediately
+  ExpiresByType text/html "access plus 0 seconds"
+  ExpiresByType image/png "access plus 7 days"
+  ExpiresByType image/svg+xml "access plus 7 days"
+  ExpiresByType application/manifest+json "access plus 1 day"
+</IfModule>
+
+<IfModule mod_headers.c>
+  <FilesMatch "\.(html)$">
+    Header set Cache-Control "public, max-age=0, must-revalidate"
+  </FilesMatch>
+  Header set X-Content-Type-Options "nosniff"
+  Header set X-Frame-Options "SAMEORIGIN"
+  Header set Referrer-Policy "strict-origin-when-cross-origin"
+  Header set Permissions-Policy "geolocation=(), microphone=(), camera=(self)"
+</IfModule>
+
+# ---- correct MIME type for the web manifest ----
+<IfModule mod_mime.c>
+  AddType application/manifest+json .webmanifest
+  AddType image/svg+xml .svg
+</IfModule>
+
+# ---- force https ----
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{HTTPS} !=on
+  RewriteCond %{HTTP:X-Forwarded-Proto} !https
+  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+  # anything that is not a real file falls back to the app
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule . index.html [L]
+</IfModule>
+
+# ---- keep the Python source out of the web root ----
+<FilesMatch "\.(py|json|md)$">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+</FilesMatch>
