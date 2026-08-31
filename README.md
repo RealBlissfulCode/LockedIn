@@ -1,90 +1,65 @@
 # The Handbook
 
-Meals, training, shopping, money and schedule for two people, in one static site.
-No framework, no build step, no backend, no accounts.
+Meals, training, shopping, money and schedule for two people. One HTML file,
+no framework, no build step, no backend, no accounts.
 
-- **251 recipes**, all gluten-free, macros computed from gram weights
-- **168 ingredients** with Walmart Fort Collins and Costco Timnath prices, fully editable
-- **211 exercises** and 32 prebuilt sessions
-- **Financial** planning and real earnings tracking, seeded from the Moving In workbook
-- **Schedule** with a weekly template and a shared calendar
+- 251 recipes, gluten-free, macros computed from gram weights
+- 168 ingredients priced at whichever of Walmart Fort Collins or Costco Timnath is cheaper
+- 211 exercises and 32 prebuilt sessions
+- Financial planning with scenarios, plus real earnings tracking
+- Schedule with a weekly template and a shared time-ordered calendar
+- Dark and light themes
 
-## Deploy to Netlify
+## Deploy
 
-**Drag and drop.** Drop this folder onto app.netlify.com. Live in seconds.
+Netlify: **Add new site, Import an existing project**, pick the repo.
+Build command **empty**, publish directory `.`
 
-**From the repo.** Better, because every push redeploys.
+Or drag this folder onto app.netlify.com.
 
-```
-git init
-git add .
-git commit -m "Handbook"
-git branch -M main
-git remote add origin https://github.com/YOURNAME/Meal-App.git
-git push -u origin main
-```
-
-Then Netlify: Add new site, Import an existing project, pick the repo.
-Build command **empty**, publish directory `.` — `netlify.toml` already sets headers,
-caching and the SPA fallback.
-
-## Layout
+## Files
 
 ```
-index.html               shell and meta
-assets/app.css           the design system
-assets/app.js            state, router, all five sections
-assets/data.js           recipes, ingredients, exercises, sessions, seed budget
-manifest.webmanifest     installable on a phone
-sw.js                    offline cache
+index.html               the entire app, self-contained
+manifest.webmanifest     lets it install to a phone home screen
 icons/                   app icons
-netlify.toml             headers, caching, redirects
-src/                     Python that regenerates assets/data.js
+netlify.toml             headers and the SPA redirect
+src/                     Python that regenerates index.html (not deployed)
 ```
+
+There is deliberately **no service worker**. Earlier versions cached assets and a
+partial upload could leave a new page running old code. With one file and no cache,
+what you upload is exactly what loads.
 
 ## Your data
 
-Everything lives in this browser's localStorage on this device. Nothing is uploaded,
-there is no backend and no analytics.
+Everything saves to this browser on this device. Nothing is uploaded, there is no
+backend and no analytics.
 
-**Save** in the top bar downloads the whole state as `handbook-data-YYYY-MM-DD.json`:
-profiles, ingredient edits, every shopping list, favourites, custom recipes, photos,
-every logged day, shifts, costs, scenarios and the schedule. **Load** restores it.
+The gear icon opens Settings. **Save to a file** downloads everything as
+`handbook-data-YYYY-MM-DD.json`: profiles, ingredient edits, shopping lists,
+favourites, custom recipes, photos, every logged day, shifts, costs, scenarios and
+the schedule. **Load a file** restores it. That file is also how to hand the data
+over for changes, so a new version can be built on top of real entries.
 
-That file is also how you hand the data back for changes. Send the JSON and the next
-version can be built on top of exactly what is in it, rather than starting clean.
+Because storage is per browser and per device, it does not sync between a phone and
+a laptop. Save on one, Load on the other.
 
-Because storage is per browser and per device, it does not sync between a phone and a
-laptop by itself. Save on one, Load on the other.
+Storage caps around 5 MB. Photos are the only thing large enough to matter; they are
+downscaled to 900 px on the way in.
 
-Storage caps at roughly 5 MB. Photos are the only thing big enough to matter; they are
-downscaled to 900 px and compressed on the way in.
-
-## Editing
-
-- **Look** -> `assets/app.css`
-- **Behaviour** -> `assets/app.js`. Views are `vMeals`, `vRecipe`, `vShopping`,
-  `vIngredients`, `vTraining`, `vExercises`, `vFinancial`, `vActual`, `vPurchases`,
-  `vSchedule`, `vWeekTemplate`. Each returns an HTML string.
-- **Recipes, prices, exercises** -> `assets/data.js` is generated. Edit the Python in
-  `src/` and re-run, or edit an ingredient price directly in the app, which is easier
-  and updates every recipe that uses it.
-
-Regenerate the data file:
+## Rebuilding index.html
 
 ```
-cd src && python3 repo2.py
+cd src && python3 build.py && python3 -c "import build_app"
 ```
 
-## Downloads the app can produce
-
-Recipe cards as PNG, shopping checklists as TXT, shopping lists as CSV, a single
-shopping list as JSON that can be loaded back, the ingredient list as CSV, shifts as
-CSV, the daily log as CSV, and the whole state as JSON.
+Prices live in `src/prices.py` as dollars per 100 g, two columns. Editing an
+ingredient price inside the app is easier and updates every recipe that uses it.
 
 ## Known limits
 
-- No sync between devices. By design, since there is no server.
-- Prices are Aug 2026 estimates for Fort Collins and drift. Edit them in the app.
+- No sync between devices, by design, since there is no server.
+- Prices are Aug 2026 estimates for Fort Collins and drift.
 - Leucine is an estimate within about 10 percent where USDA has no amino acid profile.
 - Recipe photos are yours to add. No stock imagery is bundled.

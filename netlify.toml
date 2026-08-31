@@ -1,8 +1,10 @@
-# Static site. No build step, no dependencies.
+# One self-contained file. No build step, no dependencies, nothing to install.
 [build]
   publish = "."
   command = ""
 
+# Hash routing means deep paths are never requested from the server,
+# but this covers anyone typing one in.
 [[redirects]]
   from = "/*"
   to = "/index.html"
@@ -16,22 +18,13 @@
     Referrer-Policy = "strict-origin-when-cross-origin"
     Permissions-Policy = "geolocation=(), microphone=(), camera=(self)"
 
-[[headers]]
-  for = "/assets/*"
-  [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
-
-[[headers]]
-  for = "/icons/*"
-  [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
-
+# Never cache the app itself. A redeploy is live immediately.
 [[headers]]
   for = "/index.html"
   [headers.values]
     Cache-Control = "public, max-age=0, must-revalidate"
 
 [[headers]]
-  for = "/sw.js"
+  for = "/icons/*"
   [headers.values]
-    Cache-Control = "public, max-age=0, must-revalidate"
+    Cache-Control = "public, max-age=604800"
