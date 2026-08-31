@@ -1,2267 +1,1487 @@
+(function(){
+'use strict';
+var _D=window._DATA;
+
 /* ============================================================
-   The Handbook - router and wiring
-
-   Owns the URL, decides which view renders, and binds every
-   control on it. All the writes to state happen here.
+   THE HANDBOOK  -  five sections, one state object, one file.
+   Everything the app knows lives in S. S is written to
+   localStorage on every change and can be saved to / loaded
+   from a real .json file so it can be handed back for edits.
    ============================================================ */
-(function (global) {
-  'use strict';
-
-  var H = global.Handbook;
-  var $ = H.$, $$ = H.$$, on = H.on, E = H.E, money = H.money, money0 = H.money0;
-  var toast = H.toast, modal = H.modal, form = H.form, opt = H.opt;
-  var V = H.views;
-
-  function S() { return H.state(); }
-
-  /* ---------------------------------------------------------- chrome */
-  var NAV = [
-    ['meals', 'Meals'], ['training', 'Training'], ['shopping', 'Shopping'],
-    ['financial', 'Financial'], ['schedule', 'Schedule']
-  ];
-  H.NAV = NAV;
-
-  var ICO = {
-    meals: '<path d="M4 3v8a3 3 0 006 0V3M7 11v10M16 3c-1.5 2-2 4-2 6s.5 3 2 3 2-1 2-3-.5-4-2-6zM16 12v9"/>',
-    training: '<path d="M6 8v8M18 8v8M3 10v4M21 10v4M6 12h12"/>',
-    shopping: '<path d="M3 4h2l2 12h11M7 8h14l-2 6H8"/><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/>',
-    financial: '<path d="M12 2v20M17 6H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>',
-    schedule: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>'
-  };
-
-  var SUN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
-  var MOON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></svg>';
-
-  function chrome() {
-    $('#tabs').innerHTML = NAV.map(function (t) {
-      return '<button class="tab" data-v="' + t[0] + '" data-nav="' + t[0] + '">' + t[1] + '</button>';
-    }).join('');
-    $('#btm').innerHTML = NAV.map(function (t) {
-      return '<button data-v="' + t[0] + '" data-nav="' + t[0] + '" aria-label="' + t[1] + '">' +
-        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" ' +
-        'stroke-linejoin="round" aria-hidden="true">' + ICO[t[0]] + '</svg>' +
-        '<span>' + t[1] + '</span></button>';
-    }).join('');
-    drawWho();
-    drawTheme();
-  }
-
-  function drawWho() {
-    $('#who').innerHTML = ['j', 'a'].map(function (k) {
-      return '<button data-w="' + k + '"' + (S().who === k ? ' class="on"' : '') +
-        ' aria-pressed="' + (S().who === k) + '">' + E(S().prof[k].name) + '</button>';
-    }).join('');
-  }
-
-  /* ---------------------------------------------------------- theme */
-  function applyTheme() {
-    var pref = S().theme || 'auto';
-    var dark = pref === 'dark' || (pref === 'auto' && global.matchMedia &&
-      global.matchMedia('(prefers-color-scheme: dark)').matches);
-    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
-    var meta = document.querySelector('meta[name="theme-color"]:not([media])');
-    if (!meta) {
-      meta = document.createElement('meta');
-      meta.name = 'theme-color';
-      document.head.appendChild(meta);
-    }
-    meta.content = dark ? '#16160F' : '#FBFAF7';
-    drawTheme();
-  }
-  H.applyTheme = applyTheme;
-
-  function drawTheme() {
-    var btn = $('#themeBtn');
-    if (!btn) return;
-    // The icon shows what a tap will give you, not what you already have.
-    var dark = document.documentElement.getAttribute('data-theme') === 'dark';
-    btn.innerHTML = dark ? SUN : MOON;
-    btn.title = dark ? 'Switch to light' : 'Switch to dark';
-    btn.setAttribute('aria-label', btn.title);
-  }
-
-  if (global.matchMedia) {
-    var mq = global.matchMedia('(prefers-color-scheme: dark)');
-    var onScheme = function () { if ((S().theme || 'auto') === 'auto') applyTheme(); };
-    if (mq.addEventListener) mq.addEventListener('change', onScheme);
-    else if (mq.addListener) mq.addListener(onScheme);
-  }
-
-  /* ---------------------------------------------------------- router */
-  H.calY = new Date().getFullYear();
-  H.calM = new Date().getMonth();
-  H.calSel = H.today();
-  H.planCursor = H.today();
-
-  var scrollByRoute = {};
-  var lastRoute = null;
-
-  function parse() {
-    var h = (location.hash || '#/meals').slice(2).split('/');
-    return { v: h[0] || 'meals', sub: h[1] || '', rest: h.slice(2) };
-  }
-
-  function viewHTML(r) {
-    switch (r.v) {
-      case 'r': return V.recipe(r.sub);
-      case 'plan': return V.plan();
-      case 'training': return V.training(r.sub);
-      case 'shopping': return V.shopping(r.sub);
-      case 'financial': return V.financial(r.sub);
-      case 'schedule': return V.schedule(r.sub);
-      case 'settings': return V.settings();
-      default: return V.meals();
-    }
-  }
-
-  /* scroll-behavior:smooth makes programmatic scrolling animate, which turns a
-     "stay exactly where you are" repaint into a visible drift. These jumps are
-     always instant. */
-  function jump(y) {
-    try { global.scrollTo({ top: y, left: 0, behavior: 'instant' }); }
-    catch (e) { global.scrollTo(0, y); }
-  }
-
-  function paint(r, keepScroll) {
-    var main = $('#view');
-    var y = global.scrollY || 0;
-    main.innerHTML = viewHTML(r);
-
-    $$('.tab,.btmnav button').forEach(function (b) {
-      var active = b.dataset.v === (r.v === 'r' || r.v === 'plan' ? 'meals' : r.v);
-      b.classList.toggle('on', active);
-      if (active) b.setAttribute('aria-current', 'page');
-      else b.removeAttribute('aria-current');
-    });
-    $$('#who button').forEach(function (b) {
-      b.classList.toggle('on', b.dataset.w === S().who);
-      b.setAttribute('aria-pressed', b.dataset.w === S().who);
-    });
-    $$('[data-stagger]').forEach(H.stagger);
-    H.fillBars(main);
-
-    if (keepScroll) jump(y);
-    bind(r);
-  }
-
-  /* A fresh route scrolls to the top and restores where you were if you are
-     going back; a refresh in place must not move the page at all, which is what
-     made ticking a shopping item so annoying before. */
-  function route() {
-    var r = parse();
-    var key = r.v + '/' + r.sub;
-    if (lastRoute && lastRoute !== key) scrollByRoute[lastRoute] = global.scrollY || 0;
-
-    var render = function () { paint(r, false); };
-    if (document.startViewTransition && lastRoute !== key) {
-      document.startViewTransition(render);
-    } else {
-      render();
-    }
-
-    if (lastRoute !== key) {
-      var restore = scrollByRoute[key] || 0;
-      requestAnimationFrame(function () { jump(restore); });
-    }
-    lastRoute = key;
-  }
-
-  function refresh() { paint(parse(), true); }
-  H.refresh = refresh;
-
-  function nav(p) {
-    if (('#/' + p) === location.hash) { refresh(); return; }
-    location.hash = '#/' + p;
-  }
-  H.nav = nav;
-
-  global.addEventListener('hashchange', route);
-
-  /* ---------------------------------------------------------- per-view */
-  function bind(r) {
-    if (r.v === 'meals') bindMeals();
-    else if (r.v === 'r') bindRecipe(r.sub);
-    else if (r.v === 'plan') bindPlan();
-    else if (r.v === 'shopping') {
-      if (r.sub === 'ingredients') bindIngredients();
-      else if (r.sub === 'pantry') bindPantry();
-      else bindShop();
-    }
-    else if (r.v === 'training') {
-      if (r.sub === 'exercises') bindExercises();
-      else bindTraining();
-    }
-    else if (r.v === 'financial') bindFin(r.sub);
-    else if (r.v === 'schedule') bindSched(r.sub);
-    else if (r.v === 'settings') bindSettings();
-  }
-
-  function debounce(fn, ms) {
-    var t = null;
-    return function () {
-      var a = arguments, self = this;
-      clearTimeout(t);
-      t = setTimeout(function () { fn.apply(self, a); }, ms);
-    };
-  }
-
-  /* ---------------------------------------------------------- meals */
-  /* A phone shows fewer per page: the same 48 cards is several screens of
-     scrolling before the button that loads more. */
-  function pageSize() { return global.innerWidth <= 560 ? 24 : 48; }
-
-  function drawGrid() {
-    var g = $('#fgrid');
-    if (!g) return;
-    var L = H.filtered();
-    var per = pageSize();
-    var shown = L.slice(0, H.flt.page * per);
-    g.innerHTML = shown.length
-      ? shown.map(H.rcard).join('')
-      : H.empty('Nothing matches.',
-        H.flt.q ? 'No recipe mentions “' + E(H.flt.q) + '”.' : 'Try loosening the filters.',
-        '<button class="b o" id="fReset">Clear the search and filters</button>');
-    H.stagger(g);
-    var reset = $('#fReset');
-    if (reset) {
-      reset.onclick = function () {
-        H.flt = { q: '', cat: '', tag: '', sort: 'rec', page: 1 };
-        refresh();
-      };
-    }
-    H.setText('#fcount', L.length + ' recipe' + (L.length === 1 ? '' : 's') +
-      (shown.length < L.length ? ', showing ' + shown.length : ''));
-    var more = $('#fmore');
-    if (more) {
-      more.innerHTML = shown.length < L.length
-        ? '<button class="b o" id="fmoreBtn">Show ' +
-        Math.min(per, L.length - shown.length) + ' more of ' + L.length + '</button>'
-        : '';
-      var b = $('#fmoreBtn');
-      if (b) b.onclick = function () { H.flt.page++; drawGrid(); };
-    }
-  }
-
-  function bindMeals() {
-    drawGrid();
-    on('#fq', 'input', debounce(function () {
-      H.flt.q = this.value; H.flt.page = 1; drawGrid();
-    }, 140));
-    on('#fOpen', 'click', filterSheet);
-    on('#addOwn', 'click', ownRecipe);
-    on('#logPlanned', 'click', function () { logPlanned(H.today()); });
-    on('#quickLog', 'click', function () { mealPicker(H.today()); });
-
-    $$('[data-unflt]').forEach(function (b) {
-      b.onclick = function () {
-        var k = b.dataset.unflt;
-        H.flt[k] = k === 'sort' ? 'rec' : '';
-        H.flt.page = 1;
-        refresh();
-      };
-    });
-
-    on('#costMenu', 'click', function () {
-      var modes = [['all', 'Every recipe, averaged'], ['cheap', 'The cheapest 40 per calorie'],
-      ['fav', 'My favourites only'], ['logged', 'What we actually logged']];
-      H.menu(this, modes.map(function (m) {
-        return {
-          label: m[1],
-          hint: S().prefs.costMode === m[0] ? 'current' : '',
-          run: function () { S().prefs.costMode = m[0]; H.save(true); refresh(); }
-        };
-      }));
-    });
-  }
-
-  function filterSheet() {
-    var m = modal('Filter recipes', V.filterBody(),
-      '<button class="b o" id="fClear">Clear all</button>' +
-      '<button class="b" id="fApply">Show them</button>', { focus: '#fcat' });
-
-    $('#fClear', m).onclick = function () {
-      H.flt = { q: H.flt.q, cat: '', tag: '', sort: 'rec', page: 1 };
-      m.close(); refresh();
-    };
-    $('#fApply', m).onclick = function () {
-      H.flt.cat = $('#fcat', m).value;
-      H.flt.tag = $('#ftag', m).value;
-      H.flt.sort = $('#fsort', m).value;
-      H.flt.page = 1;
-      m.close(); refresh();
-    };
-  }
-
-  function logPlanned(ds) {
-    var planned = H.planFor(ds);
-    if (!planned.length) return;
-    var log = H.dayLog(ds);
-    planned.forEach(function (m) {
-      log.meals.push({ id: m.id, q: m.q || 1 });
-      H.consumeFromPantry(m.id, m.q || 1);
-    });
-    H.save(true);
-    refresh();
-    toast(planned.length + ' meals logged');
-  }
-
-  /* ---------------------------------------------------------- recipe */
-  function drawIng(r, mult) {
-    var el = $('#ingList');
-    if (!el) return;
-    el.innerHTML = (r.ing || []).map(function (i) {
-      var meas = i[0], key = i[1], g = i[2] || 0, q = H.ING(key);
-      var nm = q ? q.n : meas;
-      var pr = q ? (g * mult / 100) * H.best(q) : 0;
-      var gs = g ? Math.round(g * mult) + ' g' : '';
-      var sub = (q && meas) ? ' <span class="muted xs">(' + E(meas) + ')</span>' : '';
-      return '<li><b>' + gs + '</b><span>' + E(nm) + sub + '</span>' +
-        (pr ? '<span class="c">' + money(pr) + '</span>' : '') + '</li>';
-    }).join('');
-
-    var sv = (r.sv || 1) * mult;
-    var nice = function (x) { return Math.round(x * 10) / 10; };
-    var t = H.ctot(r) * mult;
-    H.setText('#svLabel', 'for ' + nice(sv) + ' serving' + (sv === 1 ? '' : 's'));
-    H.setText('#svHero', nice(sv));
-    H.setText('#totHero', money(t));
-    H.setText('#batchSv', nice(sv));
-    var a = $('#batchAll');
-    if (a) {
-      a.textContent = Math.round(r.k * sv) + ' kcal, ' + Math.round(r.p * sv) +
-        ' g protein, ' + Math.round(r.c * sv) + ' g carbs, ' + Math.round(r.f * sv) +
-        ' g fat, ' + money(t);
-    }
-  }
-
-  function bindRecipe(id) {
-    var r = H.byId(id);
-    if (!r) return;
-    drawIng(r, 1);
-    $$('[data-scale]').forEach(function (b) {
-      b.onclick = function () {
-        $$('[data-scale]').forEach(function (x) {
-          x.classList.remove('on');
-          x.setAttribute('aria-pressed', 'false');
-        });
-        b.classList.add('on');
-        b.setAttribute('aria-pressed', 'true');
-        drawIng(r, parseFloat(b.dataset.scale));
-      };
-    });
-
-    on('#recipeMore', 'click', function () {
-      var ph = S().photos[id];
-      var items = [
-        { label: 'Put it on a day', hint: 'meal plan', run: function () { planPicker(id); } },
-        { label: 'Add to a recipe list', run: function () { listModal(id); } },
-        { label: ph ? 'Change the photo' : 'Add a photo', run: function () { pickPhoto(id); } },
-        { label: 'Save a recipe card', hint: 'PNG', run: function () { cardPNG(H.byId(id)); } }
-      ];
-      if (ph) {
-        items.push({ sep: true });
-        items.push({
-          label: 'Remove the photo', danger: true,
-          run: function () { delete S().photos[id]; H.save(true); refresh(); toast('Photo removed'); }
-        });
-      }
-      H.menu(this, items);
-    });
-    // Ticking steps is per-visit rather than stored: it is a cooking aid, not data.
-    var list = $('#stepList');
-    if (list) {
-      list.addEventListener('click', function (e) {
-        var li = e.target.closest('li[data-step]');
-        if (li) li.classList.toggle('done');
-      });
-    }
-  }
-
-  /* ---------------------------------------------------------- plan */
-  function generate() {
-    var o = H.planOpts;
-    var res = H.generatePlan({
-      from: H.planCursor,
-      days: o.days,
-      slots: o.slots,
-      who: S().who,
-      budget: o.budget === '' ? null : H.num(o.budget),
-      maxMinutes: o.maxMinutes === '' ? null : H.num(o.maxMinutes),
-      favOnly: o.favOnly,
-      variety: o.variety,
-      seed: Date.now() & 0xffff
-    });
-    Object.keys(res.plan).forEach(function (ds) { S().plan[ds] = res.plan[ds]; });
-    H.save(true);
-    refresh();
-
-    var over = res.report.filter(function (d) { return d.overBudget; }).length;
-    var missed = res.report.filter(function (d) { return d.err > 55; }).length;
-    var msg = o.days + ' days planned';
-    if (over) msg += ', ' + over + ' over budget';
-    else if (missed) msg += ', ' + missed + ' a way off target';
-    else msg += ', every day on target';
-    toast(msg, { action: 'Shopping list', onAction: buildListFromPlan });
-  }
-
-  function planOptions() {
-    var m = modal('Plan settings', V.planOptionsBody(),
-      '<button class="b o" data-close>Cancel</button>' +
-      '<button class="b" id="poGo">Generate with these</button>', { focus: '#pDays' });
-
-    var fav = $('#pFav', m);
-    fav.onclick = function () {
-      var next = fav.getAttribute('aria-checked') !== 'true';
-      fav.setAttribute('aria-checked', next);
-    };
-    $('#poGo', m).onclick = function () {
-      var o = H.planOpts;
-      H.planCursor = $('#pFrom', m).value || H.today();
-      o.days = +$('#pDays', m).value;
-      o.slots = +$('#pSlots', m).value;
-      o.budget = $('#pBudget', m).value;
-      o.maxMinutes = $('#pMax', m).value;
-      o.variety = +$('#pVar', m).value;
-      o.favOnly = fav.getAttribute('aria-checked') === 'true';
-      S().prefs.planSlots = o.slots;
-      S().prefs.dayBudget = o.budget === '' ? null : H.num(o.budget);
-      H.save(true);
-      m.close();
-      generate();
-    };
-  }
-
-  function bindPlan() {
-    on('#pGen', 'click', generate);
-    on('#pGen2', 'click', generate);
-    on('#pOpts', 'click', planOptions);
-    on('#pShop', 'click', buildListFromPlan);
-    on('#pCsv', 'click', function () {
-      var rows = [['Date', 'Slot', 'Recipe', 'Servings', 'Kcal', 'Protein', 'Cost']];
-      H.planRange(H.planCursor, H.planOpts.days).forEach(function (d) {
-        d.meals.forEach(function (m) {
-          var rec = H.byId(m.id);
-          if (!rec) return;
-          rows.push([d.date, m.slot || '', rec.n, m.q || 1,
-          Math.round(rec.k * (m.q || 1)), Math.round(rec.p * (m.q || 1)),
-          (H.cps(rec) * (m.q || 1)).toFixed(2)]);
-        });
-      });
-      H.dl('meal-plan-' + H.planCursor + '.csv', H.toCSV(rows), 'text/csv');
-      toast('Plan exported');
-    });
-    on('#pClear', 'click', function () {
-      H.confirmDanger({
-        title: 'Clear these ' + H.planOpts.days + ' days?',
-        text: 'The planned meals go. Anything already logged stays.',
-        ok: 'Clear'
-      }).then(function (okd) {
-        if (!okd) return;
-        for (var i = 0; i < H.planOpts.days; i++) delete S().plan[H.addDays(H.planCursor, i)];
-        H.save(true);
-        refresh();
-        toast('Plan cleared');
-      });
-    });
-
-    $$('[data-swap]').forEach(function (b) {
-      b.onclick = function () {
-        var p = b.dataset.swap.split('|');
-        swapMeal(p[0], +p[1]);
-      };
-    });
-  }
-
-  function swapMeal(ds, idx) {
-    var meals = S().plan[ds] || [];
-    var cur = meals[idx];
-    if (!cur) return;
-    var r = H.byId(cur.id);
-
-    var m = modal('Swap ' + (r ? r.n : 'this meal'),
-      '<div class="row" style="margin-bottom:12px">' +
-      '<span class="muted sm">Servings</span>' +
-      [0.5, 1, 1.5, 2].map(function (q) {
-        return '<button class="pill' + ((cur.q || 1) === q ? ' on' : '') +
-          '" data-q="' + q + '">' + q + '×</button>';
-      }).join('') + '</div>' +
-      '<label class="f"><span>Pick a different recipe</span>' +
-      '<input id="swq" type="search" placeholder="Filter recipes..." autocomplete="off"></label>' +
-      '<div class="picklist" id="swlist"></div>',
-      '<button class="b o dz" id="swDel">Remove from the day</button>' +
-      '<button class="b o" data-close>Done</button>', { focus: '#swq' });
-
-    function draw(q) {
-      q = (q || '').toLowerCase();
-      var hits = H.all().filter(function (x) {
-        return x.n.toLowerCase().indexOf(q) >= 0;
-      }).slice(0, 60);
-      $('#swlist', m).innerHTML = hits.map(function (x) {
-        return '<button class="pickrow" data-r="' + E(x.id) + '">' +
-          '<div style="flex:1"><b>' + E(x.n) + '</b>' +
-          '<div class="xs muted">' + Math.round(x.k) + ' kcal &middot; ' + Math.round(x.p) +
-          'g protein &middot; ' + money(H.cps(x)) + '</div></div>' +
-          '<span class="b s">Use</span></button>';
-      }).join('') || '<p class="empty sm">No match.</p>';
-      $$('[data-r]', m).forEach(function (row) {
-        row.onclick = function () {
-          meals[idx] = { id: row.dataset.r, q: cur.q || 1, slot: cur.slot };
-          H.save(true); m.close(); refresh(); toast('Swapped');
-        };
-      });
-    }
-
-    $$('[data-q]', m).forEach(function (b) {
-      b.onclick = function () {
-        cur.q = parseFloat(b.dataset.q);
-        H.save(true); m.close(); refresh();
-      };
-    });
-    $('#swDel', m).onclick = function () {
-      meals.splice(idx, 1);
-      H.save(true); m.close(); refresh(); toast('Removed');
-    };
-    $('#swq', m).oninput = function () { draw(this.value); };
-    draw('');
-  }
-
-  function buildListFromPlan() {
-    var res = H.shoppingFromPlan(H.planCursor, H.planOpts.days, { usePantry: true });
-    if (!res.items.length) {
-      toast('Nothing to buy — the pantry already covers this plan');
-      return;
-    }
-    var total = res.items.reduce(function (a, i) { return a + i.price; }, 0);
-    var name = 'Plan ' + H.shortD(H.planCursor);
-
-    var m = modal('Build the shopping list',
-      '<p class="sm muted" style="margin-top:0">' + res.items.length + ' ingredients across ' +
-      H.planOpts.days + ' planned days, priced at the cheaper store, worth <b>' +
-      money(total) + '</b>.' +
-      (res.skipped.length ? ' ' + res.skipped.length + ' already covered by the pantry.' : '') +
-      '</p>' +
-      '<label class="f"><span>List name</span><input id="blName" value="' + E(name) + '"></label>' +
-      '<label class="f"><span>What to do with what is already on that list</span>' +
-      '<select id="blMode">' +
-      opt([['replace', 'Replace it'], ['merge', 'Add to it']], 'replace') + '</select></label>' +
-      (res.skipped.length
-        ? '<div class="note"><b>Skipped.</b> ' +
-        res.skipped.slice(0, 8).map(function (s) { return E(s.name); }).join(', ') +
-        (res.skipped.length > 8 ? ' and ' + (res.skipped.length - 8) + ' more' : '') +
-        ' — already in the pantry.</div>'
-        : ''),
-      '<button class="b o" data-close>Cancel</button>' +
-      '<button class="b" id="blGo">Build it</button>', { focus: '#blName' });
-
-    $('#blGo', m).onclick = function () {
-      var nm = $('#blName', m).value.trim() || name;
-      var mode = $('#blMode', m).value;
-      var lists = H.shopLists();
-      if (!lists[nm] || mode === 'replace') {
-        lists[nm] = { cat: 'Groceries', fav: false, items: res.items };
-      } else {
-        res.items.forEach(function (it) {
-          var ex = null;
-          lists[nm].items.forEach(function (x) { if (x.key === it.key) ex = x; });
-          if (ex) {
-            ex.grams = (ex.grams || 0) + it.grams;
-            ex.price = (ex.grams / 100) * H.best(H.ING(it.key));
-            ex.note = Math.round(ex.grams) + ' g';
-          } else lists[nm].items.push(it);
-        });
-      }
-      S().shop.active = nm;
-      H.save(true);
-      m.close();
-      nav('shopping');
-      toast(res.items.length + ' items on "' + nm + '"');
-    };
-  }
-
-  /* ---------------------------------------------------------- shopping */
-  /* Named actions the views reference by name when they build an action bar.
-     Keeping them here means a view describes what it offers, not how it works. */
-  H.act = {};
-
-  H.act.gAdd = function () {
-    ingPicker(function (it) { H.curList().items.push(it); H.save(true); refresh(); });
-  };
-  H.act.gRecipe = function () { recipePicker(); };
-  H.act.gPlan = function () { buildListFromPlan(); };
-  H.act.gTxt = function () { shopTxt(); };
-  H.act.gCsv = function () { shopCsv(); };
-
-  H.act.gSave = function () {
-    H.dl('list-' + S().shop.active.replace(/[^a-z0-9]+/gi, '-').toLowerCase() + '.json',
-      JSON.stringify({ app: 'handbook-list', name: S().shop.active, list: H.curList() }, null, 1),
-      'application/json');
-    toast('List saved to a file');
-  };
-
-  H.act.gLoad = function () {
-    H.pickFile('.json', function (f) {
-      var fr = new FileReader();
-      fr.onload = function () {
-        try {
-          var o = JSON.parse(fr.result);
-          var nm = o.name || 'Imported list';
-          while (S().shop.lists[nm]) nm += ' 2';
-          S().shop.lists[nm] = o.list || o;
-          S().shop.active = nm;
-          H.save(true); refresh();
-          toast('Loaded "' + nm + '"');
-        } catch (e) {
-          toast('That is not a saved list file');
-        }
-      };
-      fr.readAsText(f);
-    });
-  };
-
-  H.act.gStock = function () {
-    var n = H.stockFromList();
-    if (!n) { toast('Tick things off first, then move them'); return; }
-    refresh();
-    toast(n + ' moved into the pantry');
-  };
-
-  H.act.gClear = function () {
-    var L = H.curList();
-    var removed = L.items.filter(function (i) { return i.done; });
-    if (!removed.length) { toast('Nothing is checked'); return; }
-    var before = L.items.slice();
-    L.items = L.items.filter(function (i) { return !i.done; });
-    H.save(true); refresh();
-    toast(removed.length + ' cleared', {
-      action: 'Undo',
-      onAction: function () { H.curList().items = before; H.save(true); refresh(); }
-    });
-  };
-
-  H.act.newList = function () {
-    H.ask({
-      title: 'New list', label: 'Name', placeholder: 'Costco run',
-      text: 'Lists keep separate shops apart — a weekly grocery run, a party, a Costco trip.'
-    }).then(function (n) {
-      if (!n) return;
-      var lists = S().shop.lists;
-      while (lists[n]) n += ' 2';
-      lists[n] = { cat: 'Lists', fav: false, items: [] };
-      S().shop.active = n;
-      H.save(true); refresh();
-      toast('Started "' + n + '"');
-    });
-  };
-
-  H.act.listRename = function () {
-    H.ask({ title: 'Rename list', label: 'Name', value: S().shop.active }).then(function (n) {
-      if (!n || n === S().shop.active) return;
-      var L = S().shop.lists;
-      L[n] = L[S().shop.active];
-      delete L[S().shop.active];
-      S().shop.active = n;
-      H.save(true); refresh();
-    });
-  };
-
-  H.act.listDup = function () {
-    var n = S().shop.active + ' copy';
-    while (S().shop.lists[n]) n += ' 2';
-    S().shop.lists[n] = JSON.parse(JSON.stringify(H.curList()));
-    S().shop.active = n;
-    H.save(true); refresh();
-    toast('Duplicated as "' + n + '"');
-  };
-
-  H.act.listFav = function () {
-    H.curList().fav = !H.curList().fav;
-    H.save(); refresh();
-  };
-
-  H.act.listDel = function () {
-    if (Object.keys(S().shop.lists).length < 2) { toast('Keep at least one list'); return; }
-    var name = S().shop.active;
-    H.confirmDanger({
-      title: 'Delete "' + name + '"?',
-      text: 'The ' + H.curList().items.length + ' items on it go too.'
-    }).then(function (okd) {
-      if (!okd) return;
-      var backup = S().shop.lists[name];
-      delete S().shop.lists[name];
-      S().shop.active = Object.keys(S().shop.lists)[0];
-      H.save(true); refresh();
-      toast('Deleted "' + name + '"', {
-        action: 'Undo',
-        onAction: function () {
-          S().shop.lists[name] = backup;
-          S().shop.active = name;
-          H.save(true); refresh();
-        }
-      });
-    });
-  };
-
-  H.act.ingNew = function () { ingEditor(null); };
-  H.act.ingCsv = function () {
-    var rows = [['Ingredient', 'Aisle', 'Walmart/100g', 'Costco/100g', 'Cheaper',
-      'CheaperStore', 'UsedIn', 'Edited']];
-    H.allIngKeys().forEach(function (k) {
-      var g = H.ING(k);
-      rows.push([g.n, g.a || '', g.w, g.c, H.best(g).toFixed(3),
-      H.bestStore(g), H.ingUsage(k), S().ingOv[k] ? 'yes' : '']);
-    });
-    H.dl('ingredients-' + H.today() + '.csv', H.toCSV(rows), 'text/csv');
-    toast('Ingredient list exported');
-  };
-
-  H.act.panAdd = function () {
-    ingPicker(function (it) {
-      H.ask({
-        title: 'How much ' + it.name + '?',
-        label: 'Grams', value: '500',
-        text: 'Roughly is fine. This only decides what a generated list can skip.'
-      }).then(function (v) {
-        if (v == null) return;
-        H.pantryAdd(it.key, H.num(v));
-        refresh();
-        toast(it.name + ' is in the pantry');
-      });
-    });
-  };
-
-  H.act.panClear = function () {
-    if (!Object.keys(S().pantry).length) { toast('The pantry is already empty'); return; }
-    H.confirmDanger({
-      title: 'Empty the pantry?',
-      text: 'Generated shopping lists will stop skipping anything.'
-    }).then(function (okd) {
-      if (!okd) return;
-      var backup = S().pantry;
-      S().pantry = {};
-      H.save(true); refresh();
-      toast('Pantry emptied', {
-        action: 'Undo',
-        onAction: function () { S().pantry = backup; H.save(true); refresh(); }
-      });
-    });
-  };
-
-  H.act.panCsv = function () {
-    var rows = [['Ingredient', 'Aisle', 'Grams', 'Value']];
-    Object.keys(S().pantry).forEach(function (k) {
-      var g = H.ING(k);
-      if (!g) return;
-      rows.push([g.n, g.a || '', Math.round(S().pantry[k].g),
-      (S().pantry[k].g / 100 * H.best(g)).toFixed(2)]);
-    });
-    H.dl('pantry-' + H.today() + '.csv', H.toCSV(rows), 'text/csv');
-    toast('Pantry exported');
-  };
-
-  H.act.shAdd = function () { shiftEditor(); };
-  H.act.shCsv = function () {
-    var rows = [['Date', 'Who', 'Job', 'Hours', 'Gross', 'Net', 'Note']];
-    S().fin.shifts.forEach(function (sh) {
-      var j = null;
-      S().fin.jobs.forEach(function (x) { if (x.id === sh.jobId) j = x; });
-      rows.push([sh.date, j ? H.nameOf(j.who) : '', j ? j.name : '',
-      sh.hours, sh.gross, sh.net, sh.note || '']);
-    });
-    H.dl('shifts-' + H.today() + '.csv', H.toCSV(rows), 'text/csv');
-    toast('Shifts exported');
-  };
-
-  function bindShop() {
-    on('#newList', 'click', H.act.newList);
-    on('#gPlan2', 'click', H.act.gPlan);
-    on('#hideChecked', 'click', function () {
-      S().prefs.hideChecked = !S().prefs.hideChecked;
-      H.save(true); refresh();
-    });
-
-    on('#listMenu', 'click', function () {
-      var cur = H.curList();
-      H.menu(this, [
-        { label: cur.fav ? 'Remove from favourites' : 'Mark as a favourite', run: H.act.listFav },
-        { label: 'Rename this list', run: H.act.listRename },
-        { label: 'Duplicate it', run: H.act.listDup },
-        { label: 'Start a new list', run: H.act.newList },
-        { sep: true },
-        { label: 'Delete this list', danger: true, run: H.act.listDel }
-      ]);
-    });
-
-    // Collapsing an aisle is remembered, so the aisles you have finished stay shut.
-    $$('[data-aisle]').forEach(function (b) {
-      b.onclick = function () {
-        var a = b.dataset.aisle;
-        var closed = S().prefs.closedAisles;
-        var i = closed.indexOf(a);
-        if (i >= 0) closed.splice(i, 1); else closed.push(a);
-        b.closest('.aislegrp').classList.toggle('shut', i < 0);
-        b.setAttribute('aria-expanded', i >= 0);
-        H.save();
-      };
-    });
-  }
-
-  function shopTxt() {
-    var L = H.curList(), byA = {};
-    L.items.forEach(function (i) { (byA[i.aisle] = byA[i.aisle] || []).push(i); });
-    var out = ['SHOPPING LIST  -  ' + S().shop.active, H.pretty(H.today()),
-      'Best price of Walmart Fort Collins / Costco Timnath', ''];
-    var tot = 0;
-    H.AISLES.map(function (a) { return a[0]; }).concat(['Other']).forEach(function (a) {
-      if (!byA[a]) return;
-      out.push(a.toUpperCase());
-      byA[a].forEach(function (i) {
-        tot += i.price * i.qty;
-        out.push('  [' + (i.done ? 'x' : ' ') + '] ' + i.name + '  -  ' +
-          (i.note || '') + '   ' + money(i.price * i.qty));
-      });
-      out.push('');
-    });
-    out.push('TOTAL  ' + money(tot));
-    H.dl('shopping-' + H.today() + '.txt', out.join('\n'));
-  }
-
-  function shopCsv() {
-    var rows = [['List', 'Aisle', 'Item', 'Qty', 'Grams', 'Price', 'Store', 'Done']];
-    H.curList().items.forEach(function (i) {
-      rows.push([S().shop.active, i.aisle, i.name, i.qty, i.grams || '',
-      i.price.toFixed(2), i.key ? H.bestStore(H.ING(i.key)) : '', i.done ? 'yes' : '']);
-    });
-    H.dl('shopping-' + H.today() + '.csv', H.toCSV(rows), 'text/csv');
-  }
-
-  function ingPicker(cb) {
-    var keys = H.allIngKeys().sort(function (a, b) {
-      return H.ING(a).n.localeCompare(H.ING(b).n);
-    });
-    var m = modal('Add to ' + S().shop.active,
-      '<label class="f"><span>Search the ' + keys.length + ' ingredients we already have</span>' +
-      '<input id="ipq" type="search" placeholder="Type to filter..." autocomplete="off"></label>' +
-      '<div class="picklist" id="iplist" style="max-height:300px"></div>' +
-      '<div class="note"><b>Not there?</b> Adding it below puts it in the master ingredient ' +
-      'list permanently, not just this shop.</div>',
-      '<button class="b o" data-close>Cancel</button>' +
-      '<button class="b" id="ipNew">Add a new ingredient</button>', { focus: '#ipq' });
-
-    function draw(q) {
-      q = (q || '').toLowerCase();
-      var hits = keys.filter(function (k) {
-        return H.ING(k).n.toLowerCase().indexOf(q) >= 0;
-      }).slice(0, 60);
-      $('#iplist', m).innerHTML = hits.map(function (k) {
-        var g = H.ING(k);
-        return '<button class="pickrow" data-k="' + E(k) + '"><div style="flex:1">' +
-          '<b>' + E(g.n) + '</b><div class="xs muted">' + E(g.a || 'Other') + ' &middot; ' +
-          money(H.best(g)) + '/100g at ' + E(H.bestStore(g)) + '</div></div>' +
-          '<span class="b s">Add</span></button>';
-      }).join('') || '<p class="empty sm">No match. Nothing by that name exists yet.</p>';
-      $$('[data-k]', m).forEach(function (row) {
-        row.onclick = function () {
-          var k = row.dataset.k, g = H.ING(k);
-          cb({
-            key: k, name: g.n, qty: 1, price: H.best(g) * 2, grams: 200,
-            note: 'about 200 g', aisle: g.a || 'Other', done: false
-          });
-          m.close();
-          toast('Added ' + g.n);
-        };
-      });
-    }
-    $('#ipq', m).oninput = function () { draw(this.value); };
-    $('#ipNew', m).onclick = function () { m.close(); ingEditor(null); };
-    draw('');
-  }
-
-  function recipePicker() {
-    var m = modal('Add a recipe to ' + S().shop.active,
-      '<label class="f"><span>Search</span>' +
-      '<input id="rpq" type="search" placeholder="Filter recipes..." autocomplete="off"></label>' +
-      '<div class="picklist" id="rplist"></div>',
-      '<button class="b" data-close>Done</button>',
-      { focus: '#rpq', onClose: refresh });
-
-    function draw(q) {
-      q = (q || '').toLowerCase();
-      var hits = H.all().filter(function (r) {
-        return r.n.toLowerCase().indexOf(q) >= 0;
-      }).slice(0, 70);
-      $('#rplist', m).innerHTML = hits.map(function (r) {
-        return '<button class="pickrow" data-r="' + E(r.id) + '"><div style="flex:1">' +
-          '<b>' + E(r.n) + '</b><div class="xs muted">' + E(r.id) + ' &middot; makes ' + r.sv +
-          ' &middot; ' + money(H.ctot(r)) + '</div></div><span class="b s">Add</span></button>';
-      }).join('');
-      $$('[data-r]', m).forEach(function (row) {
-        row.onclick = function () {
-          var n = H.addRecipeToShop(H.byId(row.dataset.r));
-          toast(n + ' ingredients added');
-        };
-      });
-    }
-    $('#rpq', m).oninput = function () { draw(this.value); };
-    draw('');
-  }
-
-  function shopItemEditor(idx) {
-    var it = H.curList().items[idx];
-    if (!it) return;
-    var m = modal('Edit ' + it.name,
-      form([{ id: 'sen', l: 'Name', v: it.name },
-      { id: 'seq', l: 'Qty', t: 'number', step: '0.5', v: it.qty },
-      { id: 'sep', l: 'Price each', t: 'number', step: '0.01', v: it.price },
-      {
-        id: 'sea', l: 'Aisle', t: 'select',
-        o: H.AISLES.map(function (a) { return [a[0], a[0]]; }).concat([['Other', 'Other']]),
-        v: it.aisle
-      },
-      { id: 'sen2', l: 'Note', v: it.note || '' }]) +
-      (it.key ? '<p class="sm muted">Changing the price here only affects this list. To change ' +
-        'it everywhere, edit it in the <a href="#/shopping/ingredients">ingredient list</a>.</p>' : ''),
-      '<button class="b o dz" id="seDel">Remove</button>' +
-      '<button class="b o" data-close>Cancel</button>' +
-      '<button class="b" id="seSave">Save</button>', { focus: '#sen' });
-
-    $('#seDel', m).onclick = function () {
-      H.curList().items.splice(idx, 1);
-      H.save(true); m.close(); refresh();
-    };
-    $('#seSave', m).onclick = function () {
-      it.name = $('#sen', m).value;
-      it.qty = H.num($('#seq', m).value, 1);
-      it.price = H.num($('#sep', m).value);
-      it.aisle = $('#sea', m).value;
-      it.note = $('#sen2', m).value;
-      H.save(true); m.close(); refresh();
-    };
-  }
-
-  /* ---------------------------------------------------------- pantry */
-  function bindPantry() {
-    // Everything else on this view is an action-bar entry; only the empty
-    // state has a button of its own.
-    on('#panAdd2', 'click', H.act.panAdd);
-  }
-
-  /* ---------------------------------------------------------- ingredients */
-  var INGPAGE = 60;
-  var ingShown = INGPAGE;
-
-  function drawIngTable(q) {
-    var body = $('#ingBody');
-    if (!body) return;
-    q = (q || '').toLowerCase();
-    var keys = H.allIngKeys().filter(function (k) {
-      return H.ING(k).n.toLowerCase().indexOf(q) >= 0;
-    }).sort(function (a, b) { return H.ING(a).n.localeCompare(H.ING(b).n); });
-
-    var page = keys.slice(0, ingShown);
-    body.innerHTML = H.table(
-      [{ h: 'Ingredient' }, { h: 'Aisle' }, { h: 'Walmart /100g', cls: 'num', hide: true },
-      { h: 'Costco /100g', cls: 'num', hide: true }, { h: 'Cheaper', cls: 'num' },
-      { h: 'Used in', cls: 'num', hide: true }, { h: '' }],
-      page.map(function (k) {
-        var g = H.ING(k), ov = S().ingOv[k];
-        return ['<b>' + E(g.n) + '</b>' + (ov ? ' <span class="chip t">edited</span>' : ''),
-          '<span class="sm muted">' + E(g.a || 'Other') + '</span>',
-          g.w != null ? money(g.w) : '—',
-          g.c != null && g.c > 0 ? money(g.c) : '—',
-          '<b>' + money(H.best(g)) + '</b> <span class="xs muted">' + E(H.bestStore(g)) + '</span>',
-          H.ingUsage(k) + ' recipes',
-          '<button class="b o s" data-ie="' + E(k) + '">Edit</button>'];
-      }), { emptyTitle: 'Nothing matches that search.' }) +
-      (page.length < keys.length
-        ? '<div class="row" style="justify-content:center;margin-top:16px">' +
-        '<button class="b o" id="ingMore">Show ' +
-        Math.min(INGPAGE, keys.length - page.length) + ' more</button></div>'
-        : '');
-
-    H.setText('#ingCount', keys.length + ' ingredient' + (keys.length === 1 ? '' : 's') +
-      (page.length < keys.length ? ', showing ' + page.length : ''));
-    var more = $('#ingMore');
-    if (more) more.onclick = function () { ingShown += INGPAGE; drawIngTable(q); };
-  }
-
-  function bindIngredients() {
-    ingShown = INGPAGE;
-    drawIngTable('');
-    on('#ingQ', 'input', debounce(function () {
-      ingShown = INGPAGE;
-      drawIngTable(this.value);
-    }, 120));
-  }
-
-  function ingEditor(k) {
-    var g = k ? H.ING(k) : { n: '', a: 'Other', w: null, c: null };
-    var isNew = !k;
-    var aisles = H.AISLES.map(function (a) { return a[0]; }).concat(['Other']);
-
-    var body = '<div class="fr">' +
-      '<label class="f"><span>Name</span><input id="ieN" value="' + E(g.n) + '"></label>' +
-      '<label class="f"><span>Aisle</span><select id="ieA">' +
-      aisles.map(function (a) {
-        return '<option' + (a === (g.a || 'Other') ? ' selected' : '') + '>' + E(a) + '</option>';
-      }).join('') + '</select></label></div>' +
-      '<div class="fr">' +
-      '<label class="f"><span>Walmart $ per 100 g</span>' +
-      '<input id="ieW" type="number" step="0.01" min="0" value="' + (g.w != null ? g.w : '') + '"></label>' +
-      '<label class="f"><span>Costco $ per 100 g</span>' +
-      '<input id="ieC" type="number" step="0.01" min="0" value="' +
-      (g.c != null && g.c > 0 ? g.c : '') + '"></label></div>' +
-      (isNew ? '<div class="fr">' +
-        '<label class="f"><span>kcal /100g</span><input id="ieK" type="number"></label>' +
-        '<label class="f"><span>Protein</span><input id="ieP" type="number" step="0.1"></label>' +
-        '<label class="f"><span>Carbs</span><input id="ieCb" type="number" step="0.1"></label>' +
-        '<label class="f"><span>Fat</span><input id="ieF" type="number" step="0.1"></label></div>' : '') +
-      '<p class="sm muted">Leave a price blank if that store does not stock a sensible size. ' +
-      'The cheaper of the two is always what gets used.</p>' +
-      (k ? '<p class="sm muted">Used in <b>' + H.ingUsage(k) + '</b> recipes. Changing the price ' +
-        'updates all of them.</p>' : '');
-
-    var m = modal(isNew ? 'Add an ingredient' : 'Edit ' + g.n, body,
-      (k && S().ingOv[k] ? '<button class="b o dz" id="ieReset">Reset to default</button>' : '') +
-      '<button class="b o" data-close>Cancel</button>' +
-      '<button class="b" id="ieSave">Save</button>', { focus: '#ieN' });
-
-    var reset = $('#ieReset', m);
-    if (reset) {
-      reset.onclick = function () {
-        delete S().ingOv[k];
-        H.save(true); H.bumpCosts(); m.close(); refresh();
-        toast('Reset to the default price');
-      };
-    }
-    $('#ieSave', m).onclick = function () {
-      var nm = $('#ieN', m).value.trim();
-      if (!nm) { toast('It needs a name'); $('#ieN', m).focus(); return; }
-      var key = k || ('u_' + nm.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 28));
-      var w = $('#ieW', m).value, c = $('#ieC', m).value;
-      var o = S().ingOv[key] || {};
-      o.n = nm;
-      o.a = $('#ieA', m).value;
-      o.w = w === '' ? null : H.num(w);
-      o.c = c === '' ? null : H.num(c);
-      if (isNew) {
-        o.k = H.num($('#ieK', m).value);
-        o.p = H.num($('#ieP', m).value);
-        o.cb = H.num($('#ieCb', m).value);
-        o.f = H.num($('#ieF', m).value);
-        o.userAdded = true;
-      }
-      S().ingOv[key] = o;
-      H.save(true); H.bumpCosts(); m.close(); refresh();
-      toast(isNew ? 'Ingredient added' : 'Updated. ' + H.ingUsage(key) + ' recipes recosted.');
-    };
-  }
-
-  /* ---------------------------------------------------------- training */
-  function bindTraining() {
-    on('#tWorkout', 'change', function () {
-      H.dayLog(H.today()).workout = this.value;
-      H.save(true); refresh();
-    });
-    on('#tSave', 'click', function () {
-      var d = H.dayLog(H.today());
-      d.notes = $('#tNotes').value;
-      var w = parseFloat($('#tW').value);
-      d.w = isNaN(w) ? null : w;
-      H.save(true); refresh();
-      toast('Saved');
-    });
-    on('#splitBtn', 'click', splitModal);
-  }
-
-  function splitModal() {
-    var keys = Object.keys(H.SPLITS);
-    var m = modal('Generate a training split',
-      '<p class="sm muted" style="margin-top:0">Writes a repeating week onto the calendar, ' +
-      'which is what the macro targets key off. Anything already logged on those days keeps ' +
-      'its meals and notes.</p>' +
-      form([
-        {
-          id: 'spK', l: 'Split', t: 'select', wide: true,
-          o: keys.map(function (k) { return [k, H.SPLITS[k].n]; }), v: 'ppl'
-        },
-        { id: 'spFrom', l: 'Starting', t: 'date', v: H.today() },
-        {
-          id: 'spWeeks', l: 'For how long', t: 'select',
-          o: [[1, 'One week'], [2, 'Two weeks'], [4, 'A month'], [12, 'Three months']], v: 4
-        }
-      ]) + '<div id="spPreview"></div>',
-      '<button class="b o" data-close>Cancel</button>' +
-      '<button class="b" id="spGo">Write it to the calendar</button>', { focus: '#spK' });
-
-    function preview() {
-      var s = H.SPLITS[$('#spK', m).value];
-      var from = $('#spFrom', m).value || H.today();
-      var startDow = H.dOf(from).getDay();
-      $('#spPreview', m).innerHTML = '<div class="lbl" style="margin-bottom:8px">The week</div>' +
-        '<div class="row">' + H.DOW.map(function (d, i) {
-          var w = s.d[(i - startDow + 7 * 7) % 7];
-          // Show the week as it will land on real weekdays.
-          var wk = s.d[((i - startDow) % 7 + 7) % 7];
-          return '<span class="pill flat' + (wk !== 'rest' ? ' on' : '') + '">' + d + ' ' +
-            E(H.TRAIN[wk].n.split(' ')[0]) + '</span>';
-        }).join('') + '</div>';
-    }
-    $('#spK', m).onchange = preview;
-    $('#spFrom', m).onchange = preview;
-    preview();
-
-    $('#spGo', m).onclick = function () {
-      var from = $('#spFrom', m).value || H.today();
-      var n = H.applySplit($('#spK', m).value, from, +$('#spWeeks', m).value, 0);
-      m.close(); refresh();
-      toast(n + ' days scheduled');
-    };
-  }
-
-  function drawEx() {
-    var el = $('#exList');
-    if (!el) return;
-    var q = H.exFlt.q.toLowerCase();
-    var L = H.EX.filter(function (e) {
-      if (H.exFlt.mg && e.mg !== H.exFlt.mg) return false;
-      if (H.exFlt.hero && !e.hero) return false;
-      if (H.exFlt.eq && e.eq.toLowerCase().indexOf(H.exFlt.eq.toLowerCase()) < 0) return false;
-      if (q && (e.n + ' ' + e.pri + ' ' + e.tags).toLowerCase().indexOf(q) < 0) return false;
-      return true;
-    });
-    H.setText('#excount', L.length + ' exercise' + (L.length === 1 ? '' : 's'));
-    el.innerHTML = L.slice(0, 120).map(function (e) {
-      return '<details data-ex="' + E(e.n) + '"><summary>' + E(e.n) +
-        ' <span class="chip">' + E(e.mg) + '</span>' +
-        (e.hero ? ' <span class="chip t">Hero</span>' : '') + '</summary><div class="dc">' +
-        '<div class="chips"><span class="chip">' + E(e.eq) + '</span>' +
-        '<span class="chip">' + E(e.df) + '</span>' +
-        '<span class="chip">' + E(e.sets) + ' × ' + E(e.reps) + '</span>' +
-        '<span class="chip">RIR ' + E(e.rir) + '</span>' +
-        '<span class="chip">' + E(e.rest) + '</span></div>' +
-        '<p><b>Technique.</b> ' + E(e.tech) + '</p>' +
-        (e.mist ? '<p><b>Common mistakes.</b> ' + E(e.mist) + '</p>' : '') +
-        (e.prog ? '<p><b>Progress it.</b> ' + E(e.prog) + '</p>' : '') +
-        (e.reg ? '<p><b>Regress it.</b> ' + E(e.reg) + '</p>' : '') +
-        (e.use ? '<p><b>Best use.</b> ' + E(e.use) + '</p>' : '') +
-        '<p class="sm muted">Primary: ' + E(e.pri) +
-        (e.sec ? '. Secondary: ' + E(e.sec) : '') + '</p></div></details>';
-    }).join('') || '<p class="empty">Nothing matches.</p>';
-    if (L.length > 120) {
-      el.innerHTML += '<p class="sm muted" style="text-align:center">Showing the first 120 of ' +
-        L.length + '. Narrow the search to see the rest.</p>';
-    }
-  }
-
-  H.focusExercise = function (name) {
-    H.exFlt = { q: name, mg: '', eq: '', hero: false };
-    refresh();
-    var d = $('[data-ex]');
-    if (d) { d.open = true; d.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
-  };
-
-  function bindExercises() {
-    drawEx();
-    on('#exq', 'input', debounce(function () { H.exFlt.q = this.value; drawEx(); }, 130));
-    on('#exmg', 'change', function () { H.exFlt.mg = this.value; drawEx(); });
-    on('#exeq', 'change', function () { H.exFlt.eq = this.value; drawEx(); });
-    on('#exhero', 'click', function () {
-      H.exFlt.hero = !H.exFlt.hero;
-      this.classList.toggle('on');
-      drawEx();
-    });
-  }
-
-  function sessModal(i) {
-    var s = H.SESS[i];
-    if (!s) return;
-    var m = modal(s.name,
-      H.table([{ h: 'Exercise' }, { h: 'Sets', cls: 'num' }, { h: 'Reps', cls: 'num' }, { h: 'Note' }],
-        s.ex.map(function (x) {
-          return ['<b>' + E(x.n) + '</b>', E(x.sets), E(x.reps),
-            '<span class="sm muted">' + E(x.note || '—') + '</span>'];
-        })),
-      '<button class="b o" id="sessCopy">Copy to today\'s notes</button>' +
-      '<button class="b" data-close>Close</button>', { wide: true });
-
-    $('#sessCopy', m).onclick = function () {
-      var d = H.dayLog(H.today());
-      var text = s.name + '\n' + s.ex.map(function (x) {
-        return '- ' + x.n + ' ' + x.sets + '×' + x.reps;
-      }).join('\n');
-      d.notes = d.notes ? d.notes + '\n\n' + text : text;
-      H.save(true); m.close(); refresh();
-      toast('Copied into today');
-    };
-  }
-
-  /* ---------------------------------------------------------- financial */
-  function bindFin(sub) {
-    on('#finMode', 'change', function () { S().fin.costMode = this.value; H.save(); refresh(); });
-    on('#finPath', 'change', function () { S().fin.path = this.value; H.save(); refresh(); });
-    on('#finScen', 'change', function () {
-      var s = S().fin.scenarios[this.value];
-      if (!s) return;
-      S().fin.costMode = s.mode;
-      S().fin.path = s.path;
-      H.save(true); refresh();
-      toast('Loaded ' + this.value);
-    });
-    on('#scenSave', 'click', function () {
-      H.ask({
-        title: 'Save this scenario', label: 'Name',
-        placeholder: 'Renting, both grinding'
-      }).then(function (n) {
-        if (!n) return;
-        var mode = S().fin.costMode || 'real', path = S().fin.path || 'rent';
-        S().fin.scenarios[n] = {
-          mode: mode, path: path,
-          inc: H.finIncome('both', mode), cost: H.finCost(mode, path), saved: H.today()
-        };
-        H.save(true); refresh();
-        toast('Scenario saved');
-      });
-    });
-    on('#scenDel', 'click', function () {
-      var v = $('#finScen').value;
-      if (!v) { toast('Pick one first'); return; }
-      H.confirmDanger({ title: 'Delete "' + v + '"?', text: 'The scenario goes.' })
-        .then(function (ok) {
-          if (!ok) return;
-          delete S().fin.scenarios[v];
-          H.save(true); refresh();
-        });
-    });
-    ['#jobAdd', '#jobAdd2'].forEach(function (s) {
-      on(s, 'click', function () { jobEditor(null); });
-    });
-    on('#costAdd', 'click', function () { costEditor(null); });
-    ['#shAdd', '#shAdd2'].forEach(function (s) { on(s, 'click', shiftEditor); });
-    on('#shCsv', 'click', function () {
-      var rows = [['Date', 'Who', 'Job', 'Hours', 'Gross', 'Net', 'Note']];
-      S().fin.shifts.forEach(function (sh) {
-        var j = null;
-        S().fin.jobs.forEach(function (x) { if (x.id === sh.jobId) j = x; });
-        rows.push([sh.date, j ? H.nameOf(j.who) : '', j ? j.name : '',
-        sh.hours, sh.gross, sh.net, sh.note || '']);
-      });
-      H.dl('shifts-' + H.today() + '.csv', H.toCSV(rows), 'text/csv');
-    });
-    on('#scenFromActual', 'click', function () {
-      var from = H.addDays(H.today(), -90);
-      var net = H.shiftsFor(null, from).reduce(function (a, s) { return a + (s.net || 0); }, 0) / (90 / 30.4);
-      S().fin.scenarios['From actual earnings'] = {
-        mode: 'actual', path: S().fin.path || 'rent',
-        inc: Math.round(net), cost: H.finCost('real', S().fin.path || 'rent'),
-        saved: H.today(), auto: true
-      };
-      H.save(true); refresh();
-      toast('Saved from real data');
-    });
-    ['#bpNew', '#bpNew2'].forEach(function (s) {
-      on(s, 'click', function () {
-        H.ask({ title: 'New comparison list', label: 'Name', value: 'Apartments' })
-          .then(function (n) {
-            if (!n) return;
-            H.ask({ title: 'What kind?', label: 'Category', value: 'Housing' }).then(function (c) {
-              S().fin.purchases[n] = { cat: c || 'Other', items: [] };
-              H.save(true); refresh();
-            });
-          });
-      });
-    });
-  }
-
-  var JOB_FIELDS = function (j) {
-    return [
-      {
-        id: 'jw', l: 'Who', t: 'select',
-        o: [['Jaron', S().prof.j.name], ['Aaliyah', S().prof.a.name], ['Both', 'Shared / gig']],
-        v: j.who
-      },
-      { id: 'jn', l: 'Name', v: j.name, ph: 'Ritchey day job' },
-      { id: 'je', l: 'Employer', v: j.employer },
-      { id: 'jt', l: 'Title', v: j.title },
-      { id: 'jr', l: 'Hourly rate', t: 'number', step: '0.01', v: j.rate },
-      { id: 'jl', l: 'Low / mo', t: 'number', v: j.low },
-      { id: 'jm', l: 'Realistic / mo', t: 'number', v: j.real },
-      { id: 'jh', l: 'High / mo', t: 'number', v: j.high }
-    ];
-  };
-
-  function jobEditor(id) {
-    var j = null;
-    if (id) S().fin.jobs.forEach(function (x) { if (x.id === id) j = x; });
-    if (!j) j = { who: 'Jaron', name: '', employer: '', title: '', rate: '', low: '', real: '', high: '' };
-
-    var m = modal(id ? 'Edit income' : 'Add income', form(JOB_FIELDS(j)),
-      (id ? '<button class="b o dz" id="jDel">Delete</button>' : '') +
-      '<button class="b o" data-close>Cancel</button>' +
-      '<button class="b" id="jSave">Save</button>', { focus: '#jn' });
-
-    var del = $('#jDel', m);
-    if (del) {
-      del.onclick = function () {
-        S().fin.jobs = S().fin.jobs.filter(function (x) { return x.id !== id; });
-        H.save(true); m.close(); refresh();
-      };
-    }
-    $('#jSave', m).onclick = function () {
-      var o = {
-        id: id || H.uid(), who: $('#jw', m).value,
-        name: $('#jn', m).value.trim() || 'Income',
-        employer: $('#je', m).value, title: $('#jt', m).value,
-        rate: H.num($('#jr', m).value) || null,
-        low: H.num($('#jl', m).value), real: H.num($('#jm', m).value),
-        high: H.num($('#jh', m).value)
-      };
-      if (id) S().fin.jobs = S().fin.jobs.map(function (x) { return x.id === id ? o : x; });
-      else S().fin.jobs.push(o);
-      H.save(true); m.close(); refresh();
-    };
-  }
-
-  function costEditor(id) {
-    var c = null;
-    if (id) S().fin.costs.forEach(function (x) { if (x.id === id) c = x; });
-    if (!c) c = { name: '', section: 'Living', who: 'Both', low: '', real: '', high: '', actual: '' };
-
-    var m = modal(id ? 'Edit cost' : 'Add cost',
-      form([{ id: 'cn', l: 'Cost', v: c.name },
-      {
-        id: 'cs', l: 'Section', t: 'select',
-        o: [['Living', 'Living'], ['Utilities', 'Utilities'], ['Health', 'Health'],
-        ['Housing (rent)', 'Housing (rent)'], ['Housing (buy)', 'Housing (buy)'],
-        ['Debt', 'Debt'], ['Savings', 'Savings']], v: c.section
-      },
-      {
-        id: 'cw', l: 'Who', t: 'select',
-        o: [['Both', 'Both'], ['Jaron', S().prof.j.name], ['Aaliyah', S().prof.a.name]], v: c.who
-      },
-      { id: 'cl', l: 'Low', t: 'number', v: c.low },
-      { id: 'cr', l: 'Realistic', t: 'number', v: c.real },
-      { id: 'ch', l: 'High', t: 'number', v: c.high },
-      { id: 'ca', l: 'Actual', t: 'number', v: c.actual }]),
-      (id ? '<button class="b o dz" id="cDel">Delete</button>' : '') +
-      '<button class="b o" data-close>Cancel</button>' +
-      '<button class="b" id="cSave">Save</button>', { focus: '#cn' });
-
-    var del = $('#cDel', m);
-    if (del) {
-      del.onclick = function () {
-        S().fin.costs = S().fin.costs.filter(function (x) { return x.id !== id; });
-        H.save(true); m.close(); refresh();
-      };
-    }
-    $('#cSave', m).onclick = function () {
-      var o = {
-        id: id || H.uid(), name: $('#cn', m).value.trim() || 'Cost',
-        section: $('#cs', m).value, who: $('#cw', m).value,
-        low: H.num($('#cl', m).value), real: H.num($('#cr', m).value),
-        high: H.num($('#ch', m).value), actual: H.num($('#ca', m).value) || null
-      };
-      if (id) S().fin.costs = S().fin.costs.map(function (x) { return x.id === id ? o : x; });
-      else S().fin.costs.push(o);
-      H.save(true); m.close(); refresh();
-    };
-  }
-
-  function shiftEditor() {
-    if (!S().fin.jobs.length) { toast('Add a job first'); return; }
-    var m = modal('Log a shift',
-      form([{ id: 'sd', l: 'Date', t: 'date', v: H.today() },
-      {
-        id: 'sj', l: 'Job', t: 'select',
-        o: S().fin.jobs.map(function (j) { return [j.id, H.nameOf(j.who) + ' — ' + j.name]; }),
-        v: S().fin.jobs[0].id
-      },
-      { id: 'sh', l: 'Hours', t: 'number', step: '0.25', v: 8 },
-      { id: 'sg', l: 'Gross $', t: 'number', step: '0.01', v: '' },
-      { id: 'sn', l: 'Net (after tax) $', t: 'number', step: '0.01', v: '' },
-      { id: 'sx', l: 'Note', v: '', wide: true }]) +
-      '<p class="sm muted">Leave gross blank and it uses the job hourly rate. Leave net blank ' +
-      'and it estimates 80% of gross.</p>',
-      '<button class="b o" data-close>Cancel</button>' +
-      '<button class="b" id="sSave">Save</button>', { focus: '#sd' });
-
-    $('#sSave', m).onclick = function () {
-      var jid = $('#sj', m).value, j = null;
-      S().fin.jobs.forEach(function (x) { if (x.id === jid) j = x; });
-      var hrs = H.num($('#sh', m).value);
-      var g = H.num($('#sg', m).value), n = H.num($('#sn', m).value);
-      if (!g && j && j.rate) g = hrs * j.rate;
-      if (!n && g) n = g * 0.8;
-      S().fin.shifts.push({
-        id: H.uid(), date: $('#sd', m).value || H.today(), jobId: jid, hours: hrs,
-        gross: Math.round(g * 100) / 100, net: Math.round(n * 100) / 100,
-        note: $('#sx', m).value
-      });
-      H.save(true); m.close(); refresh();
-      toast('Shift logged');
-    };
-  }
-
-  function bpItemEditor(listName) {
-    var L = S().fin.purchases[listName];
-    if (!L) return;
-    var cat = (L.cat || '').toLowerCase();
-    var extra = cat.indexOf('hous') >= 0
-      ? [{ id: 'f1', l: 'Beds' }, { id: 'f2', l: 'Baths' }, { id: 'f3', l: 'Sq ft' }, { id: 'f4', l: 'To CSU (min)' }]
-      : cat.indexOf('car') >= 0
-        ? [{ id: 'f1', l: 'Year' }, { id: 'f2', l: 'Miles' }, { id: 'f3', l: 'MPG' }, { id: 'f4', l: 'Condition' }]
-        : [{ id: 'f1', l: 'Detail 1' }, { id: 'f2', l: 'Detail 2' }];
-
-    var m = modal('Add to ' + listName,
-      form([{ id: 'bn', l: 'Name', v: '' },
-      { id: 'bp', l: 'Price / rent', t: 'number', v: '' },
-      { id: 'bl', l: 'Link', v: '' }]
-        .concat(extra)
-        .concat([{ id: 'bo', l: 'Notes', t: 'area', v: '' }])),
-      '<button class="b o" data-close>Cancel</button>' +
-      '<button class="b" id="bSave">Save</button>', { focus: '#bn' });
-
-    $('#bSave', m).onclick = function () {
-      var f = {};
-      extra.forEach(function (x) {
-        var v = $('#' + x.id, m).value;
-        if (v) f[x.l] = v;
-      });
-      L.items.push({
-        name: $('#bn', m).value.trim() || 'Item', price: H.num($('#bp', m).value),
-        link: $('#bl', m).value, notes: $('#bo', m).value, fields: f
-      });
-      H.save(true); m.close(); refresh();
-    };
-  }
-
-  /* ---------------------------------------------------------- schedule */
-  function bindSched() {
-    on('#cPrev', 'click', function () {
-      H.calM--;
-      if (H.calM < 0) { H.calM = 11; H.calY--; }
-      refresh();
-    });
-    on('#cNext', 'click', function () {
-      H.calM++;
-      if (H.calM > 11) { H.calM = 0; H.calY++; }
-      refresh();
-    });
-    on('#schWorkout', 'change', function () {
-      H.dayLog(H.calSel).workout = this.value;
-      H.save(true); refresh();
-    });
-    on('#evAdd', 'click', function () { evEditor(H.calSel); });
-    on('#spAdd', 'click', function () { spendEditor(H.calSel); });
-    on('#mealAdd', 'click', function () { mealPicker(H.calSel); });
-    on('#logPlannedDay', 'click', function () { logPlanned(H.calSel); });
-    ['#applyTmpl', '#applyTmpl2'].forEach(function (s) {
-      on(s, 'click', function () {
-        var n = H.applyTemplate(H.calSel);
-        refresh();
-        toast(n ? n + ' items added to that week' : 'Already applied');
-      });
-    });
-    on('#calCsv', 'click', function () {
-      var rows = [['Date', 'Training', 'Kcal', 'Protein', 'FoodCost', 'OtherSpend',
-        'Plans', 'Bodyweight', 'Notes']];
-      Object.keys(S().days).sort().forEach(function (d) {
-        var rec = S().days[d], e = H.eaten(d);
-        var sp = (rec.spend || []).reduce(function (a, x) { return a + (x.amt || 0); }, 0);
-        rows.push([d, H.TRAIN[rec.workout] ? H.TRAIN[rec.workout].n : rec.workout,
-        Math.round(e.kcal), Math.round(e.p), e.cost.toFixed(2), sp.toFixed(2),
-        (rec.sched || []).map(function (x) { return H.nameOf(x.who) + ':' + x.what; }).join('; '),
-        rec.w || '', rec.notes || '']);
-      });
-      H.dl('log-' + H.today() + '.csv', H.toCSV(rows), 'text/csv');
-    });
-  }
-
-  function whoOptions() {
-    return [['Jaron', S().prof.j.name], ['Aaliyah', S().prof.a.name], ['Both', 'Both of us']];
-  }
-
-  function evEditor(ds) {
-    var m = modal('Add to ' + H.shortD(ds),
-      form([{ id: 'ew', l: 'Who', t: 'select', o: whoOptions(), v: H.label(S().who) },
-      { id: 'ex', l: 'What', v: '', ph: 'Class, shift, gym' },
-      { id: 'ef', l: 'From', t: 'time', v: '09:00' },
-      { id: 'et', l: 'To', t: 'time', v: '17:00' },
-      { id: 'el', l: 'Where', v: '' }]),
-      '<button class="b o" data-close>Cancel</button>' +
-      '<button class="b" id="eSave">Add</button>', { focus: '#ex' });
-
-    $('#eSave', m).onclick = function () {
-      H.dayLog(ds).sched.push({
-        who: $('#ew', m).value, what: $('#ex', m).value.trim() || 'Busy',
-        from: $('#ef', m).value, to: $('#et', m).value, where: $('#el', m).value
-      });
-      H.save(true); m.close(); refresh();
-    };
-  }
-
-  function spendEditor(ds) {
-    var m = modal('Log a spend',
-      form([{ id: 'sw', l: 'Who', t: 'select', o: whoOptions(), v: 'Both' },
-      { id: 'sx', l: 'What', v: '', ph: 'Gas, coffee, parts' },
-      { id: 'sa', l: 'Amount', t: 'number', step: '0.01', v: '' }]),
-      '<button class="b o" data-close>Cancel</button>' +
-      '<button class="b" id="spSave">Add</button>', { focus: '#sx' });
-
-    $('#spSave', m).onclick = function () {
-      H.dayLog(ds).spend.push({
-        who: $('#sw', m).value, what: $('#sx', m).value.trim() || 'Spend',
-        amt: H.num($('#sa', m).value)
-      });
-      H.save(true); m.close(); refresh();
-    };
-  }
-
-  function mealPicker(ds) {
-    var m = modal('Log a meal on ' + H.shortD(ds),
-      '<label class="f"><span>Search</span>' +
-      '<input id="mpq" type="search" placeholder="What did we eat?" autocomplete="off"></label>' +
-      '<div class="picklist" id="mplist"></div>',
-      '<button class="b" data-close>Done</button>',
-      { focus: '#mpq', onClose: refresh });
-
-    function draw(q) {
-      q = (q || '').toLowerCase();
-      var hits = H.all().filter(function (r) {
-        return r.n.toLowerCase().indexOf(q) >= 0;
-      }).slice(0, 60);
-      $('#mplist', m).innerHTML = hits.map(function (r) {
-        return '<button class="pickrow" data-a="' + E(r.id) + '"><div style="flex:1">' +
-          '<b>' + E(r.n) + '</b><div class="xs muted">' + Math.round(r.k) + ' kcal &middot; ' +
-          Math.round(r.p) + 'g protein &middot; ' + money(H.cps(r)) + '</div></div>' +
-          '<span class="b s">Add</span></button>';
-      }).join('');
-      $$('[data-a]', m).forEach(function (row) {
-        row.onclick = function () {
-          H.dayLog(ds).meals.push({ id: row.dataset.a, q: 1 });
-          H.consumeFromPantry(row.dataset.a, 1);
-          H.save(true);
-          toast('Logged');
-        };
-      });
-    }
-    $('#mpq', m).oninput = function () { draw(this.value); };
-    draw('');
-  }
-
-  function tmplEditor(dayIdx) {
-    var m = modal('Regular ' + H.DOW[dayIdx],
-      form([{ id: 'tw', l: 'Who', t: 'select', o: whoOptions(), v: H.label(S().who) },
-      { id: 'tx', l: 'What', v: '', ph: 'Work, class, gym' },
-      { id: 'tf', l: 'From', t: 'time', v: '09:00' },
-      { id: 'tt', l: 'To', t: 'time', v: '17:00' }]),
-      '<button class="b o" data-close>Cancel</button>' +
-      '<button class="b" id="tSave2">Add</button>', { focus: '#tx' });
-
-    $('#tSave2', m).onclick = function () {
-      if (!S().sched.tmpl[dayIdx]) S().sched.tmpl[dayIdx] = [];
-      S().sched.tmpl[dayIdx].push({
-        who: $('#tw', m).value, what: $('#tx', m).value.trim() || 'Busy',
-        from: $('#tf', m).value, to: $('#tt', m).value
-      });
-      H.save(true); m.close(); refresh();
-    };
-  }
-
-  /* ---------------------------------------------------------- settings */
-  function bindSettings() {
-    on('#setTheme', 'change', function () {
-      S().theme = this.value;
-      H.save(true);
-      applyTheme();
-    });
-    on('#setSlots', 'change', function () {
-      S().prefs.planSlots = +this.value;
-      H.planOpts.slots = +this.value;
-      H.save();
-    });
-    on('#setBudget', 'change', function () {
-      S().prefs.dayBudget = this.value === '' ? null : H.num(this.value);
-      H.planOpts.budget = this.value;
-      H.save();
-    });
-    on('#setRemind', 'click', function () {
-      var next = this.getAttribute('aria-checked') !== 'true';
-      this.setAttribute('aria-checked', next);
-      S().prefs.remindBackup = next;
-      H.save(true);
-    });
-    on('#setExport', 'click', exportAll);
-    on('#setImport', 'click', importAll);
-    on('#setDropPhotos', 'click', function () {
-      H.confirmDanger({
-        title: 'Remove every photo?',
-        text: 'This frees the most storage by a wide margin. The recipes themselves are untouched.'
-      }).then(function (ok) {
-        if (!ok) return;
-        S().photos = {};
-        H.save(true); refresh();
-        toast('Photos removed');
-      });
-    });
-    on('#setReset', 'click', function () {
-      H.confirmDanger({
-        title: 'Start over?',
-        text: 'Every profile, log, list, price edit and photo on this device goes. ' +
-          'Save to a file first if there is any doubt.',
-        ok: 'Wipe it'
-      }).then(function (ok) {
-        if (!ok) return;
-        H.setState(H.DEF());
-        H.save(true);
-        H.invalidate();
-        applyTheme();
-        chrome();
-        nav('meals');
-        toast('Back to a clean slate');
-      });
-    });
-    $$('[data-prof]').forEach(function (b) {
-      b.onclick = function () { profileEditor(b.dataset.prof); };
-    });
-    $$('[data-listdel]').forEach(function (b) {
-      b.onclick = function () {
-        var n = b.dataset.listdel;
-        var backup = S().lists[n];
-        delete S().lists[n];
-        H.save(true); refresh();
-        toast('Deleted "' + n + '"', {
-          action: 'Undo',
-          onAction: function () { S().lists[n] = backup; H.save(true); refresh(); }
-        });
-      };
-    });
-    $$('[data-listshop]').forEach(function (b) {
-      b.onclick = function () {
-        var ids = S().lists[b.dataset.listshop] || [];
-        var n = 0;
-        ids.forEach(function (id) { n += H.addRecipeToShop(H.byId(id)); });
-        toast(n + ' ingredients added to "' + S().shop.active + '"');
-      };
-    });
-  }
-
-  function profileEditor(k) {
-    var p = S().prof[k];
-    var fields = [
-      { id: 'pfN', l: 'Name', v: p.name, wide: true },
-      { id: 'pfS', l: 'Sex', t: 'select', o: [['m', 'Male'], ['f', 'Female']], v: p.sex },
-      { id: 'pfA', l: 'Age', t: 'number', v: p.age, min: 12, max: 100 },
-      { id: 'pfW', l: 'Weight (lb)', t: 'number', step: '0.1', v: p.w },
-      { id: 'pfH', l: 'Height (in)', t: 'number', step: '0.5', v: p.h },
-      { id: 'pfB', l: 'Body fat %', t: 'number', step: '0.5', v: p.bf },
-      {
-        id: 'pfAc', l: 'Activity', t: 'select', v: p.act,
-        o: [[1.2, 'Sedentary'], [1.375, 'Light, 1–3 days'], [1.45, 'Moderate, 3–4 days'],
-        [1.55, 'Active, 4–5 days'], [1.725, 'Very active, 6–7 days'], [1.9, 'Athlete / physical job']]
-      },
-      {
-        id: 'pfG', l: 'Goal', t: 'select', v: p.goal,
-        o: [[0.8, 'Cut hard (−20%)'], [0.9, 'Cut (−10%)'], [1.0, 'Maintain'],
-        [1.09, 'Lean bulk (+9%)'], [1.2, 'Bulk (+20%)']]
-      },
-      {
-        id: 'pfP', l: 'Protein g per lb', t: 'number', step: '0.05', v: p.pf,
-        hint: '0.8 to 1.2 covers almost everyone lifting.'
-      }
-    ];
-
-    var m = modal('Edit ' + p.name, form(fields) + '<div id="pfPreview"></div>',
-      '<button class="b o" data-close>Cancel</button>' +
-      '<button class="b" id="pfSave">Save</button>', { focus: '#pfN' });
-
-    function read() {
-      return {
-        name: $('#pfN', m).value.trim() || p.name,
-        sex: $('#pfS', m).value,
-        age: H.num($('#pfA', m).value, p.age),
-        w: H.num($('#pfW', m).value, p.w),
-        h: H.num($('#pfH', m).value, p.h),
-        bf: H.num($('#pfB', m).value, p.bf),
-        act: H.num($('#pfAc', m).value, p.act),
-        goal: H.num($('#pfG', m).value, p.goal),
-        pf: H.num($('#pfP', m).value, p.pf)
-      };
-    }
-    function preview() {
-      var c = H.calc(read());
-      $('#pfPreview', m).innerHTML = '<div class="stats" style="margin-top:6px">' +
-        H.stat(c.kcal.toLocaleString(), 'Kcal / day', 'acc') +
-        H.stat(c.p + 'g', 'Protein') +
-        H.stat(c.c + 'g', 'Carbs') +
-        H.stat(c.f + 'g', 'Fat') +
-        H.stat(c.w + 'oz', 'Water') + '</div>' +
-        '<p class="sm muted" style="margin:10px 0 0">TDEE ' + c.tdee.toLocaleString() +
-        ', resting ' + c.rmr.toLocaleString() + ', FFMI ' + c.ffmi + '. About <b>' +
-        (c.rate >= 0 ? '+' : '') + c.rate.toFixed(1) + ' lb a week</b> at this intake.</p>';
-    }
-    $$('input,select', m).forEach(function (n) {
-      n.addEventListener('input', preview);
-      n.addEventListener('change', preview);
-    });
-    preview();
-
-    $('#pfSave', m).onclick = function () {
-      var next = read();
-      Object.keys(next).forEach(function (key) { p[key] = next[key]; });
-      H.save(true);
-      m.close();
-      chrome();
-      refresh();
-      toast('Profile updated');
-    };
-  }
-
-  /* ---------------------------------------------------------- own recipe */
-  function ownRecipe() {
-    var fields = [
-      { id: 'on', l: 'Name', v: '', wide: true },
-      {
-        id: 'oc', l: 'Category', t: 'select', v: 'Lunch/Dinner',
-        o: [['Breakfast', 'Breakfast'], ['Lunch/Dinner', 'Mains'], ['Snack', 'Snack'],
-        ['Drink', 'Drink'], ['SDA Meat/Fish', 'Meat and fish']]
-      },
-      { id: 'osv', l: 'Servings', t: 'number', v: 2, min: 1 },
-      { id: 'ot', l: 'Minutes', t: 'number', v: 20, min: 0 },
-      { id: 'ok', l: 'Kcal / serving', t: 'number', v: '' },
-      { id: 'op', l: 'Protein g', t: 'number', v: '' },
-      { id: 'ocb', l: 'Carbs g', t: 'number', v: '' },
-      { id: 'of', l: 'Fat g', t: 'number', v: '' },
-      { id: 'ofib', l: 'Fiber g', t: 'number', v: '' },
-      { id: 'ocost', l: 'Cost / serving', t: 'number', step: '0.01', v: '' },
-      { id: 'oi', l: 'Ingredients, one per line', t: 'area', rows: 5, v: '' },
-      { id: 'os', l: 'Method, one step per line', t: 'area', rows: 5, v: '' }
-    ];
-    var m = modal('Add my own recipe', form(fields),
-      '<button class="b o" data-close>Cancel</button>' +
-      '<button class="b" id="oSave">Save</button>', { focus: '#on', wide: true });
-
-    $('#oSave', m).onclick = function () {
-      var n = $('#on', m).value.trim();
-      if (!n) { toast('It needs a name'); $('#on', m).focus(); return; }
-      var sv = H.num($('#osv', m).value, 1);
-      var c = H.num($('#ocost', m).value);
-      S().mine.push({
-        id: 'X-' + (S().mine.length + 1), n: n, cat: $('#oc', m).value, sv: sv,
-        t: H.num($('#ot', m).value, 20), diff: 'MODERATE',
-        k: H.num($('#ok', m).value), p: H.num($('#op', m).value),
-        c: H.num($('#ocb', m).value), f: H.num($('#of', m).value),
-        fib: H.num($('#ofib', m).value), leu: 0, tg: ['MY RECIPE'],
-        cw: c * sv, cws: c, cc: c * sv, ccs: c,
-        ing: $('#oi', m).value.split('\n').filter(Boolean).map(function (l) {
-          return [l.trim(), '', 0];
-        }),
-        st: $('#os', m).value.split('\n').filter(Boolean),
-        storage: '', prep: '', subs: [], vars: []
-      });
-      H.save(true);
-      H.invalidate();
-      m.close();
-      refresh();
-      toast('Recipe saved');
-    };
-  }
-
-  function listModal(id) {
-    var names = Object.keys(S().lists);
-    var body = (names.length
-      ? names.map(function (n) {
-        var has = S().lists[n].indexOf(id) >= 0;
-        return '<label class="pickrow" data-l="' + E(n) + '">' +
-          '<input type="checkbox"' + (has ? ' checked' : '') +
-          ' style="width:18px;height:18px;accent-color:var(--forest)">' +
-          '<div><b>' + E(n) + '</b><div class="xs muted">' +
-          S().lists[n].length + ' recipes</div></div></label>';
-      }).join('')
-      : '<p class="sm muted">No recipe lists yet.</p>') +
-      '<label class="f" style="margin-top:14px"><span>Or make a new one</span>' +
-      '<input id="nl" placeholder="Sunday prep"></label>';
-
-    var m = modal('Add to a recipe list', body,
-      '<button class="b o" data-close>Cancel</button>' +
-      '<button class="b" id="lS">Save</button>', { focus: '#nl' });
-
-    $('#lS', m).onclick = function () {
-      $$('.pickrow', m).forEach(function (row) {
-        var n = row.dataset.l;
-        if (!n) return;
-        var checked = row.querySelector('input').checked;
-        var i = S().lists[n].indexOf(id);
-        if (checked && i < 0) S().lists[n].push(id);
-        if (!checked && i >= 0) S().lists[n].splice(i, 1);
-      });
-      var nl = $('#nl', m).value.trim();
-      if (nl) {
-        if (!S().lists[nl]) S().lists[nl] = [];
-        if (S().lists[nl].indexOf(id) < 0) S().lists[nl].push(id);
-      }
-      H.save(true); m.close();
-      toast('Saved to your lists');
-    };
-  }
-
-  function planPicker(id) {
-    var r = H.byId(id);
-    var days = [];
-    for (var i = 0; i < 14; i++) days.push(H.addDays(H.today(), i));
-    var m = modal('Put ' + (r ? r.n : 'this') + ' on a day',
-      '<div class="picklist">' + days.map(function (ds) {
-        var n = (S().plan[ds] || []).length;
-        return '<button class="pickrow" data-d="' + ds + '"><div style="flex:1">' +
-          '<b>' + E(H.pretty(ds)) + '</b><div class="xs muted">' +
-          (n ? n + ' meals planned' : 'nothing planned') + '</div></div>' +
-          '<span class="b s">Add</span></button>';
-      }).join('') + '</div>',
-      '<button class="b" data-close>Done</button>');
-
-    $$('[data-d]', m).forEach(function (row) {
-      row.onclick = function () {
-        var ds = row.dataset.d;
-        if (!S().plan[ds]) S().plan[ds] = [];
-        S().plan[ds].push({ id: id, q: 1, slot: 'snack' });
-        H.save(true);
-        m.close();
-        toast('Added to ' + H.shortD(ds));
-      };
-    });
-  }
-
-  /* ---------------------------------------------------------- photos */
-  function pickPhoto(id) {
-    H.pickFile('image/*', function (f) {
-      var fr = new FileReader();
-      fr.onload = function () {
-        var img = new Image();
-        img.onload = function () {
-          var sc = Math.min(1, 900 / Math.max(img.width, img.height));
-          var cv = document.createElement('canvas');
-          cv.width = img.width * sc | 0;
-          cv.height = img.height * sc | 0;
-          cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
-          S().photos[id] = cv.toDataURL('image/jpeg', 0.72);
-          if (!H.save(true)) { delete S().photos[id]; return; }
-          refresh();
-          toast('Photo saved');
-        };
-        img.onerror = function () { toast('That image would not open'); };
-        img.src = fr.result;
-      };
-      fr.readAsDataURL(f);
-    });
-  }
-
-  function cardPNG(r) {
-    if (!r) return;
-    var W = 900, Hh = 1280;
-    var cv = document.createElement('canvas');
-    cv.width = W; cv.height = Hh;
-    var x = cv.getContext('2d');
-    var col = H.CATC[r.cat] || H.CATC['My recipe'];
-    var g = x.createLinearGradient(0, 0, W, Hh);
-    g.addColorStop(0, '#14140F'); g.addColorStop(.58, '#1F3A2C'); g.addColorStop(1, col[1]);
-    x.fillStyle = g; x.fillRect(0, 0, W, Hh);
-    x.fillStyle = col[0]; x.fillRect(0, 0, W, 9);
-    x.fillStyle = '#A8CDB8'; x.font = '700 19px Helvetica,Arial';
-    x.fillText(r.id + '   ·   ' + r.cat.toUpperCase() + '   ·   ' + r.diff, 56, 80);
-    x.fillStyle = '#fff'; x.font = '800 52px Helvetica,Arial';
-    var y = 142 + wrapT(x, r.n, 56, 142, 780, 56);
-
-    var mac = [[Math.round(r.k), 'KCAL'], [Math.round(r.p) + 'g', 'PROTEIN'],
-    [Math.round(r.c) + 'g', 'CARBS'], [Math.round(r.f) + 'g', 'FAT'],
-    [Math.round(r.fib || 0) + 'g', 'FIBER'], [(r.leu || 0).toFixed(1) + 'g', 'LEUCINE']];
-    var bw = (788 - 25) / 6;
-    mac.forEach(function (mm, i) {
-      var bx = 56 + i * (bw + 5);
-      x.fillStyle = 'rgba(255,255,255,.10)'; x.fillRect(bx, y, bw, 90);
-      x.fillStyle = '#fff'; x.font = '800 25px Helvetica,Arial'; x.textAlign = 'center';
-      x.fillText(String(mm[0]), bx + bw / 2, y + 40);
-      x.fillStyle = '#A8CDB8'; x.font = '700 11px Helvetica,Arial';
-      x.fillText(mm[1], bx + bw / 2, y + 66);
-      x.textAlign = 'left';
-    });
-    y += 128;
-
-    x.fillStyle = '#1F4D3A'; x.fillRect(56, y, 788, 62);
-    x.fillStyle = '#fff'; x.font = '700 23px Helvetica,Arial';
-    x.fillText(r.t + ' min   ·   makes ' + r.sv + '   ·   ' + money(H.cps(r)) +
-      '/serving   ·   ' + money(H.ctot(r)) + ' batch', 78, y + 39);
-    y += 100;
-
-    x.fillStyle = '#A8CDB8'; x.font = '700 16px Helvetica,Arial';
-    x.fillText('INGREDIENTS', 56, y); y += 28;
-    x.fillStyle = '#E6EDE7'; x.font = '400 18px Helvetica,Arial';
-    (r.ing || []).slice(0, 15).forEach(function (i) {
-      var q = H.ING(i[1]);
-      x.fillText('•  ' + (i[2] ? Math.round(i[2]) + ' g  ' : '') + (q ? q.n : i[0]), 56, y);
-      y += 26;
-    });
-
-    y += 20;
-    x.fillStyle = '#A8CDB8'; x.font = '700 16px Helvetica,Arial';
-    x.fillText('METHOD', 56, y); y += 28;
-    x.fillStyle = '#C9D6CB'; x.font = '400 16px Helvetica,Arial';
-    (r.st || []).slice(0, 6).forEach(function (s, i) {
-      y += wrapT(x, (i + 1) + '. ' + s, 56, y, 788, 23) + 7;
-    });
-    x.fillStyle = '#6E8A76'; x.font = '700 13px Helvetica,Arial';
-    x.fillText('The Handbook', 56, Hh - 40);
-
-    var a = document.createElement('a');
-    a.download = r.id + '-' + r.n.replace(/[^a-z0-9]+/gi, '-').toLowerCase() + '.png';
-    a.href = cv.toDataURL('image/png');
-    a.click();
-    toast('Card saved');
-  }
-
-  function wrapT(x, t, px, py, mw, lh) {
-    var words = String(t).split(' '), line = '', yy = py, used = 0;
-    for (var i = 0; i < words.length; i++) {
-      var test = line + words[i] + ' ';
-      if (x.measureText(test).width > mw && line) {
-        x.fillText(line, px, yy);
-        line = words[i] + ' ';
-        yy += lh;
-        used += lh;
-      } else line = test;
-    }
-    x.fillText(line, px, yy);
-    return used + lh;
-  }
-
-  /* ---------------------------------------------------------- save / load */
-  function exportAll() {
-    H.dl('handbook-data-' + H.today() + '.json',
-      JSON.stringify(H.exportBlob(), null, 1), 'application/json');
-    H.markExported();
-    toast('Saved to file');
-  }
-
-  function importAll() {
-    H.pickFile('.json', function (f) {
-      var fr = new FileReader();
-      fr.onload = function () {
-        try {
-          H.importState(fr.result);
-          applyTheme();
-          chrome();
-          refresh();
-          toast('Loaded');
-        } catch (e) {
-          modal('That file would not load',
-            '<p style="margin:0">' + E(e.message) + '</p>' +
-            '<p class="sm muted">A handbook save is the JSON file the Save button produces. ' +
-            'A shopping-list export is a different shape and loads from the Shopping page.</p>',
-            '<button class="b" data-close>OK</button>');
-        }
-      };
-      fr.readAsText(f);
-    });
-  }
-
-  H.PALETTE_ACTIONS = [
-    { k: 'Do', nm: 'Save everything to a file', run: exportAll },
-    { k: 'Do', nm: 'Load a saved file', run: importAll },
-    { k: 'Do', nm: 'Generate a meal plan', run: function () { nav('plan'); setTimeout(generate, 120); } },
-    { k: 'Do', nm: 'Build a shopping list from the plan', run: buildListFromPlan },
-    { k: 'Do', nm: 'Generate a training split', run: function () { nav('training'); setTimeout(splitModal, 120); } },
-    { k: 'Do', nm: 'Add my own recipe', run: ownRecipe },
-    { k: 'Do', nm: 'Log a shift', run: function () { nav('financial/actual'); setTimeout(shiftEditor, 120); } },
-    { k: 'Do', nm: 'Switch between light and dark', run: cycleTheme }
-  ];
-
-  function isDark() {
-    return document.documentElement.getAttribute('data-theme') === 'dark';
-  }
-
-  function cycleTheme() {
-    S().theme = isDark() ? 'light' : 'dark';
-    H.save(true);
-    applyTheme();
-    if (parse().v === 'settings') refresh();
-  }
-
-  /* ---------------------------------------------------------- global events */
-  document.addEventListener('click', function (e) {
-    var el;
-    function hit(sel) { return (el = e.target.closest(sel)); }
-
-    if (hit('[data-nav]')) { nav(el.dataset.nav); return; }
-    if (hit('[data-w]')) { S().who = el.dataset.w; H.save(true); refresh(); return; }
-
-    if (hit('[data-fav]')) {
-      e.stopPropagation();
-      var id = el.dataset.fav, i = S().fav.indexOf(id);
-      if (i >= 0) S().fav.splice(i, 1); else S().fav.push(id);
-      H.save(true);
-      // Toggle in place so the grid does not rebuild under the cursor.
-      $$('[data-fav="' + id + '"]').forEach(function (b) {
-        var isOn = S().fav.indexOf(id) >= 0;
-        if (!b.classList.contains('fav')) return;
-        b.classList.toggle('on', isOn);
-        b.setAttribute('aria-pressed', isOn);
-        b.textContent = isOn ? '★' : '☆';
-        b.classList.remove('pop');
-        void b.offsetWidth;
-        b.classList.add('pop');
-      });
-      if (parse().v === 'r') refresh();
-      return;
-    }
-
-    if (hit('[data-go]')) { nav('r/' + el.dataset.go); return; }
-    if (hit('[data-log]')) {
-      H.dayLog(H.today()).meals.push({ id: el.dataset.log, q: 1 });
-      H.consumeFromPantry(el.dataset.log, 1);
-      H.save(true);
-      var mealId = el.dataset.log;
-      toast('Logged to today', {
-        action: 'Undo',
-        onAction: function () {
-          var meals = H.dayLog(H.today()).meals;
-          for (var k = meals.length - 1; k >= 0; k--) {
-            if (meals[k].id === mealId) { meals.splice(k, 1); break; }
-          }
-          H.save(true); refresh();
-        }
-      });
-      return;
-    }
-    if (hit('[data-groc]')) {
-      var n = H.addRecipeToShop(H.byId(el.dataset.groc));
-      toast(n + ' ingredients added to ' + S().shop.active);
-      return;
-    }
-    if (hit('[data-tolist]')) { listModal(el.dataset.tolist); return; }
-    if (hit('[data-plan]')) { planPicker(el.dataset.plan); return; }
-    if (hit('[data-photo]')) { pickPhoto(el.dataset.photo); return; }
-    if (hit('[data-rmphoto]')) {
-      delete S().photos[el.dataset.rmphoto];
-      H.save(true); refresh();
-      toast('Photo removed');
-      return;
-    }
-    if (hit('[data-card]')) { cardPNG(H.byId(el.dataset.card)); return; }
-    if (hit('[data-list]')) { S().shop.active = el.dataset.list; H.save(true); refresh(); return; }
-
-    if (hit('[data-gt]')) {
-      var idx = +el.dataset.gt;
-      var item = H.curList().items[idx];
-      if (item) {
-        item.done = el.checked;
-        H.save();
-        // Repaint just this row and the running totals; rebuilding the whole
-        // list would throw away the scroll position mid-shop.
-        var row = el.closest('.gitem');
-        if (row) row.classList.toggle('done', item.done);
-        updateShopTotals();
-        updateAisle(el.closest('.aislegrp'));
-        if (S().prefs.hideChecked && item.done && row) {
-          row.style.display = 'none';
-        }
-      }
-      return;
-    }
-    if (hit('[data-gd]')) { removeShopItem(+el.dataset.gd); return; }
-    if (hit('[data-gm]')) {
-      var gmi = +el.dataset.gm;
-      var gmit = H.curList().items[gmi];
-      if (!gmit) return;
-      H.menu(el, [
-        { label: 'Edit ' + gmit.name, run: function () { shopItemEditor(gmi); } },
-        {
-          label: gmit.key ? 'Change its price everywhere' : 'Edit the item',
-          hint: gmit.key ? 'ingredient list' : '',
-          run: function () {
-            if (gmit.key) { nav('shopping/ingredients'); setTimeout(function () { ingEditor(gmit.key); }, 200); }
-            else shopItemEditor(gmi);
-          }
-        },
-        { sep: true },
-        {
-          label: 'Remove from the list', danger: true,
-          run: function () { removeShopItem(gmi); }
-        }
-      ]);
-      return;
-    }
-    if (hit('[data-ge]')) { shopItemEditor(+el.dataset.ge); return; }
-    if (hit('[data-ie]')) { ingEditor(el.dataset.ie); return; }
-    if (hit('[data-pane]')) {
-      var pk = el.dataset.pane, pg = H.ING(pk);
-      H.ask({
-        title: pg ? pg.n : 'Pantry item', label: 'Grams in stock',
-        value: String(Math.round(S().pantry[pk].g))
-      }).then(function (v) {
-        if (v == null) return;
-        S().pantry[pk].g = Math.max(0, H.num(v));
-        if (!S().pantry[pk].g) delete S().pantry[pk];
-        H.save(true); refresh();
-      });
-      return;
-    }
-    if (hit('[data-pand]')) {
-      var dk = el.dataset.pand, back = S().pantry[dk];
-      delete S().pantry[dk];
-      H.save(true); refresh();
-      toast('Removed', {
-        action: 'Undo',
-        onAction: function () { S().pantry[dk] = back; H.save(true); refresh(); }
-      });
-      return;
-    }
-    if (hit('[data-sess]')) { sessModal(+el.dataset.sess); return; }
-    if (hit('[data-jobe]')) { jobEditor(el.dataset.jobe); return; }
-    if (hit('[data-coste]')) { costEditor(el.dataset.coste); return; }
-    if (hit('[data-shd]')) {
-      S().fin.shifts = S().fin.shifts.filter(function (x) { return x.id !== el.dataset.shd; });
-      H.save(true); refresh();
-      return;
-    }
-    if (hit('[data-bpadd]')) { bpItemEditor(el.dataset.bpadd); return; }
-    if (hit('[data-bpdel]')) {
-      var bn = el.dataset.bpdel;
-      H.confirmDanger({ title: 'Delete "' + bn + '"?', text: 'Every item on it goes too.' })
-        .then(function (ok) {
-          if (!ok) return;
-          delete S().fin.purchases[bn];
-          H.save(true); refresh();
-        });
-      return;
-    }
-    if (hit('[data-bpi]')) {
-      var p = el.dataset.bpi.split('|');
-      S().fin.purchases[p[0]].items.splice(+p[1], 1);
-      H.save(true); refresh();
-      return;
-    }
-    if (hit('[data-d]')) { H.calSel = el.dataset.d; refresh(); return; }
-    if (hit('[data-evd]')) { H.dayLog(H.calSel).sched.splice(+el.dataset.evd, 1); H.save(true); refresh(); return; }
-    if (hit('[data-spd]')) { H.dayLog(H.calSel).spend.splice(+el.dataset.spd, 1); H.save(true); refresh(); return; }
-    if (hit('[data-mld]')) { H.dayLog(H.calSel).meals.splice(+el.dataset.mld, 1); H.save(true); refresh(); return; }
-    if (hit('[data-tadd]')) { tmplEditor(+el.dataset.tadd); return; }
-    if (hit('[data-td]')) {
-      var q = el.dataset.td.split('|');
-      S().sched.tmpl[q[0]].splice(+q[1], 1);
-      H.save(true); refresh();
-      return;
-    }
-
-    if (hit('#home')) { nav('meals'); return; }
-    if (hit('#cmdBtn')) { H.openPalette(); return; }
-    if (hit('#themeBtn')) { cycleTheme(); return; }
-    if (hit('#menuBtn')) { nav('settings'); return; }
+var R=_D.recipes, BASEING=_D.ing, AISLES=_D.aisles, LEARN=_D.learn;
+var EX=_D.exercises, SESS=_D.sessions, SEEDCOST=_D.costs, SEEDJOB=_D.jobs;
+var KEY='handbook.v5';
+
+/* ---------------- state ---------------- */
+function DEF(){return{
+ v:5, who:'j', savedAt:null,
+ prof:{j:{name:'Me',sex:'m',w:150,h:68,age:20,bf:20,act:1.55,goal:1.09,pf:1.1},
+       a:{name:'Aaliyah',sex:'f',w:120,h:66.5,age:20,bf:24,act:1.45,goal:1.0,pf:0.8}},
+ ingOv:{}, fav:[], lists:{}, mine:[], photos:{},
+ shop:{active:'Weekly shop', lists:{'Weekly shop':{cat:'Groceries',fav:true,items:[]}}},
+ days:{},
+ fin:{jobs:[],shifts:[],costs:[],scenarios:{},purchases:{},costMode:'real'},
+ sched:{tmpl:{}, },
+ exLog:{}, seeded:false
+};}
+var S=(function(){
+  try{var raw=localStorage.getItem(KEY);
+    if(raw){var o=JSON.parse(raw),d=DEF();
+      for(var k in d) if(!(k in o)) o[k]=d[k];
+      for(var p in d.prof) if(!o.prof[p]) o.prof[p]=d.prof[p];
+      for(var f in d.fin) if(!(f in o.fin)) o.fin[f]=d.fin[f];
+      return o;}
+  }catch(e){}
+  return DEF();
+})();
+function save(){ S.savedAt=Date.now();
+  try{localStorage.setItem(KEY,JSON.stringify(S));}
+  catch(e){toast('Storage full. Save to file, then remove some photos.');}}
+
+/* seed financial data from the Moving In workbook, once */
+if(!S.seeded){
+  S.fin.costs=SEEDCOST.map(function(c,i){return{id:'c'+i,name:c.name,section:c.section,
+    who:c.who,low:c.low,real:c.real,high:c.high,actual:c.exact||null};});
+  S.fin.jobs=SEEDJOB.map(function(j,i){return{id:'j'+i,who:j.who,name:j.name,
+    employer:j.employer,title:j.title,rate:null,low:j.low,real:j.real,high:j.high};});
+  S.seeded=true; save();
+}
+
+/* ---------------- helpers ---------------- */
+function $(s,r){return (r||document).querySelector(s);}
+function $$(s,r){return [].slice.call((r||document).querySelectorAll(s));}
+function E(t){return String(t==null?'':t).replace(/[&<>"']/g,function(c){
+  return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+/* Money formatting done by hand. toLocaleString with options is ignored by some
+   engines, which then prints the raw float. */
+function commas(s){var p=String(s).split('.'),i=p[0],out='',c=0;
+  for(var x=i.length-1;x>=0;x--){out=i.charAt(x)+out;if(++c%3===0&&x>0)out=','+out;}
+  return p.length>1?out+'.'+p[1]:out;}
+function $$$(v){var n=Number(v);if(!isFinite(n))n=0;
+  return (n<0?'-$':'$')+commas(Math.abs(n).toFixed(2));}
+function M(v){var n=Math.round(Number(v)||0);
+  return (n<0?'-$':'$')+commas(Math.abs(n));}
+function N(v){return commas(Math.round(Number(v)||0));}
+function p2(n){n=String(n);return n.length<2?'0'+n:n;}
+function today(){var d=new Date();return d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate());}
+function dOf(ds){var p=ds.split('-');return new Date(+p[0],+p[1]-1,+p[2]);}
+function pretty(ds){return dOf(ds).toLocaleDateString(undefined,{weekday:'long',month:'short',day:'numeric'});}
+function shortD(ds){return dOf(ds).toLocaleDateString(undefined,{month:'short',day:'numeric'});}
+function uid(){return Math.random().toString(36).slice(2,9);}
+function toast(m){var t=document.createElement('div');t.className='toast';t.textContent=m;
+  document.body.appendChild(t);setTimeout(function(){t.remove();},2600);}
+function dl(name,text,mime){var b=new Blob([text],{type:mime||'text/plain'});
+  var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click();
+  setTimeout(function(){URL.revokeObjectURL(a.href);},1200);}
+function P(){return S.prof[S.who];}
+function num(x,d){var n=parseFloat(x);return isNaN(n)?(d||0):n;}
+
+/* ---------------- ingredients: base + user overrides ---------------- */
+function ING(k){
+  var b=BASEING[k], o=S.ingOv[k];
+  if(!b&&!o) return null;
+  var m={};
+  if(b) for(var x in b) m[x]=b[x];
+  if(o) for(var y in o) if(o[y]!==null&&o[y]!==undefined&&o[y]!=='') m[y]=o[y];
+  return m;
+}
+function allIngKeys(){
+  var s={};for(var k in BASEING)s[k]=1;for(var j in S.ingOv)s[j]=1;
+  return Object.keys(s).filter(function(k){return !S.ingOv[k]||!S.ingOv[k].deleted;});
+}
+function best(q){ if(!q) return 0;
+  var w=q.w,c=q.c;
+  if(c!=null&&c>0&&(w==null||w<=0||c<w)) return c;
+  return w||0;}
+function bestStore(q){ if(!q) return '';
+  var w=q.w,c=q.c;
+  if(c!=null&&c>0&&(w==null||w<=0||c<w)) return 'Costco';
+  return 'Walmart';}
+/* recipe cost is always recomputed from live ingredient prices, so an
+   edited price flows straight through to every recipe that uses it */
+function rcost(r){
+  var t=0,any=false;
+  (r.ing||[]).forEach(function(i){
+    var q=ING(i[1]); if(!q) return;
+    var p=best(q); if(p>0){any=true;t+=(i[2]||0)/100*p;}
   });
+  if(!any) return {tot:r.cw||0,per:r.cws||0};
+  return {tot:t, per:t/Math.max(r.sv||1,1)};
+}
+function cps(r){return rcost(r).per;}
+function ctot(r){return rcost(r).tot;}
+function all(){return R.concat(S.mine);}
+function byId(id){var A=all();for(var i=0;i<A.length;i++)if(A[i].id===id)return A[i];return null;}
 
-  function removeShopItem(i) {
-    var removed = H.curList().items[i];
-    if (!removed) return;
-    H.curList().items.splice(i, 1);
-    H.save(true); refresh();
-    toast('Removed ' + removed.name, {
-      action: 'Undo',
-      onAction: function () {
-        H.curList().items.splice(i, 0, removed);
-        H.save(true); refresh();
-      }
+/* ---------------- nutrition ---------------- */
+function calc(p){
+  var kg=p.w*0.45359237, cm=p.h*2.54, m=cm/100, lbm=kg*(1-p.bf/100);
+  var rmr=(10*kg)+(6.25*cm)-(5*p.age)+(p.sex==='f'?-161:5);
+  var tdee=rmr*p.act, kcal=tdee*p.goal;
+  var prot=p.w*p.pf, fat=kcal*0.25/9, carb=(kcal-prot*4-fat*9)/4;
+  return {rmr:Math.round(rmr),katch:Math.round(370+21.6*lbm),tdee:Math.round(tdee),
+    kcal:Math.round(kcal),p:Math.round(prot),c:Math.round(carb),f:Math.round(fat),
+    fib:Math.round(kcal/1000*14),w:Math.round(p.w*0.6+35),lbm:Math.round(p.w*(1-p.bf/100)),
+    ffmi:(lbm/(m*m)+6.1*(1.8-m)).toFixed(1),rate:(kcal-tdee)*7/3500};
+}
+var TRAIN={
+ rest:{n:'Rest day',k:0.94,c:0.80,p:1.00,why:'Repair happens on rest days, so protein holds. Carbs ease back, fiber and micronutrients come up.'},
+ pull:{n:'Back and biceps',k:1.02,c:1.05,p:1.08,why:'Biggest upper-body group. Protein and leucine lead, and iron-rich meals get weighted up.'},
+ push:{n:'Chest, shoulders, triceps',k:1.02,c:1.02,p:1.08,why:'Straight hypertrophy demand. Leucine per feeding matters most.'},
+ legs:{n:'Legs',k:1.10,c:1.30,p:1.04,why:'Legs empty the most glycogen of any session. Carbs and total calories lead.'},
+ arms:{n:'Arms',k:0.99,c:0.95,p:1.05,why:'Small group, small systemic cost. Protein holds, calories do not spike.'},
+ abs:{n:'Abs and core',k:0.96,c:0.88,p:1.02,why:'Low energy cost. Food volume and fiber over calories.'},
+ cardio:{n:'Cardio',k:1.06,c:1.25,p:0.98,why:'Carbs and fluid lead. Sodium matters more in dry Colorado air.'},
+ skill:{n:'Skill work',k:1.01,c:1.10,p:1.04,why:'Loads connective tissue more than muscle. Omega-3 and nutrient density weighted up.'},
+ full:{n:'Full body',k:1.06,c:1.15,p:1.08,why:'Everything trained, everything demanded.'}
+};
+function dayLog(ds){ if(!S.days[ds]) S.days[ds]={workout:'rest',meals:[],notes:'',w:null,sched:[],spend:[]};
+  var d=S.days[ds]; if(!d.sched)d.sched=[]; if(!d.spend)d.spend=[]; return d;}
+function dayTarget(who,tt){
+  var b=calc(S.prof[who]), t=TRAIN[tt||'rest'];
+  var kcal=Math.round(b.kcal*t.k), pr=Math.round(b.p*t.p), cb=Math.round(b.c*t.c);
+  var ft=Math.round((kcal-pr*4-cb*4)/9), floor=Math.round(S.prof[who].w*0.3);
+  if(ft<floor){ft=floor;cb=Math.round((kcal-pr*4-ft*9)/4);}
+  return {kcal:kcal,p:pr,c:cb,f:ft,fib:Math.round(kcal/1000*14),w:b.w,tr:t,base:b};
+}
+function eaten(ds){var d=dayLog(ds),o={kcal:0,p:0,c:0,f:0,fib:0,cost:0};
+  d.meals.forEach(function(m){var r=byId(m.id);if(!r)return;var q=m.q||1;
+    o.kcal+=r.k*q;o.p+=r.p*q;o.c+=r.c*q;o.f+=r.f*q;o.fib+=(r.fib||0)*q;o.cost+=cps(r)*q;});
+  return o;}
+
+/* cost per macro: what a day of these targets actually costs, from real recipes */
+function costModel(){
+  var A=all().filter(function(r){return r.k>60;});
+  var pk=0,pp=0,n=0;
+  A.forEach(function(r){var c=cps(r); if(c<=0)return;
+    pk+=c/r.k; pp+=(r.p>0?c/r.p:0); n++;});
+  return {perKcal:pk/n, perProtein:pp/n, n:n};
+}
+function estDayCost(t,mode){
+  var A=all().filter(function(r){return r.k>60;});
+  if(mode==='fav'&&S.fav.length) A=S.fav.map(byId).filter(Boolean);
+  if(mode==='cheap') A=A.slice().sort(function(a,b){return (cps(a)/a.k)-(cps(b)/b.k);}).slice(0,40);
+  if(mode==='logged'){
+    var days=Object.keys(S.days).filter(function(d){return S.days[d].meals.length;});
+    if(days.length){var c=0,k=0;
+      days.forEach(function(d){var e=eaten(d);c+=e.cost;k+=e.kcal;});
+      if(k>0) return {byKcal:t.kcal*(c/k), byProt:null, src:days.length+' logged days'};}
+  }
+  if(!A.length) A=all();
+  var pk=0,n=0,pp=0,np=0;
+  A.forEach(function(r){var c=cps(r);if(c<=0)return;pk+=c/r.k;n++;
+    if(r.p>3){pp+=c/r.p;np++;}});
+  return {byKcal:t.kcal*(pk/Math.max(n,1)), byProt:t.p*(pp/Math.max(np,1)),
+          src:(mode==='fav'?'favourites':mode==='cheap'?'the 40 cheapest per calorie':'all '+n+' recipes')};
+}
+
+/* ---------------- file persistence ---------------- */
+function exportAll(){
+  var blob={app:'handbook',version:5,exported:new Date().toISOString(),state:S};
+  dl('handbook-data-'+today()+'.json',JSON.stringify(blob,null,1),'application/json');
+  toast('Saved to file');
+}
+function importAll(file,cb){
+  var fr=new FileReader();
+  fr.onload=function(){
+    try{
+      var o=JSON.parse(fr.result);
+      var st=o.state||o;
+      if(!st.prof) throw new Error('not a handbook file');
+      var d=DEF(); for(var k in d) if(!(k in st)) st[k]=d[k];
+      S=st; save(); cb&&cb(true);
+    }catch(e){ alert('That did not read as a handbook file.\n\n'+e.message); cb&&cb(false); }
+  };
+  fr.readAsText(file);
+}
+function csvEsc(v){return '"'+String(v==null?'':v).replace(/"/g,'""')+'"';}
+function toCSV(rows){return rows.map(function(r){return r.map(csvEsc).join(',');}).join('\n');}
+
+/* ============================ MEALS ============================ */
+var CATC={'Breakfast':['#D89A3C','#B0651F'],'Lunch/Dinner':['#2C6B50','#173C2C'],
+ 'Snack':['#4E8C7A','#28584A'],'Drink':['#6E5AA8','#3F3168'],
+ 'SDA Meat/Fish':['#C4614B','#8A3826'],'My recipe':['#6B6B5E','#3E3E36']};
+function ringSVG(r){
+  var tot=r.p*4+r.c*4+r.f*9||1, C=2*Math.PI*15.9155;
+  var segs=[[r.p*4/tot,'#1F4D3A'],[r.c*4/tot,'#C2860E'],[r.f*9/tot,'#5C4A78']],off=25,h='';
+  segs.forEach(function(s){var L=s[0]*C;
+    h+='<circle cx="18" cy="18" r="15.9155" fill="none" stroke="'+s[1]+'" stroke-width="4.4" '+
+       'stroke-dasharray="'+L.toFixed(2)+' '+(C-L).toFixed(2)+'" stroke-dashoffset="'+off.toFixed(2)+'"/>';
+    off-=L;});
+  return '<svg class="ring" viewBox="0 0 36 36" width="58" height="58">'+
+    '<circle cx="18" cy="18" r="15.9155" fill="rgba(255,255,255,.14)" stroke="rgba(255,255,255,.22)" stroke-width="4.4"/>'+
+    h+'<text x="18" y="19.4" text-anchor="middle" font-size="8.2" font-weight="800" fill="#fff">'+Math.round(r.k)+'</text>'+
+    '<text x="18" y="25" text-anchor="middle" font-size="4.2" font-weight="700" fill="rgba(255,255,255,.8)">KCAL</text></svg>';
+}
+function art(r){
+  var ph=S.photos[r.id];
+  if(ph) return '<div class="rcart"><img src="'+ph+'" alt=""></div>';
+  var c=CATC[r.cat]||CATC['My recipe'];
+  return '<div class="rcart" style="background:linear-gradient(135deg,'+c[0]+','+c[1]+')">'+
+    '<svg class="plate" viewBox="0 0 120 70" preserveAspectRatio="xMidYMid meet">'+
+    '<circle cx="45" cy="35" r="21" fill="none" stroke="rgba(255,255,255,.30)" stroke-width="3"/>'+
+    '<circle cx="45" cy="35" r="12" fill="none" stroke="rgba(255,255,255,.20)" stroke-width="2"/>'+
+    '<path d="M78 18v34M86 18v12a4 4 0 004 4h0v18M96 18v34" stroke="rgba(255,255,255,.28)" stroke-width="3" fill="none" stroke-linecap="round"/>'+
+    '</svg>'+ringSVG(r)+'</div>';
+}
+function pscale(v){return v<1.6?'$':v<3.2?'$$':'$$$';}
+function bestFor(r){
+  if(r.tg.indexOf('LEUCINE PRIORITY')>=0||r.p>=40)return 'Protein';
+  if(r.tg.indexOf('CHEAT MEAL')>=0)return 'Cheat';
+  if(r.tg.indexOf('HEALTHY DESSERT')>=0||r.tg.indexOf('CHEAT DESSERT')>=0)return 'Dessert';
+  if(r.c>=70)return 'Carbs'; if(r.tg.indexOf('HIGH FIBER')>=0)return 'Fiber';
+  if(r.k<=350)return 'Lean'; if(r.k>=600)return 'Calories'; return 'Balanced';}
+function rcard(r){
+  var f=S.fav.indexOf(r.id)>=0, dc=r.diff==='EASY'?'d1':r.diff==='MODERATE'?'d2':'d3';
+  return '<article class="rc" data-go="'+r.id+'">'+art(r)+
+   '<button class="fav'+(f?' on':'')+'" data-fav="'+r.id+'">'+(f?'\u2605':'\u2606')+'</button>'+
+   '<div class="rcbadge">'+r.id+'</div><div class="rcb"><div class="rcn">'+E(r.n)+'</div>'+
+   '<div class="chips"><span class="chip">'+r.t+' min</span>'+
+   '<span class="chip '+dc+'">'+(r.diff||'EASY').charAt(0)+(r.diff||'EASY').slice(1).toLowerCase()+'</span>'+
+   '<span class="chip p">'+pscale(cps(r))+' '+$$$(cps(r))+'</span>'+
+   '<span class="chip t">'+bestFor(r)+'</span></div>'+
+   '<div class="rcm"><div><b>'+Math.round(r.k)+'</b><span>kcal</span></div>'+
+   '<div><b>'+Math.round(r.p)+'</b><span>prot</span></div>'+
+   '<div><b>'+Math.round(r.c)+'</b><span>carb</span></div>'+
+   '<div><b>'+Math.round(r.f)+'</b><span>fat</span></div></div></div></article>';
+}
+var flt={q:'',cat:'',tag:'',sort:'rec'};
+function vMeals(){
+  var ds=today(),d=dayLog(ds),tgt=dayTarget(S.who,d.workout),got=eaten(ds);
+  var left={k:Math.max(150,tgt.kcal-got.kcal),p:Math.max(10,tgt.p-got.p)};
+  var rec=rank(left,d.workout).slice(0,8);
+  var est=estDayCost(tgt,S.costMode||'all');
+  return '<div class="page"><div class="phead"><h1>Meals</h1>'+
+   '<p>'+all().length+' recipes, all gluten-free. Average '+$$$(avgCost())+' a serving at the cheaper of Walmart or Costco.</p></div>'+
+
+   '<div class="sec"><h2>What '+(S.who==='j'?'I':E(P().name))+' need today</h2>'+
+   '<p class="sub">Adjusted for '+TRAIN[d.workout].n.toLowerCase()+'. Change it on the Training tab.</p>'+
+   '<div class="grid g2"><div class="card pad">'+statRow(tgt)+
+   '<div class="mrow" style="margin-top:16px"></div>'+
+   bar('Calories',got.kcal,tgt.kcal,'pk')+bar('Protein',got.p,tgt.p,'pp')+
+   bar('Carbs',got.c,tgt.c,'pc')+bar('Fat',got.f,tgt.f,'pf')+
+   '<p class="sm muted" style="margin-top:12px">Left today: <b>'+Math.round(left.k)+' kcal</b>, <b>'+
+   Math.round(left.p)+' g protein</b> &middot; spent '+$$$(got.cost)+'</p></div>'+
+
+   '<div class="card pad"><h3 style="font-size:15px">What that costs</h3>'+
+   '<p class="sub sm">Estimated food cost to actually hit today\'s numbers.</p>'+
+   '<label class="f"><span>Base the estimate on</span><select id="costMode">'+
+   opt([['all','Every recipe (average)'],['cheap','The cheapest 40 per calorie'],
+        ['fav','My favourites only'],['logged','What we actually logged']],S.costMode||'all')+
+   '</select></label>'+
+   '<div class="stats"><div class="stat acc"><b>'+$$$(est.byKcal)+'</b><span>Today</span></div>'+
+   (est.byProt?'<div class="stat"><b>'+$$$(est.byProt)+'</b><span>By protein</span></div>':'')+
+   '<div class="stat"><b>'+$$$(est.byKcal*7)+'</b><span>Per week</span></div>'+
+   '<div class="stat"><b>'+$$$(est.byKcal*30)+'</b><span>Per month</span></div></div>'+
+   '<p class="xs muted" style="margin-top:10px">From '+E(est.src)+'. '+
+   (est.byProt?'The two figures differ because protein is the expensive macro; if they are far apart the day is protein-heavy relative to its calories.':'')+
+   '</p><div class="row" style="margin-top:12px">'+
+   '<button class="b o s" id="bothCost">Cost for both of us</button></div>'+
+   '<div id="bothOut"></div></div></div></div>'+
+
+   '<div class="sec"><h2>For today</h2><p class="sub">Ranked for the session and what is left.</p>'+
+   '<div class="grid g3">'+rec.map(rcard).join('')+'</div></div>'+
+
+   (S.fav.length?'<div class="sec"><h2>Favourites</h2><div class="grid g3">'+
+     S.fav.map(byId).filter(Boolean).map(rcard).join('')+'</div></div>':'')+
+
+   '<div class="sec"><h2>Everything</h2><div class="card pad" style="margin-bottom:14px"><div class="fr">'+
+   '<label class="f"><span>Search</span><input id="fq" placeholder="tofu, oats, burger..." value="'+E(flt.q)+'"></label>'+
+   '<label class="f"><span>Category</span><select id="fcat">'+opt([['','All'],['Breakfast','Breakfast'],
+     ['Lunch/Dinner','Mains'],['Snack','Snacks'],['Drink','Drinks'],['SDA Meat/Fish','Meat and fish'],
+     ['My recipe','Mine']],flt.cat)+'</select></label>'+
+   '<label class="f"><span>Best for</span><select id="ftag">'+opt([['','Any'],
+     ['LEUCINE PRIORITY','High protein'],['CHEAT MEAL','Cheat meal'],['HEALTHY DESSERT','Dessert'],
+     ['BUDGET FRIENDLY','Cheap'],['NO-COOK','No cooking'],['MEAL PREP','Meal prep'],
+     ['HIGH FIBER','High fiber']],flt.tag)+'</select></label>'+
+   '<label class="f"><span>Sort</span><select id="fsort">'+opt([['rec','Protein'],['cheap','Cheapest'],
+     ['t','Fastest'],['k','Most calories'],['az','A to Z']],flt.sort)+'</select></label></div>'+
+   '<div class="row"><button class="b o s" id="addOwn">Add my own recipe</button>'+
+   '<span class="right sm muted" id="fcount"></span></div></div>'+
+   '<div class="grid g3" id="fgrid"></div></div>'+
+   explain()+'</div>';
+}
+/* Explanations live at the bottom, out of the way of the daily screens. */
+function explain(){
+  var p=P(), c=calc(p);
+  function D(q,a){return '<details><summary>'+q+'</summary><div class="dc">'+a+'</div></details>';}
+  return '<div class="sec"><h2>Why these numbers</h2>'+
+   '<p class="sub">Open what is useful, ignore the rest. Everything here uses '+E(p.name)+"'s current figures.</p>"+
+   D('Protein','<p>Nine of the twenty amino acids are essential, meaning food is the only source. '+
+     'Muscle is built from them.</p><p><b>How much.</b> '+p.pf+' g per lb of bodyweight, so <b>'+c.p+
+     ' g a day</b>. A plant-heavy diet gets pushed to the upper end because dairy and plant proteins '+
+     'are less digestible and lower in leucine than meat.</p><p>Above about 1.5 g per lb the extra is '+
+     'oxidised. Not harmful, just calories that would do more good as carbs.</p>')+
+   D('Carbohydrate','<p>Training fuel, and what keeps muscle glycogen full. Full glycogen is why muscle '+
+     'looks full rather than flat, which is a fast and real visual change.</p><p><b>How much.</b> '+
+     'Whatever is left: (calories - protein x 4 - fat x 9) / 4 = <b>'+c.c+' g</b>.</p>'+
+     '<p>Storage capacity is roughly 15 g per kg bodyweight, about 1,000 g, worth 4,000 calories and '+
+     '3 kg of water. Refilling it is most of what the first two weeks of eating properly shows on the scale.</p>')+
+   D('Fat','<p>Hormones, cell membranes, and absorbing vitamins A, D, E and K.</p>'+
+     '<p><b>Floor.</b> 0.3 g per lb, so <b>'+Math.round(p.w*0.3)+' g</b>. Below that testosterone suffers. '+
+     'The target here is 25% of calories, <b>'+c.f+' g</b>.</p><p>Fat is also the easiest way to add '+
+     'calories without volume, at 9 kcal per gram against 4 for the others.</p>')+
+   D('Fiber and water','<p>Fiber target is 14 g per 1,000 kcal, so <b>'+c.fib+' g</b>. Raising it fast '+
+     'is unpleasant, so add about 5 g a week.</p><p>Water is 0.6 oz per lb plus training and altitude, '+
+     'about <b>'+c.w+' oz</b>. Colorado is dry enough that thirst lags behind actual need.</p>')+
+   D('Leucine','<p>The amino acid that flips the switch on muscle protein synthesis. Roughly 2.5 to 3 g '+
+     'per feeding saturates the signal.</p><p>It is ignition, not fuel. Hitting leucine without adequate '+
+     'total protein, calories and training does close to nothing, which is what the isolated BCAA '+
+     'research found once total protein was controlled for.</p>')+
+   D('How the calorie target is worked out','<p><b>1. RMR.</b> Mifflin-St Jeor: (10 x kg) + (6.25 x cm) '+
+     '- (5 x age) + 5 for men, -161 for women. For '+E(p.name)+' that is <b>'+c.rmr+'</b>.</p>'+
+     '<p><b>2. TDEE.</b> RMR x activity factor. At x'+p.act+' that is <b>'+c.tdee+'</b>.</p>'+
+     '<p><b>3. Goal.</b> TDEE x '+p.goal+' = <b>'+c.kcal+'</b> a day.</p>'+
+     '<p>Then the session adjustment on top, which the Training tab controls. Katch-McArdle gives '+
+     c.katch+' for comparison; it is the better equation but only once body fat comes from a DEXA '+
+     'rather than a scale.</p>')+
+   D('Why the scale is not the whole story','<p>Daily swings of 2 to 4 lb are sodium, carb loading, '+
+     'water retention after hard training, gut contents and sleep. Compare a seven-day average to the '+
+     'average three weeks ago, never single days.</p><p>With celiac there is one more: an accidental '+
+     'gluten exposure causes several days of inflammatory water retention that looks exactly like fat gain.</p>')+
+   D('FFMI and the ceiling','<p>Fat-free mass index is lean mass in kg over height in metres squared, '+
+     'height-corrected. '+E(p.name)+' is at <b>'+c.ffmi+'</b>, on '+c.lbm+' lb of lean mass. Around 25 is '+
+     'the practical natural limit, so there is <b>'+(25-c.ffmi).toFixed(1)+' points</b> of room. That is '+
+     'real, and worth several years of training.</p>')+
+   D('Celiac: where the risk actually is','<p>Every recipe here is gluten-free by ingredient. The risk is '+
+     'brands, not foods. Worth reading a label on: oats (cross-contaminated in harvest and milling, buy '+
+     'certified), soy sauce (wheat, use tamari), buffalo sauce and curry paste (wheat thickeners), frozen '+
+     'fries (flour anti-stick coating), protein powder (shared lines), and anything labelled panko.</p>'+
+     '<p>Kitchen side: separate toaster, squeeze bottles rather than jars, no shared colander or wooden board.</p>')+
+   D('Nutrients that run low for us','<p>Celiac damages the duodenum, where iron is absorbed, and a '+
+     'vegetarian base limits iron, B12 and zinc on top of that. Highest risk five: iron, B12, vitamin D, '+
+     'calcium, zinc.</p><p>Pair plant iron with vitamin C, which multiplies absorption several-fold. Do not '+
+     'drink tea or coffee with an iron-heavy meal.</p><p>Worth testing yearly: ferritin, CBC, B12, '+
+     '25-OH vitamin D, and tTG-IgA to confirm the diet is controlling the disease.</p>')+
+   '</div>';
+}
+function avgCost(){var A=all();return A.reduce(function(a,r){return a+cps(r);},0)/A.length;}
+function rank(left,tr){
+  var t=TRAIN[tr]||TRAIN.rest;
+  return all().map(function(r){var s=0;
+    s-=Math.abs(r.k-left.k)/26; s+=Math.min(r.p,left.p*1.4)*1.9*t.p;
+    s+=Math.min(r.c,140)*0.15*t.c; s+=(r.leu||0)*7;
+    if(S.fav.indexOf(r.id)>=0)s+=14; return {r:r,s:s};})
+    .sort(function(a,b){return b.s-a.s;}).map(function(o){return o.r;});
+}
+function applyFilters(){
+  var g=$('#fgrid'); if(!g)return; var q=flt.q.toLowerCase();
+  var L=all().filter(function(r){
+    if(flt.cat&&r.cat!==flt.cat)return false;
+    if(flt.tag&&r.tg.indexOf(flt.tag)<0)return false;
+    if(q){var h=(r.n+' '+r.cat+' '+r.tg.join(' ')+' '+(r.ing||[]).map(function(i){
+      var m=ING(i[1]);return m?m.n:'';}).join(' ')).toLowerCase();
+      if(h.indexOf(q)<0)return false;}
+    return true;});
+  L.sort(function(a,b){var s=flt.sort;
+    if(s==='cheap')return cps(a)-cps(b); if(s==='t')return a.t-b.t;
+    if(s==='k')return b.k-a.k; if(s==='az')return a.n.localeCompare(b.n); return b.p-a.p;});
+  g.innerHTML=L.length?L.map(rcard).join(''):'<p class="empty">Nothing matches.</p>';
+  $('#fcount').textContent=L.length+' shown';
+}
+
+/* ============================ RECIPE DETAIL ============================ */
+function vRecipe(id){
+  var r=byId(id); if(!r)return '<div class="page"><p class="empty">Not found. <a href="#/meals">Back</a></p></div>';
+  var sv=r.sv||1, f=S.fav.indexOf(id)>=0, ph=S.photos[id];
+  var c=CATC[r.cat]||CATC['My recipe'];
+  return '<div class="page">'+
+   '<div class="row" style="margin:16px 0 14px"><button class="b o s" data-nav="meals">&larr; Meals</button>'+
+   '<span class="chip">'+r.id+'</span></div>'+
+   '<div class="dhero" style="background:linear-gradient(135deg,'+c[0]+','+c[1]+')">'+
+   (ph?'<img src="'+ph+'" alt="">':'')+'<div class="scrim"></div><div class="in">'+
+   '<div class="chips"><span class="chip">'+E(r.cat)+'</span><span class="chip">'+r.diff+'</span>'+
+   '<span class="chip">'+r.t+' min</span><span class="chip">'+bestFor(r)+'</span></div>'+
+   '<h1>'+E(r.n)+'</h1><div class="sm" style="color:rgba(255,255,255,.85)">makes '+
+   '<span id="svHero">'+sv+'</span> &middot; '+$$$(cps(r))+' per serving, <span id="totHero">'+
+   $$$(ctot(r))+'</span> total</div></div></div>'+
+   '<div class="row" style="margin:16px 0"><button class="b" data-log="'+id+'">Log to today</button>'+
+   '<button class="b o" data-fav="'+id+'">'+(f?'\u2605 Favourited':'\u2606 Favourite')+'</button>'+
+   '<button class="b o" data-tolist="'+id+'">Add to a list</button>'+
+   '<button class="b o" data-groc="'+id+'">Add to shopping</button>'+
+   '<button class="b o" data-photo="'+id+'">'+(ph?'Change photo':'Add photo')+'</button>'+
+   '<button class="b o" data-card="'+id+'">Save card</button></div>'+
+   '<div class="sec"><div class="stats">'+
+   '<div class="stat acc"><b>'+Math.round(r.k)+'</b><span>Calories</span></div>'+
+   '<div class="stat"><b>'+Math.round(r.p)+'g</b><span>Protein</span></div>'+
+   '<div class="stat"><b>'+Math.round(r.c)+'g</b><span>Carbs</span></div>'+
+   '<div class="stat"><b>'+Math.round(r.f)+'g</b><span>Fat</span></div>'+
+   '<div class="stat"><b>'+Math.round(r.fib||0)+'g</b><span>Fiber</span></div>'+
+   '<div class="stat"><b>'+(r.leu||0).toFixed(1)+'g</b><span>Leucine</span></div></div>'+
+   '<p class="muted sm" style="margin-top:9px">Every number above is <b>one plated serving</b>. '+
+   'Making <span id="batchSv">'+sv+'</span> total: <span id="batchAll">'+Math.round(r.k*sv)+
+   ' kcal, '+Math.round(r.p*sv)+' g protein, '+Math.round(r.c*sv)+' g carbs, '+
+   Math.round(r.f*sv)+' g fat, '+$$$(ctot(r))+'</span>.</p></div>'+
+   '<div class="grid g2"><div class="card pad">'+
+   '<div class="spread" style="margin-bottom:10px"><h3 style="font-size:16px">Ingredients '+
+   '<span class="muted sm" id="svLabel">for '+sv+'</span></h3></div>'+
+   '<div class="row" style="margin-bottom:12px"><span class="muted sm">Scale</span>'+
+   [0.5,1,1.5,2,3,4].map(function(x){return '<button class="pill'+(x===1?' on':'')+
+     '" data-scale="'+x+'">'+x+'x</button>';}).join('')+'</div>'+
+   '<ul class="ing" id="ingList"></ul>'+
+   '<p class="xs muted" style="margin-top:10px">Prices come from the ingredient list. '+
+   '<a href="#/shopping/ingredients">Edit an ingredient</a> and every recipe using it updates.</p></div>'+
+   '<div class="card pad"><h3 style="font-size:16px;margin-bottom:12px">Method</h3><ol class="stp">'+
+   (r.st||[]).map(function(s){return '<li>'+E(s)+'</li>';}).join('')+'</ol></div></div>'+
+   (r.prep?'<div class="note"><b>Note.</b> '+E(r.prep)+'</div>':'')+
+   '<div class="grid g2" style="margin-top:14px">'+
+   (r.storage?'<div class="card pad"><h4 class="lbl">Storage</h4><p class="sm" style="margin:8px 0 0">'+E(r.storage)+'</p></div>':'')+
+   ((r.subs||[]).length?'<div class="card pad"><h4 class="lbl">Substitutions</h4><ul class="sm" style="margin:8px 0 0;padding-left:18px">'+
+     r.subs.map(function(s){return '<li>'+E(s)+'</li>';}).join('')+'</ul></div>':'')+
+   ((r.vars||[]).length?'<div class="card pad"><h4 class="lbl">Variations</h4><ul class="sm" style="margin:8px 0 0;padding-left:18px">'+
+     r.vars.map(function(s){return '<li>'+E(s)+'</li>';}).join('')+'</ul></div>':'')+
+   '</div></div>';
+}
+function drawIng(r,mult){
+  var el=$('#ingList'); if(!el)return;
+  el.innerHTML=(r.ing||[]).map(function(i){
+    var meas=i[0],key=i[1],g=i[2]||0,q=ING(key);
+    var nm=q?q.n:meas, pr=q?(g*mult/100)*best(q):0;
+    var gs=g?Math.round(g*mult)+' g':'';
+    var sub=(q&&meas)?' <span class="muted xs">('+E(meas)+')</span>':'';
+    return '<li><b>'+gs+'</b><span>'+E(nm)+sub+'</span>'+
+      (pr?'<span class="c">'+$$$(pr)+'</span>':'')+'</li>';}).join('');
+  var sv=(r.sv||1)*mult, nice=function(x){return Math.round(x*10)/10;};
+  var t=ctot(r)*mult;
+  set('#svLabel','for '+nice(sv)+' serving'+(sv===1?'':'s'));
+  set('#svHero',nice(sv)); set('#totHero',$$$(t)); set('#batchSv',nice(sv));
+  var a=$('#batchAll'); if(a)a.innerHTML=Math.round(r.k*sv)+' kcal, '+Math.round(r.p*sv)+
+    ' g protein, '+Math.round(r.c*sv)+' g carbs, '+Math.round(r.f*sv)+' g fat, '+$$$(t);
+}
+function set(sel,v){var e=$(sel); if(e)e.textContent=v;}
+
+/* ============================ SHOPPING ============================ */
+function shopLists(){return S.shop.lists;}
+function curList(){var L=shopLists(); if(!L[S.shop.active]){var k=Object.keys(L)[0];
+  if(!k){L['Weekly shop']={cat:'Groceries',fav:true,items:[]};k='Weekly shop';}
+  S.shop.active=k;} return L[S.shop.active];}
+function vShopping(sub){
+  if(sub==='ingredients') return vIngredients();
+  var L=shopLists(), names=Object.keys(L), cur=curList(), items=cur.items||[];
+  var byA={}; items.forEach(function(it,i){(byA[it.aisle]=byA[it.aisle]||[]).push([it,i]);});
+  var order=AISLES.map(function(a){return a[0];}).concat(['Other']);
+  var tot=items.reduce(function(a,i){return a+(i.done?0:i.price*i.qty);},0);
+  var got=items.reduce(function(a,i){return a+(i.done?i.price*i.qty:0);},0);
+  var cats={}; names.forEach(function(n){var c=L[n].cat||'Lists';(cats[c]=cats[c]||[]).push(n);});
+  return '<div class="page"><div class="phead"><h1>Shopping</h1>'+
+   '<p>Every item priced at whichever of Walmart Fort Collins or Costco Timnath is cheaper for that item.</p></div>'+
+
+   '<div class="sec"><div class="spread"><h2>Lists</h2>'+
+   '<div class="row"><button class="b o s" id="newList">New list</button>'+
+   '<button class="b o s" data-nav="shopping/ingredients">Ingredient list</button></div></div>'+
+   Object.keys(cats).sort().map(function(c){
+     return '<div style="margin:10px 0"><div class="lbl" style="margin-bottom:7px">'+E(c)+'</div>'+
+     '<div class="row">'+cats[c].map(function(n){
+       return '<button class="pill'+(n===S.shop.active?' on':'')+'" data-list="'+E(n)+'">'+
+       (L[n].fav?'\u2605 ':'')+E(n)+' <span class="muted">'+L[n].items.length+'</span></button>';
+     }).join('')+'</div></div>';}).join('')+'</div>'+
+
+   '<div class="sec"><div class="spread"><h2>'+E(S.shop.active)+'</h2>'+
+   '<div class="row"><button class="b o s" id="listFav">'+(cur.fav?'\u2605 Favourite':'\u2606 Favourite')+'</button>'+
+   '<button class="b o s" id="listRename">Rename</button>'+
+   '<button class="b o s" id="listDup">Duplicate</button>'+
+   '<button class="b o s dz" id="listDel">Delete</button></div></div>'+
+   '<div class="stats" style="margin:12px 0">'+
+   '<div class="stat acc"><b>'+M(tot)+'</b><span>Still to buy</span></div>'+
+   '<div class="stat"><b>'+items.length+'</b><span>Items</span></div>'+
+   '<div class="stat"><b>'+M(got)+'</b><span>In the cart</span></div>'+
+   '<div class="stat"><b>'+Object.keys(byA).length+'</b><span>Aisles</span></div></div>'+
+   '<div class="row" style="margin-bottom:14px">'+
+   '<button class="b" id="gAdd">Add item</button>'+
+   '<button class="b o" id="gRecipe">Add from a recipe</button>'+
+   '<button class="b o" id="gTxt">Checklist</button>'+
+   '<button class="b o" id="gCsv">CSV</button>'+
+   '<button class="b o" id="gSave">Save list to file</button>'+
+   '<button class="b o" id="gLoad">Load list</button>'+
+   '<button class="b o dz right" id="gClear">Clear checked</button></div>'+
+   (items.length? order.filter(function(a){return byA[a];}).map(function(a){
+     var L2=byA[a], st=L2.reduce(function(x,p){return x+(p[0].done?0:p[0].price*p[0].qty);},0);
+     return '<div class="card" style="margin-bottom:12px;overflow:hidden">'+
+      '<div class="aisle">'+E(a)+'<span>'+M(st)+'</span></div>'+
+      L2.map(function(p){var it=p[0],i=p[1];
+        return '<div class="gitem'+(it.done?' done':'')+'">'+
+        '<input type="checkbox" data-gt="'+i+'"'+(it.done?' checked':'')+'>'+
+        '<div style="flex:1;min-width:0"><div class="gn">'+E(it.name)+'</div>'+
+        '<div class="gq">'+(it.qty>1?it.qty+' x ':'')+E(it.note||'')+
+        (it.key?' &middot; '+E(bestStore(ING(it.key))):'')+'</div></div>'+
+        '<span class="gp">'+$$$(it.price*it.qty)+'</span>'+
+        '<button class="b o s" data-ge="'+i+'">Edit</button>'+
+        '<button class="x" data-gd="'+i+'">&times;</button></div>';}).join('')+'</div>';}).join('')
+    : '<div class="empty"><p>Nothing on this list.</p><p class="sm">Add an item, or open a recipe and hit Add to shopping.</p></div>')+
+   '</div></div>';
+}
+function vIngredients(){
+  var keys=allIngKeys().sort(function(a,b){return ING(a).n.localeCompare(ING(b).n);});
+  var edited=Object.keys(S.ingOv).length;
+  return '<div class="page"><div class="phead"><h1>Ingredient list</h1>'+
+   '<p>The master list every recipe price comes from. Edit a price here and all '+
+   all().length+' recipes recost instantly. '+edited+' edited or added so far.</p></div>'+
+   '<div class="row" style="margin-bottom:14px">'+
+   '<button class="b" id="ingNew">Add an ingredient</button>'+
+   '<button class="b o" data-nav="shopping">&larr; Back to lists</button>'+
+   '<button class="b o" id="ingCsv">Export list</button>'+
+   '<input class="right" id="ingQ" placeholder="Search "+keys.length+" ingredients" '+
+   'style="padding:10px 13px;border:1px solid var(--line-2);border-radius:9px;min-width:220px">'+
+   '</div><div class="tw"><table><thead><tr><th>Ingredient</th><th>Aisle</th>'+
+   '<th>Walmart /100g</th><th>Costco /100g</th><th>Best</th><th>Used in</th><th></th></tr></thead>'+
+   '<tbody id="ingBody"></tbody></table></div></div>';
+}
+function ingUsage(k){var n=0;all().forEach(function(r){(r.ing||[]).forEach(function(i){
+  if(i[1]===k)n++;});});return n;}
+function drawIngTable(q){
+  var b=$('#ingBody'); if(!b)return; q=(q||'').toLowerCase();
+  var keys=allIngKeys().filter(function(k){return ING(k).n.toLowerCase().indexOf(q)>=0;})
+    .sort(function(a,b2){return ING(a).n.localeCompare(ING(b2).n);});
+  b.innerHTML=keys.slice(0,400).map(function(k){var g=ING(k),ov=S.ingOv[k];
+    return '<tr><td><b>'+E(g.n)+'</b>'+(ov?' <span class="chip t">edited</span>':'')+'</td>'+
+    '<td class="sm muted">'+E(g.a||'Other')+'</td>'+
+    '<td>'+(g.w!=null?$$$(g.w):'-')+'</td><td>'+(g.c!=null&&g.c>0?$$$(g.c):'-')+'</td>'+
+    '<td><b>'+$$$(best(g))+'</b> <span class="xs muted">'+bestStore(g)+'</span></td>'+
+    '<td class="sm">'+ingUsage(k)+'</td>'+
+    '<td><button class="b o s" data-ie="'+k+'">Edit</button></td></tr>';}).join('');
+}
+function ingEditor(k){
+  var g=k?ING(k):{n:'',a:'Other',w:null,c:null};
+  var isNew=!k;
+  var body='<div class="fr">'+
+   '<label class="f"><span>Name</span><input id="ieN" value="'+E(g.n)+'"></label>'+
+   '<label class="f"><span>Aisle</span><select id="ieA">'+
+   AISLES.map(function(a){return a[0];}).concat(['Other']).map(function(a){
+     return '<option'+(a===(g.a||'Other')?' selected':'')+'>'+E(a)+'</option>';}).join('')+
+   '</select></label></div><div class="fr">'+
+   '<label class="f"><span>Walmart $ per 100 g</span><input id="ieW" type="number" step="0.01" value="'+(g.w!=null?g.w:'')+'"></label>'+
+   '<label class="f"><span>Costco $ per 100 g</span><input id="ieC" type="number" step="0.01" value="'+(g.c!=null&&g.c>0?g.c:'')+'"></label>'+
+   '</div>'+
+   (isNew?'<div class="fr"><label class="f"><span>kcal /100g</span><input id="ieK" type="number"></label>'+
+     '<label class="f"><span>Protein</span><input id="ieP" type="number" step="0.1"></label>'+
+     '<label class="f"><span>Carbs</span><input id="ieCb" type="number" step="0.1"></label>'+
+     '<label class="f"><span>Fat</span><input id="ieF" type="number" step="0.1"></label></div>':'')+
+   '<p class="sm muted">Leave a price blank if that store does not stock a sensible size. '+
+   'The cheaper of the two is always what gets used.</p>'+
+   (k?'<p class="sm muted">Used in <b>'+ingUsage(k)+'</b> recipes. Changing the price updates all of them.</p>':'');
+  var m=modal(isNew?'Add an ingredient':'Edit '+g.n,body,
+    (k&&S.ingOv[k]?'<button class="b o dz" id="ieReset">Reset to default</button>':'')+
+    '<button class="b o" data-x>Cancel</button><button class="b" id="ieSave">Save</button>');
+  $$('[data-x]',m).forEach(function(b){b.onclick=function(){m.remove();};});
+  var rs=$('#ieReset',m); if(rs)rs.onclick=function(){delete S.ingOv[k];save();m.remove();route();toast('Reset');};
+  $('#ieSave',m).onclick=function(){
+    var nm=$('#ieN',m).value.trim(); if(!nm){toast('Needs a name');return;}
+    var key=k||('u_'+nm.toLowerCase().replace(/[^a-z0-9]+/g,'_').slice(0,28));
+    var w=$('#ieW',m).value, c=$('#ieC',m).value;
+    var o=S.ingOv[key]||{};
+    o.n=nm; o.a=$('#ieA',m).value;
+    o.w=w===''?null:num(w); o.c=c===''?null:num(c);
+    if(isNew){o.k=num($('#ieK',m).value);o.p=num($('#ieP',m).value);
+      o.cb=num($('#ieCb',m).value);o.f=num($('#ieF',m).value);o.userAdded=true;}
+    S.ingOv[key]=o; save(); m.remove(); route();
+    toast(isNew?'Ingredient added':'Updated. '+ingUsage(key)+' recipes recosted.');
+  };
+}
+
+/* ============================ TRAINING ============================ */
+var exFlt={q:'',mg:'',eq:'',hero:false};
+function vTraining(sub){
+  if(sub==='exercises') return vExercises();
+  var ds=today(), d=dayLog(ds), t=dayTarget(S.who,d.workout);
+  var wk=[]; for(var i=6;i>=0;i--){var dd=new Date();dd.setDate(dd.getDate()-i);
+    var k=dd.getFullYear()+'-'+p2(dd.getMonth()+1)+'-'+p2(dd.getDate());
+    wk.push([k,S.days[k]?S.days[k].workout:null]);}
+  var rows=Object.keys(TRAIN).map(function(k){var tt=dayTarget(S.who,k);
+    return '<tr'+(d.workout===k?' style="background:var(--moss)"':'')+'><td><b>'+TRAIN[k].n+'</b></td>'+
+    '<td>'+tt.kcal+'</td><td>'+tt.p+' g</td><td>'+tt.c+' g</td><td>'+tt.f+' g</td>'+
+    '<td class="sm muted">'+E(TRAIN[k].why.split('.')[0])+'.</td></tr>';}).join('');
+  return '<div class="page"><div class="phead"><h1>Training</h1>'+
+   '<p>211 exercises, 32 prebuilt sessions, and the macro shift each session type causes.</p></div>'+
+   '<div class="sec"><h2>Today</h2><div class="grid g2"><div class="card pad">'+
+   '<label class="f"><span>Session</span><select id="tWorkout">'+
+   Object.keys(TRAIN).map(function(k){return '<option value="'+k+'"'+(d.workout===k?' selected':'')+'>'+TRAIN[k].n+'</option>';}).join('')+
+   '</select></label>'+
+   '<label class="f"><span>Notes, lifts, PRs</span><textarea id="tNotes" rows="3" placeholder="Weighted pull-up 3x5 +25 lb">'+E(d.notes||'')+'</textarea></label>'+
+   '<label class="f"><span>Bodyweight this morning</span><input id="tW" type="number" step="0.1" value="'+(d.w||'')+'"></label>'+
+   '<button class="b" id="tSave">Save</button></div>'+
+   '<div class="card pad"><h3 style="font-size:15px;margin-bottom:10px">Targets for this session</h3>'+
+   statRow(t)+'<div class="note" style="margin-top:12px">'+E(TRAIN[d.workout].why)+'</div>'+
+   '<div class="lbl" style="margin-top:14px">Last 7 days</div><div class="row" style="margin-top:8px">'+
+   wk.map(function(x){return '<span class="pill'+(x[1]&&x[1]!=='rest'?' on':'')+'" style="cursor:default">'+
+     shortD(x[0]).split(' ')[1]+' '+(x[1]?TRAIN[x[1]].n.split(' ')[0]:'-')+'</span>';}).join('')+
+   '</div></div></div></div>'+
+   '<div class="sec"><div class="spread"><h2>Sessions</h2>'+
+   '<button class="b o s" data-nav="training/exercises">Exercise database</button></div>'+
+   '<p class="sub">From the printable guide. Tap one to see the full session.</p>'+
+   '<div class="grid g3">'+SESS.map(function(s,i){
+     return '<button class="card pad" data-sess="'+i+'" style="text-align:left;cursor:pointer">'+
+     '<div style="font-weight:700;color:var(--ink);font-family:var(--fd);font-size:16px">'+E(s.name)+'</div>'+
+     '<div class="xs muted" style="margin-top:5px">'+s.ex.length+' exercises</div></button>';}).join('')+
+   '</div></div>'+
+   '<div class="sec"><h2>Macro shift by session</h2>'+
+   '<div class="tw"><table><thead><tr><th>Session</th><th>Kcal</th><th>Protein</th><th>Carbs</th>'+
+   '<th>Fat</th><th>Why</th></tr></thead><tbody>'+rows+'</tbody></table></div></div></div>';
+}
+function vExercises(){
+  var mgs=[];EX.forEach(function(e){if(mgs.indexOf(e.mg)<0)mgs.push(e.mg);});mgs.sort();
+  return '<div class="page"><div class="phead"><h1>Exercise database</h1>'+
+   '<p>'+EX.length+' exercises with technique, mistakes, progressions and regressions.</p></div>'+
+   '<div class="card pad" style="margin-bottom:14px"><div class="fr">'+
+   '<label class="f"><span>Search</span><input id="exq" placeholder="pull-up, planche..." value="'+E(exFlt.q)+'"></label>'+
+   '<label class="f"><span>Muscle group</span><select id="exmg">'+
+   opt([['','All']].concat(mgs.map(function(m){return [m,m];})),exFlt.mg)+'</select></label>'+
+   '<label class="f"><span>Equipment</span><select id="exeq">'+
+   opt([['','Anything'],['Bodyweight','Bodyweight'],['Dumbbell','Dumbbells'],['Pull-up','Pull-up bar'],
+        ['Dip','Dip station'],['Parallettes','Parallettes'],['vest','Weighted vest'],
+        ['Band','Bands'],['Rings','Rings']],exFlt.eq)+'</select></label></div>'+
+   '<div class="row"><button class="pill'+(exFlt.hero?' on':'')+'" id="exhero">Hero lifts only</button>'+
+   '<span class="right sm muted" id="excount"></span></div></div>'+
+   '<div id="exList"></div><button class="b o" data-nav="training" style="margin-top:16px">&larr; Training</button></div>';
+}
+function drawEx(){
+  var el=$('#exList'); if(!el)return; var q=exFlt.q.toLowerCase();
+  var L=EX.filter(function(e){
+    if(exFlt.mg&&e.mg!==exFlt.mg)return false;
+    if(exFlt.hero&&!e.hero)return false;
+    if(exFlt.eq&&e.eq.toLowerCase().indexOf(exFlt.eq.toLowerCase())<0)return false;
+    if(q&&(e.n+' '+e.pri+' '+e.tags).toLowerCase().indexOf(q)<0)return false;
+    return true;});
+  $('#excount').textContent=L.length+' exercises';
+  el.innerHTML=L.slice(0,120).map(function(e){
+    return '<details><summary>'+E(e.n)+
+    ' <span class="chip">'+E(e.mg)+'</span>'+(e.hero?' <span class="chip t">Hero</span>':'')+
+    '</summary><div class="dc">'+
+    '<div class="chips"><span class="chip">'+E(e.eq)+'</span><span class="chip">'+E(e.df)+'</span>'+
+    '<span class="chip">'+E(e.sets)+' x '+E(e.reps)+'</span><span class="chip">RIR '+E(e.rir)+'</span>'+
+    '<span class="chip">'+E(e.rest)+'</span></div>'+
+    '<p><b>Technique.</b> '+E(e.tech)+'</p>'+
+    (e.mist?'<p><b>Common mistakes.</b> '+E(e.mist)+'</p>':'')+
+    (e.prog?'<p><b>Progress it.</b> '+E(e.prog)+'</p>':'')+
+    (e.reg?'<p><b>Regress it.</b> '+E(e.reg)+'</p>':'')+
+    (e.use?'<p><b>Best use.</b> '+E(e.use)+'</p>':'')+
+    '<p class="sm muted">Primary: '+E(e.pri)+(e.sec?'. Secondary: '+E(e.sec):'')+'</p>'+
+    '</div></details>';}).join('');
+}
+function sessModal(i){
+  var s=SESS[i]; if(!s)return;
+  var body='<div class="tw"><table><thead><tr><th>Exercise</th><th>Sets</th><th>Reps</th><th>Note</th></tr></thead><tbody>'+
+   s.ex.map(function(x){return '<tr><td><b>'+E(x.n)+'</b></td><td>'+E(x.sets)+'</td><td>'+E(x.reps)+
+     '</td><td class="sm muted">'+E(x.note)+'</td></tr>';}).join('')+'</tbody></table></div>';
+  modal(s.name,body,'<button class="b" data-x>Close</button>').querySelectorAll('[data-x]')
+    .forEach(function(b){b.onclick=function(){b.closest('.mask').remove();};});
+}
+
+/* ============================ FINANCIAL ============================ */
+function finIncome(who,mode){
+  return S.fin.jobs.filter(function(j){return who==='both'||j.who===who||j.who==='Both';})
+    .reduce(function(a,j){return a+(j[mode]||0);},0);
+}
+function finCost(mode,path){
+  return S.fin.costs.filter(function(c){
+    if(c.section==='Housing (rent)') return path!=='buy';
+    if(c.section==='Housing (buy)') return path==='buy';
+    return true;}).reduce(function(a,c){return a+(c[mode]||0);},0);
+}
+function shiftsFor(who,from){
+  return S.fin.shifts.filter(function(s){
+    var j=S.fin.jobs.filter(function(x){return x.id===s.jobId;})[0];
+    if(who&&j&&j.who!==who&&j.who!=='Both')return false;
+    if(from&&s.date<from)return false; return true;});
+}
+function vFinancial(sub){
+  if(sub==='purchases') return vPurchases();
+  if(sub==='actual') return vActual();
+  var mode=S.fin.costMode||'real', path=S.fin.path||'rent';
+  var inc=finIncome('both',mode), cost=finCost(mode,path);
+  var gap=inc-cost;
+  var byS={}; S.fin.costs.forEach(function(c){
+    if(c.section==='Housing (rent)'&&path==='buy')return;
+    if(c.section==='Housing (buy)'&&path!=='buy')return;
+    byS[c.section]=(byS[c.section]||0)+(c[mode]||0);});
+  var scen=Object.keys(S.fin.scenarios||{});
+  return '<div class="page"><div class="phead"><h1>Financial</h1>'+
+   '<p>Planning on the left, what actually happened on the right. Seeded from the Moving In workbook.</p></div>'+
+
+   '<div class="sec"><div class="spread"><h2>The plan</h2>'+
+   '<div class="row"><button class="b o s" data-nav="financial/actual">Actual earnings</button>'+
+   '<button class="b o s" data-nav="financial/purchases">Big purchases</button></div></div>'+
+   '<div class="card pad"><div class="fr">'+
+   '<label class="f"><span>Scenario</span><select id="finMode">'+
+   opt([['low','Lean (low estimates)'],['real','Realistic'],['high','Good month (high)'],
+        ['actual','Actual / researched']],mode)+'</select></label>'+
+   '<label class="f"><span>Housing path</span><select id="finPath">'+
+   opt([['rent','Renting'],['buy','Buying']],path)+'</select></label>'+
+   '<label class="f"><span>Saved scenarios</span><select id="finScen">'+
+   opt([['','-- pick --']].concat(scen.map(function(s){return [s,s];})),'')+'</select></label>'+
+   '</div><div class="row"><button class="b o s" id="scenSave">Save this as a scenario</button>'+
+   (scen.length?'<button class="b o s dz" id="scenDel">Delete selected</button>':'')+'</div></div>'+
+   '<div class="stats" style="margin-top:14px">'+
+   '<div class="stat"><b>'+M(inc)+'</b><span>Income / mo</span></div>'+
+   '<div class="stat"><b>'+M(cost)+'</b><span>Costs / mo</span></div>'+
+   '<div class="stat '+(gap>=0?'acc':'')+'" '+(gap<0?'style="background:var(--clay)"':'')+'>'+
+   '<b style="color:#fff">'+M(gap)+'</b><span style="color:rgba(255,255,255,.7)">'+(gap>=0?'Surplus':'Shortfall')+'</span></div>'+
+   '<div class="stat"><b>'+M(gap*12)+'</b><span>Per year</span></div></div>'+
+   (gap<0?'<div class="note" style="border-left-color:var(--clay)"><b>The gap is real.</b> '+
+     'At these numbers we are '+M(-gap)+' short every month. Either income has to rise by that, '+
+     'or costs have to fall. The Strategies list in the workbook is where the levers are.</div>':'')+
+   '</div>'+
+
+   '<div class="sec"><h2>Where the money goes</h2><div class="grid g2">'+
+   '<div class="card pad"><h3 style="font-size:15px;margin-bottom:12px">By section</h3>'+
+   Object.keys(byS).sort(function(a,b){return byS[b]-byS[a];}).map(function(k){
+     var pct=cost?byS[k]/cost*100:0;
+     return '<div class="mrow"><div class="spread"><span>'+E(k)+'</span><em>'+M(byS[k])+'</em></div>'+
+     '<div class="bar"><i class="pk" style="width:'+pct+'%"></i></div></div>';}).join('')+
+   '</div>'+
+   '<div class="card pad"><h3 style="font-size:15px;margin-bottom:12px">Income by person</h3>'+
+   ['Jaron','Aaliyah','Both'].map(function(w){var v=S.fin.jobs.filter(function(j){return j.who===w;})
+     .reduce(function(a,j){return a+(j[mode]||0);},0);
+     if(!v)return '';var pct=inc?v/inc*100:0;
+     return '<div class="mrow"><div class="spread"><span>'+E(w==='Both'?'Shared / gig':w)+'</span><em>'+M(v)+'</em></div>'+
+     '<div class="bar"><i class="pp" style="width:'+pct+'%"></i></div></div>';}).join('')+
+   '<button class="b o s" id="jobAdd" style="margin-top:10px">Add a job or income</button></div></div></div>'+
+
+   '<div class="sec"><div class="spread"><h2>Income lines</h2>'+
+   '<button class="b o s" id="jobAdd2">Add</button></div><div class="tw"><table>'+
+   '<thead><tr><th>Who</th><th>Name</th><th>Employer</th><th>Low</th><th>Realistic</th><th>High</th><th></th></tr></thead><tbody>'+
+   S.fin.jobs.map(function(j){return '<tr><td><span class="chip">'+E(j.who)+'</span></td>'+
+     '<td><b>'+E(j.name)+'</b></td><td class="sm muted">'+E(j.employer||'')+'</td>'+
+     '<td>'+M(j.low)+'</td><td><b>'+M(j.real)+'</b></td><td>'+M(j.high)+'</td>'+
+     '<td><button class="b o s" data-jobe="'+j.id+'">Edit</button></td></tr>';}).join('')+
+   '</tbody></table></div></div>'+
+
+   '<div class="sec"><div class="spread"><h2>Cost lines</h2>'+
+   '<button class="b o s" id="costAdd">Add</button></div><div class="tw"><table>'+
+   '<thead><tr><th>Section</th><th>Cost</th><th>Who</th><th>Low</th><th>Realistic</th><th>High</th><th>Actual</th><th></th></tr></thead><tbody>'+
+   S.fin.costs.map(function(c){return '<tr><td class="sm muted">'+E(c.section)+'</td>'+
+     '<td><b>'+E(c.name)+'</b></td><td><span class="chip">'+E(c.who)+'</span></td>'+
+     '<td>'+M(c.low)+'</td><td><b>'+M(c.real)+'</b></td><td>'+M(c.high)+'</td>'+
+     '<td>'+(c.actual?M(c.actual):'-')+'</td>'+
+     '<td><button class="b o s" data-coste="'+c.id+'">Edit</button></td></tr>';}).join('')+
+   '</tbody></table></div></div></div>';
+}
+function vActual(){
+  var from=new Date();from.setDate(from.getDate()-90);
+  var f=from.getFullYear()+'-'+p2(from.getMonth()+1)+'-'+p2(from.getDate());
+  var sh=S.fin.shifts.slice().sort(function(a,b){return b.date<a.date?-1:1;});
+  function tot(who,field){return shiftsFor(who,f).reduce(function(a,s){return a+(s[field]||0);},0);}
+  var jH=tot('Jaron','hours'),aH=tot('Aaliyah','hours');
+  var jG=tot('Jaron','gross'),aG=tot('Aaliyah','gross');
+  var jN=tot('Jaron','net'),aN=tot('Aaliyah','net');
+  var eff=function(g,h){return h>0?g/h:0;};
+  var months=Math.max(1,90/30.4);
+  return '<div class="page"><div class="phead"><h1>Actual earnings</h1>'+
+   '<p>Log real shifts. Averages, effective hourly and after-tax rate all come from what actually landed, not the plan.</p></div>'+
+   '<div class="row" style="margin-bottom:14px"><button class="b" id="shAdd">Log a shift</button>'+
+   '<button class="b o" id="shCsv">Export shifts</button>'+
+   '<button class="b o" data-nav="financial">&larr; Plan</button></div>'+
+   '<div class="sec"><h2>Last 90 days</h2><div class="grid g2">'+
+   ['Jaron','Aaliyah'].map(function(w){
+     var h=w==='Jaron'?jH:aH,g=w==='Jaron'?jG:aG,n=w==='Jaron'?jN:aN;
+     return '<div class="card pad"><h3 style="font-size:16px;margin-bottom:12px">'+w+'</h3>'+
+     '<div class="stats"><div class="stat acc"><b>'+M(n/months)+'</b><span>Net / mo</span></div>'+
+     '<div class="stat"><b>'+h.toFixed(0)+'</b><span>Hours</span></div>'+
+     '<div class="stat"><b>'+$$$(eff(g,h))+'</b><span>Gross / hr</span></div>'+
+     '<div class="stat"><b>'+$$$(eff(n,h))+'</b><span>Net / hr</span></div></div>'+
+     '<p class="sm muted" style="margin-top:10px">'+(g>0?'Take-home is '+Math.round(n/g*100)+'% of gross.':'No shifts logged yet.')+'</p>'+
+     '</div>';}).join('')+'</div>'+
+   '<div class="note" style="margin-top:14px"><b>Auto scenario.</b> '+
+   'Combined that is <b>'+M((jN+aN)/months)+'</b> net a month from real data, against a plan of <b>'+
+   M(finIncome('both','real'))+'</b>. '+
+   '<button class="b o s" id="scenFromActual" style="margin-left:8px">Save that as a scenario</button></div></div>'+
+   '<div class="sec"><h2>Shifts</h2>'+(sh.length?'<div class="tw"><table>'+
+   '<thead><tr><th>Date</th><th>Job</th><th>Hours</th><th>Gross</th><th>Net</th><th>Note</th><th></th></tr></thead><tbody>'+
+   sh.slice(0,80).map(function(s){var j=S.fin.jobs.filter(function(x){return x.id===s.jobId;})[0];
+     return '<tr><td>'+shortD(s.date)+'</td><td>'+E(j?j.name:'?')+'</td><td>'+s.hours+'</td>'+
+     '<td>'+M(s.gross)+'</td><td>'+M(s.net)+'</td><td class="sm muted">'+E(s.note||'')+'</td>'+
+     '<td><button class="x" data-shd="'+s.id+'">&times;</button></td></tr>';}).join('')+
+   '</tbody></table></div>':'<div class="empty">No shifts logged.</div>')+'</div></div>';
+}
+function vPurchases(){
+  var P_=S.fin.purchases||{}, names=Object.keys(P_);
+  return '<div class="page"><div class="phead"><h1>Big purchases</h1>'+
+   '<p>Houses, cars, anything worth comparing side by side before committing.</p></div>'+
+   '<div class="row" style="margin-bottom:14px"><button class="b" id="bpNew">New list</button>'+
+   '<button class="b o" data-nav="financial">&larr; Financial</button></div>'+
+   (names.length?names.map(function(n){var L=P_[n];
+     return '<div class="sec"><div class="spread"><h2>'+E(n)+' <span class="chip">'+E(L.cat||'')+'</span></h2>'+
+     '<div class="row"><button class="b o s" data-bpadd="'+E(n)+'">Add item</button>'+
+     '<button class="b o s dz" data-bpdel="'+E(n)+'">Delete list</button></div></div>'+
+     (L.items.length?'<div class="grid g3">'+L.items.map(function(it,i){
+       return '<div class="card pad"><div class="spread"><b style="font-family:var(--fd);font-size:16px">'+E(it.name)+'</b>'+
+       '<button class="x" data-bpi="'+E(n)+'|'+i+'">&times;</button></div>'+
+       '<div style="font-size:22px;font-weight:700;color:var(--forest);margin:6px 0">'+M(it.price)+'</div>'+
+       (it.fields?Object.keys(it.fields).map(function(k){
+         return '<div class="spread sm" style="border-bottom:1px solid var(--line);padding:5px 0">'+
+         '<span class="muted">'+E(k)+'</span><b>'+E(it.fields[k])+'</b></div>';}).join(''):'')+
+       (it.notes?'<p class="sm muted" style="margin-top:8px">'+E(it.notes)+'</p>':'')+
+       (it.link?'<a class="b o s" href="'+E(it.link)+'" target="_blank" rel="noopener" style="margin-top:10px">Open link</a>':'')+
+       '</div>';}).join('')+'</div>':'<div class="empty sm">Nothing on this list yet.</div>')+'</div>';}).join('')
+    :'<div class="empty"><p>No lists yet.</p><p class="sm">Make one for apartments, or cars, or anything you are comparing.</p></div>')+
+   '</div>';
+}
+
+/* ============================ SCHEDULE ============================ */
+var DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+var calY=new Date().getFullYear(), calM=new Date().getMonth(), calSel=today();
+function vSchedule(sub){
+  if(sub==='week') return vWeekTemplate();
+  var first=new Date(calY,calM,1), start=first.getDay(), days=new Date(calY,calM+1,0).getDate();
+  var cells='';
+  for(var i=0;i<start;i++)cells+='<div class="day out"></div>';
+  for(var dn=1;dn<=days;dn++){
+    var ds=calY+'-'+p2(calM+1)+'-'+p2(dn), rec=S.days[ds];
+    var ev=rec&&rec.sched?rec.sched.length:0;
+    cells+='<div class="day'+(ds===today()?' today':'')+(ds===calSel?' sel':'')+'" data-d="'+ds+'">'+
+      '<span class="dn">'+dn+'</span><span class="dots">'+
+      (rec&&rec.meals.length?'<i class="dot"></i>':'')+
+      (rec&&rec.workout&&rec.workout!=='rest'?'<i class="dot w"></i>':'')+
+      (ev?'<i class="dot" style="background:var(--plum)"></i>':'')+'</span>'+
+      '<span class="dk">'+(ev?ev+' ev':'')+'</span></div>';}
+  var d=dayLog(calSel), t=dayTarget(S.who,d.workout), got=eaten(calSel);
+  var spend=(d.spend||[]).reduce(function(a,x){return a+(x.amt||0);},0);
+  return '<div class="page"><div class="phead"><h1>Schedule</h1>'+
+   '<p>What each of us is doing, when we are both free, and what the day cost.</p></div>'+
+   '<div class="row" style="margin-bottom:14px"><button class="b o" data-nav="schedule/week">Weekly template</button>'+
+   '<button class="b o" id="calCsv">Export the log</button>'+
+   '<button class="b o" id="applyTmpl">Apply template to this week</button></div>'+
+   '<div class="card pad"><div class="spread" style="margin-bottom:12px">'+
+   '<button class="b o s" id="cPrev">&larr;</button>'+
+   '<h3>'+new Date(calY,calM,1).toLocaleDateString(undefined,{month:'long',year:'numeric'})+'</h3>'+
+   '<button class="b o s" id="cNext">&rarr;</button></div>'+
+   '<div class="cal">'+DOW.map(function(x){return '<div class="dow">'+x+'</div>';}).join('')+cells+'</div>'+
+   '<div class="row sm muted" style="margin-top:12px"><span><i class="dot" style="display:inline-block"></i> meals</span>'+
+   '<span><i class="dot w" style="display:inline-block"></i> training</span>'+
+   '<span><i class="dot" style="display:inline-block;background:var(--plum)"></i> plans</span></div></div>'+
+   '<div class="sec"><h2>'+pretty(calSel)+'</h2><div class="grid g2">'+
+   '<div class="card pad"><div class="spread"><h3 style="font-size:15px">Plans</h3>'+
+   '<button class="b o s" id="evAdd">Add</button></div>'+
+   ((d.sched||[]).length?'<div style="margin-top:10px">'+d.sched.map(function(ev,i){
+     return '<div class="gitem"><span class="chip'+(ev.who==='Aaliyah'?' t':'')+'">'+E(ev.who)+'</span>'+
+     '<div style="flex:1"><div class="gn">'+E(ev.what)+'</div>'+
+     '<div class="gq">'+E(ev.from||'')+(ev.to?' - '+E(ev.to):'')+(ev.where?' &middot; '+E(ev.where):'')+'</div></div>'+
+     '<button class="x" data-evd="'+i+'">&times;</button></div>';}).join('')+'</div>'
+     :'<div class="empty sm">Nothing planned.</div>')+
+   freeSlots(d)+'</div>'+
+   '<div class="card pad"><h3 style="font-size:15px;margin-bottom:10px">The day</h3>'+
+   '<label class="f"><span>Training</span><select id="schWorkout">'+
+   Object.keys(TRAIN).map(function(k){return '<option value="'+k+'"'+(d.workout===k?' selected':'')+'>'+TRAIN[k].n+'</option>';}).join('')+
+   '</select></label>'+
+   bar('Calories',got.kcal,t.kcal,'pk')+bar('Protein',got.p,t.p,'pp')+
+   '<div class="spread sm" style="margin-top:12px"><span class="muted">Food logged</span><b>'+$$$(got.cost)+'</b></div>'+
+   '<div class="spread sm"><span class="muted">Other spend</span><b>'+$$$(spend)+'</b></div>'+
+   '<div class="spread" style="margin-top:6px;padding-top:8px;border-top:1px solid var(--line)">'+
+   '<span><b>Day total</b></span><b style="color:var(--forest)">'+$$$(got.cost+spend)+'</b></div>'+
+   '<div class="row" style="margin-top:12px"><button class="b o s" id="spAdd">Log a spend</button>'+
+   '<button class="b o s" id="mealAdd">Log a meal</button></div>'+
+   ((d.spend||[]).length?'<div style="margin-top:10px">'+d.spend.map(function(x,i){
+     return '<div class="spread sm" style="padding:5px 0;border-bottom:1px solid var(--line)">'+
+     '<span>'+E(x.what)+' <span class="chip">'+E(x.who||'Both')+'</span></span>'+
+     '<span><b>'+$$$(x.amt)+'</b> <button class="x" data-spd="'+i+'">&times;</button></span></div>';}).join('')+'</div>':'')+
+   '</div></div></div></div>';
+}
+function freeSlots(d){
+  var busy={Jaron:[],Aaliyah:[]};
+  (d.sched||[]).forEach(function(e){ if(e.from&&e.to&&busy[e.who]) busy[e.who].push([e.from,e.to]); });
+  if(!busy.Jaron.length&&!busy.Aaliyah.length) return '';
+  function mins(t){var p=String(t).split(':');return (+p[0])*60+(+(p[1]||0));}
+  var free=[],start=8*60,end=22*60,step=30;
+  for(var m=start;m<end;m+=step){
+    var clash=false;
+    ['Jaron','Aaliyah'].forEach(function(w){busy[w].forEach(function(b){
+      if(m>=mins(b[0])&&m<mins(b[1]))clash=true;});});
+    if(!clash)free.push(m);
+  }
+  if(!free.length) return '<div class="note" style="margin-top:12px">No overlapping free time today.</div>';
+  var blocks=[],cur=[free[0],free[0]+step];
+  for(var i=1;i<free.length;i++){ if(free[i]===cur[1])cur[1]=free[i]+step; else {blocks.push(cur);cur=[free[i],free[i]+step];} }
+  blocks.push(cur);
+  var fmt=function(m){var h=Math.floor(m/60),mm=m%60;var ap=h>=12?'pm':'am';var hh=h%12||12;
+    return hh+(mm?':'+p2(mm):'')+ap;};
+  return '<div class="note" style="margin-top:12px"><b>Both free.</b> '+
+    blocks.filter(function(b){return b[1]-b[0]>=60;}).map(function(b){return fmt(b[0])+' to '+fmt(b[1]);}).join(', ')+'</div>';
+}
+function vWeekTemplate(){
+  var t=S.sched.tmpl||{};
+  return '<div class="page"><div class="phead"><h1>Weekly template</h1>'+
+   '<p>The normal week. Put the regular stuff here once, then push it onto the calendar whenever.</p></div>'+
+   '<div class="row" style="margin-bottom:14px"><button class="b o" data-nav="schedule">&larr; Calendar</button>'+
+   '<button class="b" id="applyTmpl2">Apply to this week</button></div>'+
+   '<div class="grid g3">'+DOW.map(function(dn,i){var items=t[i]||[];
+     return '<div class="card pad"><div class="spread"><h3 style="font-size:16px">'+dn+'</h3>'+
+     '<button class="b o s" data-tadd="'+i+'">Add</button></div>'+
+     (items.length?'<div style="margin-top:10px">'+items.map(function(x,j){
+       return '<div class="gitem" style="padding:8px 0"><span class="chip'+(x.who==='Aaliyah'?' t':'')+'">'+E(x.who)+'</span>'+
+       '<div style="flex:1"><div class="gn" style="font-size:13.5px">'+E(x.what)+'</div>'+
+       '<div class="gq">'+E(x.from||'')+(x.to?' - '+E(x.to):'')+'</div></div>'+
+       '<button class="x" data-td="'+i+'|'+j+'">&times;</button></div>';}).join('')+'</div>'
+       :'<p class="empty sm" style="padding:16px 0">Nothing regular.</p>')+'</div>';}).join('')+
+   '</div></div>';
+}
+
+/* ============================ shared UI ============================ */
+function statRow(t){
+  return '<div class="stats"><div class="stat acc"><b>'+N(t.kcal)+'</b><span>Calories</span></div>'+
+   '<div class="stat"><b>'+t.p+'g</b><span>Protein</span></div>'+
+   '<div class="stat"><b>'+t.c+'g</b><span>Carbs</span></div>'+
+   '<div class="stat"><b>'+t.f+'g</b><span>Fat</span></div>'+
+   '<div class="stat"><b>'+t.fib+'g</b><span>Fiber</span></div>'+
+   '<div class="stat"><b>'+t.w+'oz</b><span>Water</span></div></div>';
+}
+function bar(l,have,need,cls){
+  var pct=Math.min(100,need?have/need*100:0);
+  return '<div class="mrow"><div class="spread"><span>'+l+'</span><em>'+Math.round(have)+' / '+Math.round(need)+'</em></div>'+
+   '<div class="bar"><i class="'+cls+'" style="width:'+pct+'%"></i></div></div>';
+}
+function opt(a,sel){return a.map(function(o){return '<option value="'+E(o[0])+'"'+
+  (String(o[0])===String(sel)?' selected':'')+'>'+E(o[1])+'</option>';}).join('');}
+function modal(title,body,foot){
+  var m=document.createElement('div');m.className='mask';
+  m.innerHTML='<div class="modal"><div class="mhead"><h3>'+E(title)+'</h3><button class="x" data-close>&times;</button></div>'+
+   '<div class="mbody">'+body+'</div>'+(foot?'<div class="mfoot">'+foot+'</div>':'')+'</div>';
+  document.body.appendChild(m);
+  m.addEventListener('click',function(e){ if(e.target===m||e.target.hasAttribute('data-close'))m.remove(); });
+  return m;
+}
+function form(fields){
+  return '<div class="fr">'+fields.map(function(f){
+    if(f.t==='select') return '<label class="f"><span>'+E(f.l)+'</span><select id="'+f.id+'">'+
+      opt(f.o,f.v)+'</select></label>';
+    if(f.t==='area') return '<label class="f" style="grid-column:1/-1"><span>'+E(f.l)+'</span>'+
+      '<textarea id="'+f.id+'" rows="3">'+E(f.v||'')+'</textarea></label>';
+    return '<label class="f"><span>'+E(f.l)+'</span><input id="'+f.id+'" type="'+(f.t||'text')+
+      '"'+(f.step?' step="'+f.step+'"':'')+' value="'+E(f.v==null?'':f.v)+'"'+
+      (f.ph?' placeholder="'+E(f.ph)+'"':'')+'></label>';}).join('')+'</div>';
+}
+
+/* ============================ router ============================ */
+var TABS=[['meals','Meals'],['training','Training'],['shopping','Shopping'],
+          ['financial','Financial'],['schedule','Schedule']];
+var ICO={meals:'<path d="M4 3v8a3 3 0 006 0V3M7 11v10M16 3c-1.5 2-2 4-2 6s.5 3 2 3 2-1 2-3-.5-4-2-6zM16 12v9"/>',
+ training:'<path d="M6 8v8M18 8v8M3 10v4M21 10v4M6 12h12"/>',
+ shopping:'<path d="M3 4h2l2 12h11M7 8h14l-2 6H8"/><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/>',
+ financial:'<path d="M12 2v20M17 6H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>',
+ schedule:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>'};
+function chrome(){
+  $('#tabs').innerHTML=TABS.map(function(t){return '<button class="tab" data-v="'+t[0]+'" data-nav="'+t[0]+'">'+t[1]+'</button>';}).join('');
+  $('#btm').innerHTML=TABS.map(function(t){return '<button data-v="'+t[0]+'" data-nav="'+t[0]+'">'+
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">'+
+    ICO[t[0]]+'</svg><span>'+t[1]+'</span></button>';}).join('');
+  $('#who').innerHTML=['j','a'].map(function(k){return '<button data-w="'+k+'"'+
+    (S.who===k?' class="on"':'')+'>'+E(S.prof[k].name)+'</button>';}).join('');
+}
+function route(){
+  var h=(location.hash||'#/meals').slice(2).split('/'), v=h[0]||'meals', sub=h[1]||'';
+  var m=$('#view');
+  m.innerHTML = v==='r'?vRecipe(sub) : v==='training'?vTraining(sub) : v==='shopping'?vShopping(sub)
+    : v==='financial'?vFinancial(sub) : v==='schedule'?vSchedule(sub) : vMeals();
+  try{window.scrollTo(0,0);}catch(e){}
+  $$('.tab,.btmnav button').forEach(function(b){
+    b.classList.toggle('on', b.dataset.v===(v==='r'?'meals':v));});
+  $$('#who button').forEach(function(b){b.classList.toggle('on', b.dataset.w===S.who);});
+  bind();
+}
+window.addEventListener('hashchange',route);
+function nav(p){location.hash='#/'+p;}
+
+/* ============================ per-view binding ============================ */
+function bind(){
+  var h=(location.hash||'#/meals').slice(2).split('/'), v=h[0];
+  if(v==='meals'){ applyFilters();
+    on('#fq','input',function(){flt.q=this.value;applyFilters();});
+    ['fcat','ftag','fsort'].forEach(function(id){
+      on('#'+id,'change',function(){flt[id.slice(1)]=this.value;applyFilters();});});
+    on('#costMode','change',function(){S.costMode=this.value;save();route();});
+    on('#bothCost','click',function(){
+      var a=estDayCost(dayTarget('j',dayLog(today()).workout),S.costMode||'all');
+      var b=estDayCost(dayTarget('a',dayLog(today()).workout),S.costMode||'all');
+      $('#bothOut').innerHTML='<div class="note" style="margin-top:12px"><b>Both of us.</b> '+
+        $$$(a.byKcal)+' for me plus '+$$$(b.byKcal)+' for '+E(S.prof.a.name)+' is <b>'+
+        $$$(a.byKcal+b.byKcal)+' a day</b>, '+$$$((a.byKcal+b.byKcal)*30)+' a month.</div>';});
+    on('#addOwn','click',ownRecipe);
+  }
+  if(v==='r'){ var r=byId(h[1]); if(r){ drawIng(r,1);
+    $$('[data-scale]').forEach(function(b){b.onclick=function(){
+      $$('[data-scale]').forEach(function(x){x.classList.remove('on');});
+      b.classList.add('on'); drawIng(r,parseFloat(b.dataset.scale));};});}}
+  if(v==='shopping'&&h[1]==='ingredients'){ drawIngTable('');
+    on('#ingQ','input',function(){drawIngTable(this.value);});
+    on('#ingNew','click',function(){ingEditor(null);});
+    on('#ingCsv','click',function(){
+      var rows=[['Ingredient','Aisle','Walmart/100g','Costco/100g','Best','BestStore','UsedIn','Edited']];
+      allIngKeys().forEach(function(k){var g=ING(k);
+        rows.push([g.n,g.a||'',g.w,g.c,best(g).toFixed(3),bestStore(g),ingUsage(k),S.ingOv[k]?'yes':'']);});
+      dl('ingredients-'+today()+'.csv',toCSV(rows),'text/csv');});
+  }
+  if(v==='shopping'&&h[1]!=='ingredients'){ bindShop(); }
+  if(v==='training'&&h[1]==='exercises'){ drawEx();
+    on('#exq','input',function(){exFlt.q=this.value;drawEx();});
+    on('#exmg','change',function(){exFlt.mg=this.value;drawEx();});
+    on('#exeq','change',function(){exFlt.eq=this.value;drawEx();});
+    on('#exhero','click',function(){exFlt.hero=!exFlt.hero;this.classList.toggle('on');drawEx();});
+  }
+  if(v==='training'&&h[1]!=='exercises'){
+    on('#tWorkout','change',function(){dayLog(today()).workout=this.value;save();route();});
+    on('#tSave','click',function(){var d=dayLog(today());d.notes=$('#tNotes').value;
+      var w=parseFloat($('#tW').value); if(w)d.w=w; save();toast('Saved');});
+  }
+  if(v==='financial') bindFin(h[1]);
+  if(v==='schedule') bindSched(h[1]);
+}
+function on(sel,ev,fn){var e=$(sel); if(e)e.addEventListener(ev,fn);}
+
+/* ============================ shopping wiring ============================ */
+function bindShop(){
+  on('#newList','click',function(){
+    var n=prompt('Name the list'); if(!n)return;
+    var c=prompt('Category (Groceries, Household, Costco run, Party...)','Groceries')||'Lists';
+    S.shop.lists[n]={cat:c,fav:false,items:[]}; S.shop.active=n; save(); route();});
+  on('#listRename','click',function(){
+    var n=prompt('Rename to',S.shop.active); if(!n||n===S.shop.active)return;
+    S.shop.lists[n]=S.shop.lists[S.shop.active]; delete S.shop.lists[S.shop.active];
+    S.shop.active=n; save(); route();});
+  on('#listDup','click',function(){
+    var n=S.shop.active+' copy';
+    S.shop.lists[n]=JSON.parse(JSON.stringify(S.shop.lists[S.shop.active]));
+    S.shop.active=n; save(); route();});
+  on('#listFav','click',function(){var L=curList();L.fav=!L.fav;save();route();});
+  on('#listDel','click',function(){
+    if(Object.keys(S.shop.lists).length<2){toast('Keep at least one list');return;}
+    if(!confirm('Delete "'+S.shop.active+'"?'))return;
+    delete S.shop.lists[S.shop.active]; S.shop.active=Object.keys(S.shop.lists)[0]; save(); route();});
+  on('#gClear','click',function(){var L=curList();
+    L.items=L.items.filter(function(i){return !i.done;}); save(); route();});
+  on('#gAdd','click',function(){ingPicker(function(it){curList().items.push(it);save();route();});});
+  on('#gRecipe','click',recipePicker);
+  on('#gTxt','click',shopTxt);
+  on('#gCsv','click',shopCsv);
+  on('#gSave','click',function(){
+    dl('list-'+S.shop.active.replace(/[^a-z0-9]+/gi,'-').toLowerCase()+'.json',
+      JSON.stringify({app:'handbook-list',name:S.shop.active,list:curList()},null,1),'application/json');
+    toast('List saved');});
+  on('#gLoad','click',function(){
+    var i=document.createElement('input');i.type='file';i.accept='.json';
+    i.onchange=function(){var fr=new FileReader();fr.onload=function(){
+      try{var o=JSON.parse(fr.result); var nm=o.name||'Imported list';
+        while(S.shop.lists[nm]) nm=nm+' 2';
+        S.shop.lists[nm]=o.list||o; S.shop.active=nm; save(); route(); toast('List loaded');}
+      catch(e){alert('Not a saved list file.');}};
+      fr.readAsText(i.files[0]);};i.click();});
+}
+function ingPicker(cb){
+  var keys=allIngKeys().sort(function(a,b){return ING(a).n.localeCompare(ING(b).n);});
+  var body='<label class="f"><span>Search the '+keys.length+' ingredients we already have</span>'+
+   '<input id="ipq" placeholder="Type to filter..." autocomplete="off"></label>'+
+   '<div id="iplist" style="max-height:300px;overflow:auto;border:1px solid var(--line);border-radius:9px"></div>'+
+   '<div class="note" style="margin-top:14px"><b>Not there?</b> Adding it below puts it in the '+
+   'master ingredient list permanently, not just this shop.</div>';
+  var m=modal('Add to '+S.shop.active,body,
+    '<button class="b o" data-close>Cancel</button><button class="b" id="ipNew">Add a new ingredient</button>');
+  function draw(q){q=(q||'').toLowerCase();
+    var hit=keys.filter(function(k){return ING(k).n.toLowerCase().indexOf(q)>=0;}).slice(0,60);
+    $('#iplist',m).innerHTML=hit.map(function(k){var g=ING(k);
+      return '<div class="pickrow" data-k="'+k+'"><div style="flex:1"><b>'+E(g.n)+'</b>'+
+      '<div class="xs muted">'+E(g.a||'Other')+' &middot; '+$$$(best(g))+'/100g at '+bestStore(g)+'</div></div>'+
+      '<span class="b s">Add</span></div>';}).join('')||
+      '<p class="empty sm">No match. Nothing by that name exists yet.</p>';
+    $$('[data-k]',m).forEach(function(row){row.onclick=function(){
+      var k=row.dataset.k,g=ING(k);
+      cb({key:k,name:g.n,qty:1,price:best(g)*2,grams:200,note:'about 200 g',
+          aisle:g.a||'Other',done:false});
+      m.remove();toast('Added '+g.n);};});}
+  draw(''); $('#ipq',m).oninput=function(){draw(this.value);};
+  $('#ipNew',m).onclick=function(){m.remove();ingEditor(null);};
+}
+function recipePicker(){
+  var body='<label class="f"><span>Search</span><input id="rpq" placeholder="Filter recipes..."></label>'+
+   '<div id="rplist" style="max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:9px"></div>';
+  var m=modal('Add a recipe to '+S.shop.active,body,'<button class="b" data-close>Done</button>');
+  m.addEventListener('click',function(e){if(e.target.hasAttribute('data-close'))route();});
+  function draw(q){q=(q||'').toLowerCase();
+    var hit=all().filter(function(r){return r.n.toLowerCase().indexOf(q)>=0;}).slice(0,70);
+    $('#rplist',m).innerHTML=hit.map(function(r){
+      return '<div class="pickrow" data-r="'+r.id+'"><div style="flex:1"><b>'+E(r.n)+'</b>'+
+      '<div class="xs muted">'+r.id+' &middot; makes '+r.sv+' &middot; '+$$$(ctot(r))+'</div></div>'+
+      '<span class="b s">Add</span></div>';}).join('');
+    $$('[data-r]',m).forEach(function(row){row.onclick=function(){
+      addRecipeToShop(byId(row.dataset.r));toast('Ingredients added');};});}
+  draw('');$('#rpq',m).oninput=function(){draw(this.value);};
+}
+function addRecipeToShop(r){
+  if(!r)return; var L=curList();
+  (r.ing||[]).forEach(function(i){
+    var k=i[1],g=i[2]||0,q=ING(k); if(!q)return;
+    var ex=L.items.filter(function(x){return x.key===k;})[0];
+    if(ex){ ex.grams=(ex.grams||0)+g; ex.price=(ex.grams/100)*best(q); ex.qty=1;
+            ex.note=Math.round(ex.grams)+' g'; }
+    else L.items.push({key:k,name:q.n,qty:1,price:(g/100)*best(q),grams:g,
+      note:Math.round(g)+' g',aisle:q.a||'Other',done:false});
+  });
+  save();
+}
+function shopTxt(){
+  var L=curList(),byA={};
+  L.items.forEach(function(i){(byA[i.aisle]=byA[i.aisle]||[]).push(i);});
+  var out=['SHOPPING LIST  -  '+S.shop.active,pretty(today()),
+    'Best price of Walmart Fort Collins / Costco Timnath',''];
+  var tot=0;
+  AISLES.map(function(a){return a[0];}).concat(['Other']).forEach(function(a){
+    if(!byA[a])return; out.push(a.toUpperCase());
+    byA[a].forEach(function(i){tot+=i.price*i.qty;
+      out.push('  ['+(i.done?'x':' ')+'] '+i.name+'  -  '+(i.note||'')+'   '+$$$(i.price*i.qty));});
+    out.push('');});
+  out.push('TOTAL  '+$$$(tot));
+  dl('shopping-'+today()+'.txt',out.join('\n'));
+}
+function shopCsv(){
+  var rows=[['List','Aisle','Item','Qty','Grams','Price','Done']];
+  curList().items.forEach(function(i){
+    rows.push([S.shop.active,i.aisle,i.name,i.qty,i.grams||'',i.price.toFixed(2),i.done?'yes':'']);});
+  dl('shopping-'+today()+'.csv',toCSV(rows),'text/csv');
+}
+
+/* ============================ financial wiring ============================ */
+function bindFin(sub){
+  on('#finMode','change',function(){S.fin.costMode=this.value;save();route();});
+  on('#finPath','change',function(){S.fin.path=this.value;save();route();});
+  on('#finScen','change',function(){var s=S.fin.scenarios[this.value];
+    if(s){S.fin.costMode=s.mode;S.fin.path=s.path;save();route();toast('Loaded '+this.value);}});
+  on('#scenSave','click',function(){
+    var n=prompt('Name this scenario','e.g. Renting, both grinding'); if(!n)return;
+    S.fin.scenarios[n]={mode:S.fin.costMode||'real',path:S.fin.path||'rent',
+      inc:finIncome('both',S.fin.costMode||'real'),cost:finCost(S.fin.costMode||'real',S.fin.path||'rent'),
+      saved:today()}; save();route();toast('Scenario saved');});
+  on('#scenDel','click',function(){var v=$('#finScen').value;
+    if(v&&confirm('Delete "'+v+'"?')){delete S.fin.scenarios[v];save();route();}});
+  ['#jobAdd','#jobAdd2'].forEach(function(s){on(s,'click',function(){jobEditor(null);});});
+  on('#costAdd','click',function(){costEditor(null);});
+  on('#shAdd','click',function(){shiftEditor();});
+  on('#shCsv','click',function(){
+    var rows=[['Date','Who','Job','Hours','Gross','Net','Note']];
+    S.fin.shifts.forEach(function(s){var j=S.fin.jobs.filter(function(x){return x.id===s.jobId;})[0];
+      rows.push([s.date,j?j.who:'',j?j.name:'',s.hours,s.gross,s.net,s.note||'']);});
+    dl('shifts-'+today()+'.csv',toCSV(rows),'text/csv');});
+  on('#scenFromActual','click',function(){
+    var from=new Date();from.setDate(from.getDate()-90);
+    var f=from.getFullYear()+'-'+p2(from.getMonth()+1)+'-'+p2(from.getDate());
+    var net=shiftsFor(null,f).reduce(function(a,s){return a+(s.net||0);},0)/(90/30.4);
+    S.fin.scenarios['From actual earnings']={mode:'actual',path:S.fin.path||'rent',
+      inc:Math.round(net),cost:finCost('real',S.fin.path||'rent'),saved:today(),auto:true};
+    save();toast('Saved from real data');route();});
+  on('#bpNew','click',function(){
+    var n=prompt('List name','Apartments'); if(!n)return;
+    var c=prompt('What kind? (Housing, Cars, Furniture...)','Housing')||'Other';
+    S.fin.purchases[n]={cat:c,items:[]}; save(); route();});
+}
+function jobEditor(id){
+  var j=id?S.fin.jobs.filter(function(x){return x.id===id;})[0]:{who:'Jaron',name:'',employer:'',title:'',rate:'',low:'',real:'',high:''};
+  var m=modal(id?'Edit income':'Add income',
+    form([{id:'jw',l:'Who',t:'select',o:[['Jaron','Jaron'],['Aaliyah','Aaliyah'],['Both','Shared / gig']],v:j.who},
+      {id:'jn',l:'Name',v:j.name,ph:'Ritchey day job'},
+      {id:'je',l:'Employer',v:j.employer},{id:'jt',l:'Title',v:j.title},
+      {id:'jr',l:'Hourly rate',t:'number',step:'0.01',v:j.rate},
+      {id:'jl',l:'Low / mo',t:'number',v:j.low},{id:'jm',l:'Realistic / mo',t:'number',v:j.real},
+      {id:'jh',l:'High / mo',t:'number',v:j.high}]),
+    (id?'<button class="b o dz" id="jDel">Delete</button>':'')+
+    '<button class="b o" data-close>Cancel</button><button class="b" id="jSave">Save</button>');
+  var dl_=$('#jDel',m); if(dl_)dl_.onclick=function(){
+    S.fin.jobs=S.fin.jobs.filter(function(x){return x.id!==id;});save();m.remove();route();};
+  $('#jSave',m).onclick=function(){
+    var o={id:id||uid(),who:$('#jw',m).value,name:$('#jn',m).value.trim()||'Income',
+      employer:$('#je',m).value,title:$('#jt',m).value,rate:num($('#jr',m).value)||null,
+      low:num($('#jl',m).value),real:num($('#jm',m).value),high:num($('#jh',m).value)};
+    if(id)S.fin.jobs=S.fin.jobs.map(function(x){return x.id===id?o:x;}); else S.fin.jobs.push(o);
+    save();m.remove();route();};
+}
+function costEditor(id){
+  var c=id?S.fin.costs.filter(function(x){return x.id===id;})[0]:{name:'',section:'Living',who:'Both',low:'',real:'',high:'',actual:''};
+  var m=modal(id?'Edit cost':'Add cost',
+    form([{id:'cn',l:'Cost',v:c.name},
+      {id:'cs',l:'Section',t:'select',o:[['Living','Living'],['Utilities','Utilities'],
+        ['Health','Health'],['Housing (rent)','Housing (rent)'],['Housing (buy)','Housing (buy)'],
+        ['Debt','Debt'],['Savings','Savings']],v:c.section},
+      {id:'cw',l:'Who',t:'select',o:[['Both','Both'],['Jaron','Jaron'],['Aaliyah','Aaliyah']],v:c.who},
+      {id:'cl',l:'Low',t:'number',v:c.low},{id:'cr',l:'Realistic',t:'number',v:c.real},
+      {id:'ch',l:'High',t:'number',v:c.high},{id:'ca',l:'Actual',t:'number',v:c.actual}]),
+    (id?'<button class="b o dz" id="cDel">Delete</button>':'')+
+    '<button class="b o" data-close>Cancel</button><button class="b" id="cSave">Save</button>');
+  var d=$('#cDel',m); if(d)d.onclick=function(){
+    S.fin.costs=S.fin.costs.filter(function(x){return x.id!==id;});save();m.remove();route();};
+  $('#cSave',m).onclick=function(){
+    var o={id:id||uid(),name:$('#cn',m).value.trim()||'Cost',section:$('#cs',m).value,
+      who:$('#cw',m).value,low:num($('#cl',m).value),real:num($('#cr',m).value),
+      high:num($('#ch',m).value),actual:num($('#ca',m).value)||null};
+    if(id)S.fin.costs=S.fin.costs.map(function(x){return x.id===id?o:x;}); else S.fin.costs.push(o);
+    save();m.remove();route();};
+}
+function shiftEditor(){
+  if(!S.fin.jobs.length){toast('Add a job first');return;}
+  var m=modal('Log a shift',
+    form([{id:'sd',l:'Date',t:'date',v:today()},
+      {id:'sj',l:'Job',t:'select',o:S.fin.jobs.map(function(j){return [j.id,j.who+' - '+j.name];}),v:S.fin.jobs[0].id},
+      {id:'sh',l:'Hours',t:'number',step:'0.25',v:8},
+      {id:'sg',l:'Gross $',t:'number',step:'0.01',v:''},
+      {id:'sn',l:'Net (after tax) $',t:'number',step:'0.01',v:''},
+      {id:'sx',l:'Note',v:''}])+
+    '<p class="sm muted">Leave gross blank and it uses the job hourly rate. Leave net blank and it estimates 80% of gross.</p>',
+    '<button class="b o" data-close>Cancel</button><button class="b" id="sSave">Save</button>');
+  $('#sSave',m).onclick=function(){
+    var jid=$('#sj',m).value, j=S.fin.jobs.filter(function(x){return x.id===jid;})[0];
+    var hrs=num($('#sh',m).value), g=num($('#sg',m).value), n=num($('#sn',m).value);
+    if(!g&&j&&j.rate) g=hrs*j.rate;
+    if(!n&&g) n=g*0.8;
+    S.fin.shifts.push({id:uid(),date:$('#sd',m).value||today(),jobId:jid,hours:hrs,
+      gross:Math.round(g*100)/100,net:Math.round(n*100)/100,note:$('#sx',m).value});
+    save();m.remove();route();toast('Shift logged');};
+}
+function bpItemEditor(listName){
+  var L=S.fin.purchases[listName]; var cat=(L.cat||'').toLowerCase();
+  var extra = cat.indexOf('hous')>=0 ? [{id:'f1',l:'Beds'},{id:'f2',l:'Baths'},{id:'f3',l:'Sq ft'},{id:'f4',l:'To CSU (min)'}]
+            : cat.indexOf('car')>=0 ? [{id:'f1',l:'Year'},{id:'f2',l:'Miles'},{id:'f3',l:'MPG'},{id:'f4',l:'Condition'}]
+            : [{id:'f1',l:'Detail 1'},{id:'f2',l:'Detail 2'}];
+  var m=modal('Add to '+listName,
+    form([{id:'bn',l:'Name',v:''},{id:'bp',l:'Price / rent',t:'number',v:''},
+      {id:'bl',l:'Link',v:''}].concat(extra).concat([{id:'bo',l:'Notes',t:'area',v:''}])),
+    '<button class="b o" data-close>Cancel</button><button class="b" id="bSave">Save</button>');
+  $('#bSave',m).onclick=function(){
+    var f={}; extra.forEach(function(x){var v=$('#'+x.id,m).value; if(v)f[x.l]=v;});
+    L.items.push({name:$('#bn',m).value.trim()||'Item',price:num($('#bp',m).value),
+      link:$('#bl',m).value,notes:$('#bo',m).value,fields:f});
+    save();m.remove();route();};
+}
+
+/* ============================ schedule wiring ============================ */
+function bindSched(sub){
+  on('#cPrev','click',function(){calM--;if(calM<0){calM=11;calY--;}route();});
+  on('#cNext','click',function(){calM++;if(calM>11){calM=0;calY++;}route();});
+  on('#schWorkout','change',function(){dayLog(calSel).workout=this.value;save();route();});
+  on('#evAdd','click',function(){evEditor(calSel);});
+  on('#spAdd','click',function(){spendEditor(calSel);});
+  on('#mealAdd','click',function(){mealPicker(calSel);});
+  ['#applyTmpl','#applyTmpl2'].forEach(function(s){on(s,'click',applyTemplate);});
+  on('#calCsv','click',function(){
+    var rows=[['Date','Who','Training','Kcal','Protein','FoodCost','OtherSpend','Plans','Notes']];
+    Object.keys(S.days).sort().forEach(function(d){var r=S.days[d],e=eaten(d);
+      var sp=(r.spend||[]).reduce(function(a,x){return a+(x.amt||0);},0);
+      rows.push([d,P().name,TRAIN[r.workout]?TRAIN[r.workout].n:r.workout,Math.round(e.kcal),
+        Math.round(e.p),e.cost.toFixed(2),sp.toFixed(2),
+        (r.sched||[]).map(function(x){return x.who+':'+x.what;}).join('; '),r.notes||'']);});
+    dl('log-'+today()+'.csv',toCSV(rows),'text/csv');});
+}
+function evEditor(ds){
+  var m=modal('Add to '+shortD(ds),
+    form([{id:'ew',l:'Who',t:'select',o:[['Jaron','Jaron'],['Aaliyah','Aaliyah'],['Both','Both of us']],v:S.who==='j'?'Jaron':'Aaliyah'},
+      {id:'ex',l:'What',v:'',ph:'Class, shift, gym'},
+      {id:'ef',l:'From',t:'time',v:'09:00'},{id:'et',l:'To',t:'time',v:'17:00'},
+      {id:'el',l:'Where',v:''}]),
+    '<button class="b o" data-close>Cancel</button><button class="b" id="eSave">Add</button>');
+  $('#eSave',m).onclick=function(){
+    dayLog(ds).sched.push({who:$('#ew',m).value,what:$('#ex',m).value.trim()||'Busy',
+      from:$('#ef',m).value,to:$('#et',m).value,where:$('#el',m).value});
+    save();m.remove();route();};
+}
+function spendEditor(ds){
+  var m=modal('Log a spend',
+    form([{id:'sw',l:'Who',t:'select',o:[['Both','Both'],['Jaron','Jaron'],['Aaliyah','Aaliyah']],v:'Both'},
+      {id:'sx',l:'What',v:'',ph:'Gas, coffee, parts'},
+      {id:'sa',l:'Amount',t:'number',step:'0.01',v:''}]),
+    '<button class="b o" data-close>Cancel</button><button class="b" id="spSave">Add</button>');
+  $('#spSave',m).onclick=function(){
+    dayLog(ds).spend.push({who:$('#sw',m).value,what:$('#sx',m).value.trim()||'Spend',
+      amt:num($('#sa',m).value)});
+    save();m.remove();route();};
+}
+function mealPicker(ds){
+  var body='<label class="f"><span>Search</span><input id="mpq" placeholder="What did we eat?"></label>'+
+   '<div id="mplist" style="max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:9px"></div>';
+  var m=modal('Log a meal on '+shortD(ds),body,'<button class="b" data-close>Done</button>');
+  m.addEventListener('click',function(e){if(e.target.hasAttribute('data-close'))route();});
+  function draw(q){q=(q||'').toLowerCase();
+    var hit=all().filter(function(r){return r.n.toLowerCase().indexOf(q)>=0;}).slice(0,60);
+    $('#mplist',m).innerHTML=hit.map(function(r){
+      return '<div class="pickrow" data-a="'+r.id+'"><div style="flex:1"><b>'+E(r.n)+'</b>'+
+      '<div class="xs muted">'+Math.round(r.k)+' kcal &middot; '+Math.round(r.p)+'g protein &middot; '+$$$(cps(r))+'</div></div>'+
+      '<span class="b s">Add</span></div>';}).join('');
+    $$('[data-a]',m).forEach(function(row){row.onclick=function(){
+      dayLog(ds).meals.push({id:row.dataset.a,q:1});save();toast('Logged');};});}
+  draw('');$('#mpq',m).oninput=function(){draw(this.value);};
+}
+function tmplEditor(dayIdx){
+  var m=modal('Regular '+DOW[dayIdx],
+    form([{id:'tw',l:'Who',t:'select',o:[['Jaron','Jaron'],['Aaliyah','Aaliyah'],['Both','Both of us']],v:S.who==='j'?'Jaron':'Aaliyah'},
+      {id:'tx',l:'What',v:'',ph:'Work, class, gym'},
+      {id:'tf',l:'From',t:'time',v:'09:00'},{id:'tt',l:'To',t:'time',v:'17:00'}]),
+    '<button class="b o" data-close>Cancel</button><button class="b" id="tSave2">Add</button>');
+  $('#tSave2',m).onclick=function(){
+    if(!S.sched.tmpl[dayIdx])S.sched.tmpl[dayIdx]=[];
+    S.sched.tmpl[dayIdx].push({who:$('#tw',m).value,what:$('#tx',m).value.trim()||'Busy',
+      from:$('#tf',m).value,to:$('#tt',m).value});
+    save();m.remove();route();};
+}
+function applyTemplate(){
+  var t=S.sched.tmpl||{}, n=0, base=new Date();
+  base.setDate(base.getDate()-base.getDay());
+  for(var i=0;i<7;i++){
+    var d=new Date(base); d.setDate(base.getDate()+i);
+    var ds=d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate());
+    (t[i]||[]).forEach(function(x){
+      var log=dayLog(ds);
+      var dupe=log.sched.some(function(e){return e.what===x.what&&e.who===x.who&&e.from===x.from;});
+      if(!dupe){log.sched.push({who:x.who,what:x.what,from:x.from,to:x.to,where:''});n++;}
     });
   }
+  save();route();toast(n?n+' items added to this week':'Already applied');
+}
 
-  function updateShopTotals() {
-    var tot = H.listTotals(H.curList().items);
-    H.setText('#shopTodo', money0(tot.todo));
-    H.setText('#shopGot', money0(tot.got));
-    H.setText('#shopCount', tot.n - tot.done);
-  }
+/* ============================ global events ============================ */
+document.addEventListener('click',function(e){
+  var el;
+  if((el=e.target.closest('[data-nav]'))){nav(el.dataset.nav);return;}
+  if((el=e.target.closest('[data-w]'))){S.who=el.dataset.w;save();route();return;}
+  if((el=e.target.closest('[data-fav]'))){e.stopPropagation();
+    var id=el.dataset.fav,i=S.fav.indexOf(id);
+    if(i>=0)S.fav.splice(i,1);else S.fav.push(id); save();route();return;}
+  if((el=e.target.closest('[data-go]'))){nav('r/'+el.dataset.go);return;}
+  if((el=e.target.closest('[data-log]'))){dayLog(today()).meals.push({id:el.dataset.log,q:1});
+    save();toast('Logged to today');return;}
+  if((el=e.target.closest('[data-groc]'))){addRecipeToShop(byId(el.dataset.groc));
+    toast('Added to '+S.shop.active);return;}
+  if((el=e.target.closest('[data-tolist]'))){listModal(el.dataset.tolist);return;}
+  if((el=e.target.closest('[data-photo]'))){pickPhoto(el.dataset.photo);return;}
+  if((el=e.target.closest('[data-card]'))){cardPNG(byId(el.dataset.card));return;}
+  if((el=e.target.closest('[data-list]'))){S.shop.active=el.dataset.list;save();route();return;}
+  if((el=e.target.closest('[data-gt]'))){var L=curList();
+    L.items[+el.dataset.gt].done=el.checked;save();route();return;}
+  if((el=e.target.closest('[data-gd]'))){curList().items.splice(+el.dataset.gd,1);save();route();return;}
+  if((el=e.target.closest('[data-ge]'))){shopItemEditor(+el.dataset.ge);return;}
+  if((el=e.target.closest('[data-ie]'))){ingEditor(el.dataset.ie);return;}
+  if((el=e.target.closest('[data-sess]'))){sessModal(+el.dataset.sess);return;}
+  if((el=e.target.closest('[data-jobe]'))){jobEditor(el.dataset.jobe);return;}
+  if((el=e.target.closest('[data-coste]'))){costEditor(el.dataset.coste);return;}
+  if((el=e.target.closest('[data-shd]'))){S.fin.shifts=S.fin.shifts.filter(function(x){
+    return x.id!==el.dataset.shd;});save();route();return;}
+  if((el=e.target.closest('[data-bpadd]'))){bpItemEditor(el.dataset.bpadd);return;}
+  if((el=e.target.closest('[data-bpdel]'))){if(confirm('Delete list?')){
+    delete S.fin.purchases[el.dataset.bpdel];save();route();}return;}
+  if((el=e.target.closest('[data-bpi]'))){var p=el.dataset.bpi.split('|');
+    S.fin.purchases[p[0]].items.splice(+p[1],1);save();route();return;}
+  if((el=e.target.closest('[data-d]'))){calSel=el.dataset.d;route();return;}
+  if((el=e.target.closest('[data-evd]'))){dayLog(calSel).sched.splice(+el.dataset.evd,1);save();route();return;}
+  if((el=e.target.closest('[data-spd]'))){dayLog(calSel).spend.splice(+el.dataset.spd,1);save();route();return;}
+  if((el=e.target.closest('[data-tadd]'))){tmplEditor(+el.dataset.tadd);return;}
+  if((el=e.target.closest('[data-td]'))){var q=el.dataset.td.split('|');
+    S.sched.tmpl[q[0]].splice(+q[1],1);save();route();return;}
+  if(e.target.id==='saveFile'){exportAll();return;}
+  if(e.target.id==='loadFile'){var i=document.createElement('input');i.type='file';i.accept='.json';
+    i.onchange=function(){importAll(i.files[0],function(ok){if(ok){toast('Loaded');route();}});};
+    i.click();return;}
+});
+function shopItemEditor(idx){
+  var it=curList().items[idx];
+  var m=modal('Edit '+it.name,
+    form([{id:'sen',l:'Name',v:it.name},
+      {id:'seq',l:'Qty',t:'number',step:'0.5',v:it.qty},
+      {id:'sep',l:'Price each',t:'number',step:'0.01',v:it.price},
+      {id:'sea',l:'Aisle',t:'select',o:AISLES.map(function(a){return [a[0],a[0]];}).concat([['Other','Other']]),v:it.aisle},
+      {id:'sen2',l:'Note',v:it.note||''}])+
+    (it.key?'<p class="sm muted">Changing the price here only affects this list. To change it '+
+      'everywhere, edit it in the <a href="#/shopping/ingredients">ingredient list</a>.</p>':''),
+    '<button class="b o dz" id="seDel">Remove</button>'+
+    '<button class="b o" data-close>Cancel</button><button class="b" id="seSave">Save</button>');
+  $('#seDel',m).onclick=function(){curList().items.splice(idx,1);save();m.remove();route();};
+  $('#seSave',m).onclick=function(){
+    it.name=$('#sen',m).value;it.qty=num($('#seq',m).value,1);it.price=num($('#sep',m).value);
+    it.aisle=$('#sea',m).value;it.note=$('#sen2',m).value;save();m.remove();route();};
+}
+function listModal(id){
+  var names=Object.keys(S.lists);
+  var body=(names.length?names.map(function(n){var has=S.lists[n].indexOf(id)>=0;
+    return '<div class="pickrow" data-l="'+E(n)+'"><input type="checkbox"'+(has?' checked':'')+
+    ' style="width:18px;height:18px;accent-color:var(--forest)"><div><b>'+E(n)+'</b>'+
+    '<div class="xs muted">'+S.lists[n].length+' recipes</div></div></div>';}).join('')
+    :'<p class="sm muted">No recipe lists yet.</p>')+
+   '<label class="f" style="margin-top:14px"><span>Or make a new one</span><input id="nl" placeholder="Sunday prep"></label>';
+  var m=modal('Add to a recipe list',body,
+    '<button class="b o" data-close>Cancel</button><button class="b" id="lS">Save</button>');
+  $('#lS',m).onclick=function(){
+    $$('.pickrow',m).forEach(function(r){var n=r.dataset.l;if(!n)return;
+      var on_=r.querySelector('input').checked,i=S.lists[n].indexOf(id);
+      if(on_&&i<0)S.lists[n].push(id); if(!on_&&i>=0)S.lists[n].splice(i,1);});
+    var nl=$('#nl',m).value.trim();
+    if(nl){if(!S.lists[nl])S.lists[nl]=[];if(S.lists[nl].indexOf(id)<0)S.lists[nl].push(id);}
+    save();m.remove();toast('Saved');};
+}
+function pickPhoto(id){
+  var inp=document.createElement('input');inp.type='file';inp.accept='image/*';
+  inp.onchange=function(){var f=inp.files[0];if(!f)return;
+    var fr=new FileReader();
+    fr.onload=function(){var img=new Image();
+      img.onload=function(){var sc=Math.min(1,900/Math.max(img.width,img.height));
+        var cv=document.createElement('canvas');cv.width=img.width*sc|0;cv.height=img.height*sc|0;
+        cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
+        S.photos[id]=cv.toDataURL('image/jpeg',0.72);save();route();toast('Photo saved');};
+      img.src=fr.result;};
+    fr.readAsDataURL(f);};
+  inp.click();
+}
+function ownRecipe(){
+  var m=modal('Add my own recipe',
+    form([{id:'on',l:'Name',v:''},
+      {id:'oc',l:'Category',t:'select',o:[['Breakfast','Breakfast'],['Lunch/Dinner','Mains'],
+        ['Snack','Snack'],['Drink','Drink'],['SDA Meat/Fish','Meat and fish']],v:'Lunch/Dinner'},
+      {id:'osv',l:'Servings',t:'number',v:2},{id:'ot',l:'Minutes',t:'number',v:20},
+      {id:'ok',l:'Kcal / serving',t:'number',v:''},{id:'op',l:'Protein g',t:'number',v:''},
+      {id:'ocb',l:'Carbs g',t:'number',v:''},{id:'of',l:'Fat g',t:'number',v:''},
+      {id:'ocost',l:'Cost / serving',t:'number',step:'0.01',v:''},
+      {id:'oi',l:'Ingredients, one per line',t:'area',v:''},
+      {id:'os',l:'Method, one step per line',t:'area',v:''}]),
+    '<button class="b o" data-close>Cancel</button><button class="b" id="oSave">Save</button>');
+  $('#oSave',m).onclick=function(){
+    var n=$('#on',m).value.trim(); if(!n){toast('Needs a name');return;}
+    var sv=num($('#osv',m).value,1), c=num($('#ocost',m).value);
+    S.mine.push({id:'X-'+(S.mine.length+1),n:n,cat:$('#oc',m).value,sv:sv,t:num($('#ot',m).value,20),
+      diff:'MODERATE',k:num($('#ok',m).value),p:num($('#op',m).value),c:num($('#ocb',m).value),
+      f:num($('#of',m).value),fib:0,leu:0,tg:['MY RECIPE'],cw:c*sv,cws:c,cc:c*sv,ccs:c,
+      ing:$('#oi',m).value.split('\n').filter(Boolean).map(function(l){return [l.trim(),'',0];}),
+      st:$('#os',m).value.split('\n').filter(Boolean),storage:'',prep:'',subs:[],vars:[]});
+    save();m.remove();route();toast('Recipe saved');};
+}
+function cardPNG(r){
+  if(!r)return;
+  var W=900,H=1280,cv=document.createElement('canvas');cv.width=W;cv.height=H;
+  var x=cv.getContext('2d'),col=CATC[r.cat]||CATC['My recipe'];
+  var g=x.createLinearGradient(0,0,W,H);g.addColorStop(0,'#14140F');g.addColorStop(.58,'#1F3A2C');g.addColorStop(1,col[1]);
+  x.fillStyle=g;x.fillRect(0,0,W,H);x.fillStyle=col[0];x.fillRect(0,0,W,9);
+  x.fillStyle='#A8CDB8';x.font='700 19px Helvetica,Arial';
+  x.fillText(r.id+'   \u00B7   '+r.cat.toUpperCase()+'   \u00B7   '+r.diff,56,80);
+  x.fillStyle='#fff';x.font='800 52px Helvetica,Arial';
+  var y=142+wrapT(x,r.n,56,142,780,56);
+  var mac=[[Math.round(r.k),'KCAL'],[Math.round(r.p)+'g','PROTEIN'],[Math.round(r.c)+'g','CARBS'],
+           [Math.round(r.f)+'g','FAT'],[Math.round(r.fib||0)+'g','FIBER'],[(r.leu||0).toFixed(1)+'g','LEUCINE']];
+  var bw=(788-25)/6;
+  mac.forEach(function(mm,i){var bx=56+i*(bw+5);
+    x.fillStyle='rgba(255,255,255,.10)';x.fillRect(bx,y,bw,90);
+    x.fillStyle='#fff';x.font='800 25px Helvetica,Arial';x.textAlign='center';
+    x.fillText(String(mm[0]),bx+bw/2,y+40);
+    x.fillStyle='#A8CDB8';x.font='700 11px Helvetica,Arial';x.fillText(mm[1],bx+bw/2,y+66);x.textAlign='left';});
+  y+=128;
+  x.fillStyle='#1F4D3A';x.fillRect(56,y,788,62);x.fillStyle='#fff';x.font='700 23px Helvetica,Arial';
+  x.fillText(r.t+' min   \u00B7   makes '+r.sv+'   \u00B7   '+$$$(cps(r))+'/serving   \u00B7   '+$$$(ctot(r))+' batch',78,y+39);
+  y+=100;
+  x.fillStyle='#A8CDB8';x.font='700 16px Helvetica,Arial';x.fillText('INGREDIENTS',56,y);y+=28;
+  x.fillStyle='#E6EDE7';x.font='400 18px Helvetica,Arial';
+  (r.ing||[]).slice(0,15).forEach(function(i){var q=ING(i[1]);
+    x.fillText('\u2022  '+(i[2]?Math.round(i[2])+' g  ':'')+(q?q.n:i[0]),56,y);y+=26;});
+  y+=20;x.fillStyle='#A8CDB8';x.font='700 16px Helvetica,Arial';x.fillText('METHOD',56,y);y+=28;
+  x.fillStyle='#C9D6CB';x.font='400 16px Helvetica,Arial';
+  (r.st||[]).slice(0,6).forEach(function(s,i){y+=wrapT(x,(i+1)+'. '+s,56,y,788,23)+7;});
+  x.fillStyle='#6E8A76';x.font='700 13px Helvetica,Arial';x.fillText('The Handbook',56,H-40);
+  var a=document.createElement('a');
+  a.download=r.id+'-'+r.n.replace(/[^a-z0-9]+/gi,'-').toLowerCase()+'.png';
+  a.href=cv.toDataURL('image/png');a.click();
+}
+function wrapT(x,t,px,py,mw,lh){var w=String(t).split(' '),line='',yy=py,used=0;
+  for(var i=0;i<w.length;i++){var tt=line+w[i]+' ';
+    if(x.measureText(tt).width>mw&&line){x.fillText(line,px,yy);line=w[i]+' ';yy+=lh;used+=lh;}else line=tt;}
+  x.fillText(line,px,yy);return used+lh;}
 
-  /* Keep an aisle header's "3 left · $12" honest as things are ticked off. */
-  function updateAisle(grp) {
-    if (!grp) return;
-    var head = grp.querySelector('.aisle');
-    if (!head) return;
-    var name = head.dataset.aisle;
-    var left = H.curList().items.filter(function (it) {
-      return it.aisle === name && !it.done;
-    });
-    var subtotal = left.reduce(function (a, it) { return a + it.price * it.qty; }, 0);
-    var label = grp.querySelector('.ac');
-    if (label) {
-      label.textContent = left.length
-        ? left.length + ' left · ' + money0(subtotal)
-        : 'all in the cart';
-    }
-  }
+chrome();
+if(!location.hash)location.hash='#/meals';
+route();
 
-  /* Recipe cards are links, so they answer to Enter and Space as well as a click. */
-  document.addEventListener('keydown', function (e) {
-    var card = e.target.closest && e.target.closest('.rc');
-    if (card && (e.key === 'Enter' || e.key === ' ')) {
-      e.preventDefault();
-      nav('r/' + card.dataset.go);
-    }
-  });
-
-  /* ---------------------------------------------------------- shortcuts */
-  document.addEventListener('keydown', function (e) {
-    var typing = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.isContentEditable;
-
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-      e.preventDefault();
-      H.openPalette();
-      return;
-    }
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'p') {
-      e.preventDefault();
-      S().who = H.otherKey();
-      H.save(true);
-      refresh();
-      toast('Showing ' + H.P().name);
-      return;
-    }
-    if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
-
-    if (e.key === '/') { e.preventDefault(); H.openPalette(); return; }
-    var i = ['1', '2', '3', '4', '5'].indexOf(e.key);
-    if (i >= 0) { e.preventDefault(); nav(NAV[i][0]); }
-  });
-
-  /* ---------------------------------------------------------- boot */
-  H.onSaveFail(function () {
-    var use = H.storageUsed();
-    toast('Storage is full (' + use.mb.toFixed(1) + ' MB). Save to a file, then remove some photos.', {
-      action: 'Settings',
-      onAction: function () { nav('settings'); },
-      ms: 9000
-    });
-  });
-
-  function backupNudge() {
-    if (!S().prefs.remindBackup) return;
-    var since = H.daysSinceExport();
-    var hasData = Object.keys(S().days).length > 3 || S().mine.length || Object.keys(S().photos).length;
-    if (!hasData) return;
-    if (since !== null && since < 7) return;
-    setTimeout(function () {
-      toast(since === null
-        ? 'Nothing is backed up yet. This all lives in one browser.'
-        : 'Last backup was ' + since + ' days ago.', {
-        action: 'Save now',
-        onAction: exportAll,
-        ms: 9000
-      });
-    }, 2500);
-  }
-
-  H.planOpts.slots = S().prefs.planSlots || 4;
-  if (S().prefs.dayBudget != null) H.planOpts.budget = String(S().prefs.dayBudget);
-
-  applyTheme();
-  chrome();
-  if (!location.hash) location.hash = '#/meals';
-  route();
-  backupNudge();
-
-})(typeof window !== 'undefined' ? window : globalThis);
+})();
