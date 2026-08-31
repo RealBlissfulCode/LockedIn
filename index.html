@@ -23,15 +23,14 @@
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="/assets/app.css?v=2c377e0a">
+<link rel="stylesheet" href="/assets/app.css?v=cce99d85">
 </head>
 <body>
 <header class="top"><div class="topin">
   <div class="brand">The <em>Handbook</em></div>
   <div class="whoswitch" id="who"></div>
   <nav class="tabs" id="tabs"></nav>
-  <button class="tab" id="saveFile" title="Download everything as a file">Save</button>
-  <button class="tab" id="loadFile" title="Load a saved file">Load</button>
+  <button class="iconbtn" id="settings" title="Settings"></button>
 </div></header>
 
 <main class="wrap" id="view">
@@ -42,8 +41,8 @@
 </main>
 <nav class="btmnav" id="btm"></nav>
 
-<script src="/assets/data.js?v=2c377e0a"></script>
-<script src="/assets/app.js?v=2c377e0a"></script>
+<script src="/assets/data.js?v=cce99d85"></script>
+<script src="/assets/app.js?v=cce99d85"></script>
 <script>
 if('serviceWorker' in navigator){
   window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(){});});

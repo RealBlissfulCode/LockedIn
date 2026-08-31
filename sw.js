@@ -1,6 +1,6 @@
-var CACHE='handbook-2c377e0a';
-var CORE=['/','/index.html','/assets/app.css?v=2c377e0a','/assets/app.js?v=2c377e0a',
-          '/assets/data.js?v=2c377e0a','/manifest.webmanifest',
+var CACHE='handbook-cce99d85';
+var CORE=['/','/index.html','/assets/app.css?v=cce99d85','/assets/app.js?v=cce99d85',
+          '/assets/data.js?v=cce99d85','/manifest.webmanifest',
           '/icons/icon.svg','/icons/icon-192.png','/icons/icon-512.png'];
 self.addEventListener('install',function(e){self.skipWaiting();
   e.waitUntil(caches.open(CACHE).then(function(c){return c.addAll(CORE).catch(function(){});}));});

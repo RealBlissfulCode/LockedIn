@@ -20,7 +20,8 @@ function DEF(){return{
  ingOv:{}, fav:[], lists:{}, mine:[], photos:{},
  shop:{active:'Weekly shop', lists:{'Weekly shop':{cat:'Groceries',fav:true,items:[]}}},
  days:{},
- fin:{jobs:[],shifts:[],costs:[],scenarios:{},purchases:{},costMode:'real'},
+ fin:{jobs:[],shifts:[],costs:[],scenarios:{},purchases:{},costMode:'real',path:'rent',
+      activeScenario:null, draft:null},
  sched:{tmpl:{}, },
  exLog:{}, seeded:false
 };}
@@ -74,6 +75,9 @@ function dl(name,text,mime){var b=new Blob([text],{type:mime||'text/plain'});
   var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click();
   setTimeout(function(){URL.revokeObjectURL(a.href);},1200);}
 function P(){return S.prof[S.who];}
+/* whoever is selected up top is the default actor for anything logged */
+function ME(){return S.who==='j'?'Jaron':'Aaliyah';}
+function whoOpts(){return [['Jaron','Jaron'],['Aaliyah','Aaliyah'],['Both','Both of us']];}
 function num(x,d){var n=parseFloat(x);return isNaN(n)?(d||0):n;}
 
 /* ---------------- ingredients: base + user overrides ---------------- */
@@ -194,6 +198,34 @@ function importAll(file,cb){
   };
   fr.readAsText(file);
 }
+/* ---------------- scenarios ----------------
+   A scenario is a complete snapshot: every income line, every cost line, the
+   mode and the housing path. Editing while a scenario is open writes to a
+   draft; nothing overwrites the saved copy until Save is pressed. */
+function snapshot(){
+  return {mode:S.fin.costMode,path:S.fin.path,
+    jobs:JSON.parse(JSON.stringify(S.fin.jobs)),
+    costs:JSON.parse(JSON.stringify(S.fin.costs)),
+    saved:today()};
+}
+function scenSave(name){
+  if(!name) return false;
+  S.fin.scenarios[name]=snapshot();
+  S.fin.activeScenario=name; S.fin.draft=null; save(); return true;
+}
+function scenLoad(name){
+  var sc=S.fin.scenarios[name]; if(!sc) return false;
+  S.fin.jobs=JSON.parse(JSON.stringify(sc.jobs));
+  S.fin.costs=JSON.parse(JSON.stringify(sc.costs));
+  S.fin.costMode=sc.mode||'real'; S.fin.path=sc.path||'rent';
+  S.fin.activeScenario=name; S.fin.draft=null; save(); return true;
+}
+function scenDirty(){
+  var n=S.fin.activeScenario; if(!n||!S.fin.scenarios[n]) return false;
+  var a=S.fin.scenarios[n], b=snapshot();
+  return JSON.stringify([a.jobs,a.costs,a.mode,a.path])!==JSON.stringify([b.jobs,b.costs,b.mode,b.path]);
+}
+function scenRevert(){ if(S.fin.activeScenario) scenLoad(S.fin.activeScenario); }
 function csvEsc(v){return '"'+String(v==null?'':v).replace(/"/g,'""')+'"';}
 function toCSV(rows){return rows.map(function(r){return r.map(csvEsc).join(',');}).join('\n');}
 
@@ -585,37 +617,63 @@ function vTraining(sub){
   var ds=today(), d=dayLog(ds), t=dayTarget(S.who,d.workout);
   var wk=[]; for(var i=6;i>=0;i--){var dd=new Date();dd.setDate(dd.getDate()-i);
     var k=dd.getFullYear()+'-'+p2(dd.getMonth()+1)+'-'+p2(dd.getDate());
-    wk.push([k,S.days[k]?S.days[k].workout:null]);}
-  var rows=Object.keys(TRAIN).map(function(k){var tt=dayTarget(S.who,k);
-    return '<tr'+(d.workout===k?' style="background:var(--moss)"':'')+'><td><b>'+TRAIN[k].n+'</b></td>'+
-    '<td>'+tt.kcal+'</td><td>'+tt.p+' g</td><td>'+tt.c+' g</td><td>'+tt.f+' g</td>'+
-    '<td class="sm muted">'+E(TRAIN[k].why.split('.')[0])+'.</td></tr>';}).join('');
+    wk.push([k,S.days[k]?S.days[k].workout:null,dd]);}
+  var trained=wk.filter(function(x){return x[1];}).length;
   return '<div class="page"><div class="phead"><h1>Training</h1>'+
-   '<p>211 exercises, 32 prebuilt sessions, and the macro shift each session type causes.</p></div>'+
-   '<div class="sec"><h2>Today</h2><div class="grid g2"><div class="card pad">'+
+   '<p>'+EX.length+' exercises, '+SESS.length+' sessions, and what each session type does to the day\'s macros.</p></div>'+
+
+   '<div class="sec"><div class="grid g2">'+
+   '<div class="card pad"><h3 style="font-size:16px;margin-bottom:14px">Today</h3>'+
    '<label class="f"><span>Session</span><select id="tWorkout">'+
    Object.keys(TRAIN).map(function(k){return '<option value="'+k+'"'+(d.workout===k?' selected':'')+'>'+TRAIN[k].n+'</option>';}).join('')+
    '</select></label>'+
    '<label class="f"><span>Notes, lifts, PRs</span><textarea id="tNotes" rows="3" placeholder="Weighted pull-up 3x5 +25 lb">'+E(d.notes||'')+'</textarea></label>'+
    '<label class="f"><span>Bodyweight this morning</span><input id="tW" type="number" step="0.1" value="'+(d.w||'')+'"></label>'+
-   '<button class="b" id="tSave">Save</button></div>'+
-   '<div class="card pad"><h3 style="font-size:15px;margin-bottom:10px">Targets for this session</h3>'+
-   statRow(t)+'<div class="note" style="margin-top:12px">'+E(TRAIN[d.workout].why)+'</div>'+
-   '<div class="lbl" style="margin-top:14px">Last 7 days</div><div class="row" style="margin-top:8px">'+
-   wk.map(function(x){return '<span class="pill'+(x[1]&&x[1]!=='rest'?' on':'')+'" style="cursor:default">'+
-     shortD(x[0]).split(' ')[1]+' '+(x[1]?TRAIN[x[1]].n.split(' ')[0]:'-')+'</span>';}).join('')+
-   '</div></div></div></div>'+
-   '<div class="sec"><div class="spread"><h2>Sessions</h2>'+
-   '<button class="b o s" data-nav="training/exercises">Exercise database</button></div>'+
-   '<p class="sub">From the printable guide. Tap one to see the full session.</p>'+
-   '<div class="grid g3">'+SESS.map(function(s,i){
-     return '<button class="card pad" data-sess="'+i+'" style="text-align:left;cursor:pointer">'+
-     '<div style="font-weight:700;color:var(--ink);font-family:var(--fd);font-size:16px">'+E(s.name)+'</div>'+
-     '<div class="xs muted" style="margin-top:5px">'+s.ex.length+' exercises</div></button>';}).join('')+
+   '<button class="b" id="tSave">Save</button>'+
+   '<p class="xs muted" style="margin-top:10px">Logged as <b>'+E(ME())+'</b>. This appears on the schedule automatically.</p></div>'+
+   '<div class="card pad"><h3 style="font-size:16px;margin-bottom:12px">What the day needs</h3>'+
+   statRow(t)+'<div class="note" style="margin-bottom:0">'+E(TRAIN[d.workout].why)+'</div></div>'+
    '</div></div>'+
+
+   '<div class="sec"><h2>The week</h2><p class="sub">'+trained+' of the last 7 days trained.</p>'+
+   '<div class="card pad"><div class="row" style="gap:6px">'+
+   wk.map(function(x){
+     var on=x[1]&&x[1]!=='rest';
+     return '<div style="flex:1;min-width:64px;text-align:center;padding:12px 6px;border-radius:var(--r-s);'+
+     'border:1px solid '+(on?'var(--sage)':'var(--line)')+';background:'+(on?'rgba(127,168,127,.10)':'var(--panel-2)')+'">'+
+     '<div class="lbl">'+DOW[x[2].getDay()]+'</div>'+
+     '<div class="mono" style="font-size:15px;font-weight:700;margin-top:6px;color:'+(on?'var(--sage)':'var(--ink-4)')+'">'+
+     x[2].getDate()+'</div>'+
+     '<div class="xs muted" style="margin-top:4px">'+(x[1]?TRAIN[x[1]].n.split(/[ ,]/)[0]:'-')+'</div></div>';
+   }).join('')+'</div></div></div>'+
+
+   '<div class="sec"><div class="spread"><h2>Sessions</h2>'+
+   '<button class="b o s" data-nav="training/exercises">Exercise database &rarr;</button></div>'+
+   '<p class="sub">From the printable guide. Open one for the full list.</p>'+
+   '<div class="grid g3">'+SESS.map(function(x,i){
+     var kind=/skill/i.test(x.name)?'Skill':/upper/i.test(x.name)?'Upper':/lower/i.test(x.name)?'Lower':
+              /fallback|full/i.test(x.name)?'Full body':'Accessory';
+     return '<button class="card pad" data-sess="'+i+'" style="text-align:left;cursor:pointer;border-color:var(--line)">'+
+     '<div class="lbl" style="color:var(--brass)">'+kind+'</div>'+
+     '<div style="font-family:var(--f-disp);font-size:17px;font-weight:600;margin:8px 0 6px;color:var(--ink)">'+
+     E(x.name)+'</div>'+
+     '<div class="row" style="gap:5px"><span class="chip">'+x.ex.length+' exercises</span>'+
+     '<span class="chip">'+Math.round(x.ex.length*7)+' min</span></div></button>';}).join('')+
+   '</div></div>'+
+
    '<div class="sec"><h2>Macro shift by session</h2>'+
-   '<div class="tw"><table><thead><tr><th>Session</th><th>Kcal</th><th>Protein</th><th>Carbs</th>'+
-   '<th>Fat</th><th>Why</th></tr></thead><tbody>'+rows+'</tbody></table></div></div></div>';
+   '<p class="sub">Carbs swing roughly 50% across session types, protein about 8%. Glycogen is local '+
+   'and gets emptied by the session; protein demand is a daily total.</p>'+
+   '<div class="tw"><table><thead><tr><th>Session</th><th class="num">Kcal</th><th class="num">Protein</th>'+
+   '<th class="num">Carbs</th><th class="num">Fat</th><th>Leads with</th></tr></thead><tbody>'+
+   Object.keys(TRAIN).map(function(k){var tt=dayTarget(S.who,k),T2=TRAIN[k];
+     var lead=T2.c>=1.15?'Carbs':T2.p>=1.06?'Protein':T2.k<1?'Volume and fiber':'Balance';
+     return '<tr'+(d.workout===k?' style="background:var(--panel-2)"':'')+'>'+
+     '<td><b>'+T2.n+'</b>'+(d.workout===k?' <span class="chip t">today</span>':'')+'</td>'+
+     '<td class="num">'+N(tt.kcal)+'</td><td class="num">'+tt.p+' g</td>'+
+     '<td class="num">'+tt.c+' g</td><td class="num">'+tt.f+' g</td>'+
+     '<td class="sm muted">'+lead+'</td></tr>';}).join('')+
+   '</tbody></table></div></div></div>';
 }
 function vExercises(){
   var mgs=[];EX.forEach(function(e){if(mgs.indexOf(e.mg)<0)mgs.push(e.mg);});mgs.sort();
@@ -687,72 +745,126 @@ function vFinancial(sub){
   if(sub==='purchases') return vPurchases();
   if(sub==='actual') return vActual();
   var mode=S.fin.costMode||'real', path=S.fin.path||'rent';
-  var inc=finIncome('both',mode), cost=finCost(mode,path);
-  var gap=inc-cost;
+  var inc=finIncome('both',mode), cost=finCost(mode,path), gap=inc-cost;
   var byS={}; S.fin.costs.forEach(function(c){
     if(c.section==='Housing (rent)'&&path==='buy')return;
     if(c.section==='Housing (buy)'&&path!=='buy')return;
     byS[c.section]=(byS[c.section]||0)+(c[mode]||0);});
-  var scen=Object.keys(S.fin.scenarios||{});
+  var names=Object.keys(S.fin.scenarios||{});
+  var act=S.fin.activeScenario, dirty=scenDirty();
+  var cmp='';
+  if(names.length){
+    cmp='<div class="sec"><h2>Scenarios side by side</h2>'+
+      '<p class="sub">Each one stores every income and cost line as it was when saved.</p>'+
+      '<div class="tw"><table><thead><tr><th>Scenario</th><th>Basis</th><th>Housing</th>'+
+      '<th class="num">Income</th><th class="num">Costs</th><th class="num">Monthly</th>'+
+      '<th class="num">Yearly</th><th></th></tr></thead><tbody>'+
+      names.map(function(n){var sc=S.fin.scenarios[n];
+        var si=sc.jobs.reduce(function(a,j){return a+(j[sc.mode]||0);},0);
+        var scst=sc.costs.filter(function(c){
+          if(c.section==='Housing (rent)')return sc.path!=='buy';
+          if(c.section==='Housing (buy)')return sc.path==='buy';return true;})
+          .reduce(function(a,c){return a+(c[sc.mode]||0);},0);
+        var g=si-scst;
+        return '<tr'+(n===act?' style="background:var(--panel-2)"':'')+'>'+
+        '<td><b>'+E(n)+'</b>'+(n===act?' <span class="chip t">open</span>':'')+'</td>'+
+        '<td class="sm muted">'+E(sc.mode)+'</td><td class="sm muted">'+E(sc.path)+'</td>'+
+        '<td class="num">'+M(si)+'</td><td class="num">'+M(scst)+'</td>'+
+        '<td class="num" style="color:'+(g>=0?'var(--sage)':'var(--clay)')+'"><b>'+M(g)+'</b></td>'+
+        '<td class="num">'+M(g*12)+'</td>'+
+        '<td><button class="b o s" data-scload="'+E(n)+'">Open</button> '+
+        '<button class="x" data-scdel="'+E(n)+'">&times;</button></td></tr>';}).join('')+
+      '</tbody></table></div></div>';
+  }
   return '<div class="page"><div class="phead"><h1>Financial</h1>'+
-   '<p>Planning on the left, what actually happened on the right. Seeded from the Moving In workbook.</p></div>'+
+   '<p>Every income and cost line, saved into scenarios you can compare. Nothing overwrites a saved '+
+   'scenario until you press Save.</p></div>'+
 
-   '<div class="sec"><div class="spread"><h2>The plan</h2>'+
-   '<div class="row"><button class="b o s" data-nav="financial/actual">Actual earnings</button>'+
+   '<div class="sec"><div class="spread"><h2>'+(act?E(act):'Working numbers')+'</h2>'+
+   '<div class="row">'+(dirty?'<span class="dirty">Unsaved changes</span>':'')+
+   '<button class="b o s" data-nav="financial/actual">Actual earnings</button>'+
    '<button class="b o s" data-nav="financial/purchases">Big purchases</button></div></div>'+
+
    '<div class="card pad"><div class="fr">'+
-   '<label class="f"><span>Scenario</span><select id="finMode">'+
-   opt([['low','Lean (low estimates)'],['real','Realistic'],['high','Good month (high)'],
+   '<label class="f"><span>Which estimate column</span><select id="finMode">'+
+   opt([['low','Lean (low)'],['real','Realistic'],['high','Good month (high)'],
         ['actual','Actual / researched']],mode)+'</select></label>'+
    '<label class="f"><span>Housing path</span><select id="finPath">'+
    opt([['rent','Renting'],['buy','Buying']],path)+'</select></label>'+
-   '<label class="f"><span>Saved scenarios</span><select id="finScen">'+
-   opt([['','-- pick --']].concat(scen.map(function(s){return [s,s];})),'')+'</select></label>'+
-   '</div><div class="row"><button class="b o s" id="scenSave">Save this as a scenario</button>'+
-   (scen.length?'<button class="b o s dz" id="scenDel">Delete selected</button>':'')+'</div></div>'+
+   '<label class="f"><span>Open a scenario</span><select id="finScen">'+
+   opt([['','-- working numbers --']].concat(names.map(function(n){return [n,n];})),act||'')+
+   '</select></label></div>'+
+   '<div class="row">'+
+   '<button class="b" id="scenNew">New scenario</button>'+
+   (act?'<button class="b'+(dirty?'':' o')+'" id="scenUpdate">Save to "'+E(act)+'"</button>'+
+        '<button class="b o" id="scenRevert">Revert</button>':'')+
+   '<button class="b o" id="scenSaveAs">Save as new</button>'+
+   '</div>'+
+   (dirty?'<div class="note warn" style="margin-bottom:0"><b>Not saved.</b> '+
+     'Changes to income or cost lines are live on screen but "'+E(act)+'" still holds the old figures. '+
+     'Save to keep them, or Revert to throw them away.</div>':'')+
+   '</div>'+
+
    '<div class="stats" style="margin-top:14px">'+
    '<div class="stat"><b>'+M(inc)+'</b><span>Income / mo</span></div>'+
    '<div class="stat"><b>'+M(cost)+'</b><span>Costs / mo</span></div>'+
-   '<div class="stat '+(gap>=0?'acc':'')+'" '+(gap<0?'style="background:var(--clay)"':'')+'>'+
-   '<b style="color:#fff">'+M(gap)+'</b><span style="color:rgba(255,255,255,.7)">'+(gap>=0?'Surplus':'Shortfall')+'</span></div>'+
+   '<div class="stat '+(gap>=0?'good':'bad')+'"><b>'+M(gap)+'</b><span>'+
+   (gap>=0?'Surplus':'Shortfall')+'</span></div>'+
    '<div class="stat"><b>'+M(gap*12)+'</b><span>Per year</span></div></div>'+
-   (gap<0?'<div class="note" style="border-left-color:var(--clay)"><b>The gap is real.</b> '+
-     'At these numbers we are '+M(-gap)+' short every month. Either income has to rise by that, '+
-     'or costs have to fall. The Strategies list in the workbook is where the levers are.</div>':'')+
-   '</div>'+
+   (gap<0?'<div class="note warn"><b>The gap is real.</b> At these numbers we are '+M(-gap)+
+     ' short every month. Income has to rise by that, or costs have to fall.</div>':'')+
+   '</div>'+cmp+
 
    '<div class="sec"><h2>Where the money goes</h2><div class="grid g2">'+
-   '<div class="card pad"><h3 style="font-size:15px;margin-bottom:12px">By section</h3>'+
+   '<div class="card pad"><h3 style="font-size:15px;margin-bottom:12px">Costs by section</h3>'+
    Object.keys(byS).sort(function(a,b){return byS[b]-byS[a];}).map(function(k){
      var pct=cost?byS[k]/cost*100:0;
      return '<div class="mrow"><div class="spread"><span>'+E(k)+'</span><em>'+M(byS[k])+'</em></div>'+
-     '<div class="bar"><i class="pk" style="width:'+pct+'%"></i></div></div>';}).join('')+
-   '</div>'+
+     '<div class="bar"><i class="pk" style="width:'+pct+'%"></i></div></div>';}).join('')+'</div>'+
    '<div class="card pad"><h3 style="font-size:15px;margin-bottom:12px">Income by person</h3>'+
-   ['Jaron','Aaliyah','Both'].map(function(w){var v=S.fin.jobs.filter(function(j){return j.who===w;})
-     .reduce(function(a,j){return a+(j[mode]||0);},0);
-     if(!v)return '';var pct=inc?v/inc*100:0;
-     return '<div class="mrow"><div class="spread"><span>'+E(w==='Both'?'Shared / gig':w)+'</span><em>'+M(v)+'</em></div>'+
-     '<div class="bar"><i class="pp" style="width:'+pct+'%"></i></div></div>';}).join('')+
-   '<button class="b o s" id="jobAdd" style="margin-top:10px">Add a job or income</button></div></div></div>'+
+   ['Jaron','Aaliyah','Both'].map(function(w){
+     var v=S.fin.jobs.filter(function(j){return j.who===w;})
+       .reduce(function(a,j){return a+(j[mode]||0);},0);
+     if(!v)return ''; var pct=inc?v/inc*100:0;
+     return '<div class="mrow"><div class="spread"><span>'+E(w==='Both'?'Shared / gig':w)+'</span>'+
+     '<em>'+M(v)+'</em></div><div class="bar"><i class="pp" style="width:'+pct+'%"></i></div></div>';
+   }).join('')+'<button class="b o s" id="jobAdd" style="margin-top:10px">Add income</button></div>'+
+   '</div></div>'+
 
    '<div class="sec"><div class="spread"><h2>Income lines</h2>'+
    '<button class="b o s" id="jobAdd2">Add</button></div><div class="tw"><table>'+
-   '<thead><tr><th>Who</th><th>Name</th><th>Employer</th><th>Low</th><th>Realistic</th><th>High</th><th></th></tr></thead><tbody>'+
-   S.fin.jobs.map(function(j){return '<tr><td><span class="chip">'+E(j.who)+'</span></td>'+
-     '<td><b>'+E(j.name)+'</b></td><td class="sm muted">'+E(j.employer||'')+'</td>'+
-     '<td>'+M(j.low)+'</td><td><b>'+M(j.real)+'</b></td><td>'+M(j.high)+'</td>'+
+   '<thead><tr><th>Who</th><th>Name</th><th>Employer</th><th class="num">Low</th>'+
+   '<th class="num">Realistic</th><th class="num">High</th><th class="num">Actual</th><th></th></tr></thead><tbody>'+
+   S.fin.jobs.map(function(j){
+     return '<tr><td><span class="chip">'+E(j.who)+'</span></td><td><b>'+E(j.name)+'</b>'+
+     (j.rate?'<div class="xs muted">'+$$$(j.rate)+'/hr</div>':'')+'</td>'+
+     '<td class="sm muted">'+E(j.employer||'')+'</td>'+
+     '<td class="num">'+M(j.low)+'</td><td class="num"><b>'+M(j.real)+'</b></td>'+
+     '<td class="num">'+M(j.high)+'</td>'+
+     '<td class="num">'+(j.actual?M(j.actual):'<span class="muted">-</span>')+'</td>'+
      '<td><button class="b o s" data-jobe="'+j.id+'">Edit</button></td></tr>';}).join('')+
+   '<tr style="background:var(--panel-2)"><td colspan="3"><b>Total</b></td>'+
+   '<td class="num"><b>'+M(finIncome('both','low'))+'</b></td>'+
+   '<td class="num"><b>'+M(finIncome('both','real'))+'</b></td>'+
+   '<td class="num"><b>'+M(finIncome('both','high'))+'</b></td>'+
+   '<td class="num"><b>'+M(finIncome('both','actual'))+'</b></td><td></td></tr>'+
    '</tbody></table></div></div>'+
 
    '<div class="sec"><div class="spread"><h2>Cost lines</h2>'+
    '<button class="b o s" id="costAdd">Add</button></div><div class="tw"><table>'+
-   '<thead><tr><th>Section</th><th>Cost</th><th>Who</th><th>Low</th><th>Realistic</th><th>High</th><th>Actual</th><th></th></tr></thead><tbody>'+
+   '<thead><tr><th>Section</th><th>Cost</th><th>Who</th><th class="num">Low</th>'+
+   '<th class="num">Realistic</th><th class="num">High</th><th class="num">Actual</th><th></th></tr></thead><tbody>'+
    S.fin.costs.map(function(c){return '<tr><td class="sm muted">'+E(c.section)+'</td>'+
      '<td><b>'+E(c.name)+'</b></td><td><span class="chip">'+E(c.who)+'</span></td>'+
-     '<td>'+M(c.low)+'</td><td><b>'+M(c.real)+'</b></td><td>'+M(c.high)+'</td>'+
-     '<td>'+(c.actual?M(c.actual):'-')+'</td>'+
+     '<td class="num">'+M(c.low)+'</td><td class="num"><b>'+M(c.real)+'</b></td>'+
+     '<td class="num">'+M(c.high)+'</td>'+
+     '<td class="num">'+(c.actual?M(c.actual):'<span class="muted">-</span>')+'</td>'+
      '<td><button class="b o s" data-coste="'+c.id+'">Edit</button></td></tr>';}).join('')+
+   '<tr style="background:var(--panel-2)"><td colspan="3"><b>Total</b></td>'+
+   '<td class="num"><b>'+M(finCost('low',path))+'</b></td>'+
+   '<td class="num"><b>'+M(finCost('real',path))+'</b></td>'+
+   '<td class="num"><b>'+M(finCost('high',path))+'</b></td>'+
+   '<td class="num"><b>'+M(finCost('actual',path))+'</b></td><td></td></tr>'+
    '</tbody></table></div></div></div>';
 }
 function vActual(){
@@ -819,6 +931,42 @@ function vPurchases(){
 /* ============================ SCHEDULE ============================ */
 var DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 var calY=new Date().getFullYear(), calM=new Date().getMonth(), calSel=today();
+function dayTimeline(ds){
+  var d=dayLog(ds), out=[];
+  (d.sched||[]).forEach(function(e,i){
+    out.push({t:e.from||'',kind:'e',who:e.who,title:e.what,
+      sub:[(e.from?e.from+(e.to?' - '+e.to:''):''),e.where||''].filter(Boolean).join('  \u00B7  '),
+      rm:i});});
+  if(d.workout&&d.workout!=='rest')
+    out.push({t:d.trainAt||'17:30',kind:'w',who:d.trainWho||ME(),
+      title:TRAIN[d.workout].n,sub:'Training  \u00B7  auto from the Training tab'});
+  (d.meals||[]).forEach(function(mm,i){
+    var r=byId(mm.id); if(!r)return;
+    out.push({t:mm.at||defMealTime(i),kind:'m',who:mm.who||ME(),title:r.n,
+      sub:Math.round(r.k*(mm.q||1))+' kcal  \u00B7  '+Math.round(r.p*(mm.q||1))+' g protein  \u00B7  '+
+        $$$(cps(r)*(mm.q||1)),mi:i});});
+  (d.spend||[]).forEach(function(x,i){
+    out.push({t:x.at||'',kind:'s',who:x.who,title:x.what,sub:$$$(x.amt),si:i});});
+  out.sort(function(a,b){
+    if(!a.t&&!b.t)return 0; if(!a.t)return 1; if(!b.t)return -1;
+    return a.t<b.t?-1:a.t>b.t?1:0;});
+  return out;
+}
+function defMealTime(i){return ['08:00','12:30','16:00','19:00','21:00'][i]||'20:00';}
+function tl(ds){
+  var items=dayTimeline(ds);
+  if(!items.length) return '<div class="empty sm"><p>Nothing on this day yet.</p>'+
+    '<p class="xs">Training and meals logged elsewhere show up here automatically.</p></div>';
+  return '<ul class="tl">'+items.map(function(x){
+    return '<li><div class="tm">'+(x.t?E(x.t):'&mdash;')+'</div>'+
+    '<span class="pip '+x.kind+'"></span><div class="bd">'+
+    '<div class="ti">'+E(x.title)+' <span class="chip">'+E(x.who||'Both')+'</span></div>'+
+    (x.sub?'<div class="ts">'+E(x.sub)+'</div>':'')+'</div>'+
+    (x.rm!=null?'<button class="x" data-evd="'+x.rm+'">&times;</button>':'')+
+    (x.mi!=null?'<button class="x" data-mld="'+x.mi+'">&times;</button>':'')+
+    (x.si!=null?'<button class="x" data-spd="'+x.si+'">&times;</button>':'')+
+    '</li>';}).join('')+'</ul>';
+}
 function vSchedule(sub){
   if(sub==='week') return vWeekTemplate();
   var first=new Date(calY,calM,1), start=first.getDay(), days=new Date(calY,calM+1,0).getDate();
@@ -826,53 +974,45 @@ function vSchedule(sub){
   for(var i=0;i<start;i++)cells+='<div class="day out"></div>';
   for(var dn=1;dn<=days;dn++){
     var ds=calY+'-'+p2(calM+1)+'-'+p2(dn), rec=S.days[ds];
-    var ev=rec&&rec.sched?rec.sched.length:0;
+    var n=rec?dayTimeline(ds).length:0;
     cells+='<div class="day'+(ds===today()?' today':'')+(ds===calSel?' sel':'')+'" data-d="'+ds+'">'+
       '<span class="dn">'+dn+'</span><span class="dots">'+
-      (rec&&rec.meals.length?'<i class="dot"></i>':'')+
+      (rec&&rec.sched&&rec.sched.length?'<i class="dot e"></i>':'')+
       (rec&&rec.workout&&rec.workout!=='rest'?'<i class="dot w"></i>':'')+
-      (ev?'<i class="dot" style="background:var(--plum)"></i>':'')+'</span>'+
-      '<span class="dk">'+(ev?ev+' ev':'')+'</span></div>';}
+      (rec&&rec.meals&&rec.meals.length?'<i class="dot m"></i>':'')+
+      '</span><span class="dk">'+(n||'')+'</span></div>';}
   var d=dayLog(calSel), t=dayTarget(S.who,d.workout), got=eaten(calSel);
   var spend=(d.spend||[]).reduce(function(a,x){return a+(x.amt||0);},0);
   return '<div class="page"><div class="phead"><h1>Schedule</h1>'+
-   '<p>What each of us is doing, when we are both free, and what the day cost.</p></div>'+
+   '<p>Everything either of us is doing that day, in time order. Training and meals appear here on '+
+   'their own from the other tabs.</p></div>'+
    '<div class="row" style="margin-bottom:14px"><button class="b o" data-nav="schedule/week">Weekly template</button>'+
-   '<button class="b o" id="calCsv">Export the log</button>'+
-   '<button class="b o" id="applyTmpl">Apply template to this week</button></div>'+
+   '<button class="b o" id="applyTmpl">Apply template to this week</button>'+
+   '<button class="b o" id="calCsv">Export the log</button></div>'+
    '<div class="card pad"><div class="spread" style="margin-bottom:12px">'+
    '<button class="b o s" id="cPrev">&larr;</button>'+
    '<h3>'+new Date(calY,calM,1).toLocaleDateString(undefined,{month:'long',year:'numeric'})+'</h3>'+
    '<button class="b o s" id="cNext">&rarr;</button></div>'+
    '<div class="cal">'+DOW.map(function(x){return '<div class="dow">'+x+'</div>';}).join('')+cells+'</div>'+
-   '<div class="row sm muted" style="margin-top:12px"><span><i class="dot" style="display:inline-block"></i> meals</span>'+
+   '<div class="row xs muted" style="margin-top:12px">'+
+   '<span><i class="dot e" style="display:inline-block"></i> plans</span>'+
    '<span><i class="dot w" style="display:inline-block"></i> training</span>'+
-   '<span><i class="dot" style="display:inline-block;background:var(--plum)"></i> plans</span></div></div>'+
-   '<div class="sec"><h2>'+pretty(calSel)+'</h2><div class="grid g2">'+
-   '<div class="card pad"><div class="spread"><h3 style="font-size:15px">Plans</h3>'+
-   '<button class="b o s" id="evAdd">Add</button></div>'+
-   ((d.sched||[]).length?'<div style="margin-top:10px">'+d.sched.map(function(ev,i){
-     return '<div class="gitem"><span class="chip'+(ev.who==='Aaliyah'?' t':'')+'">'+E(ev.who)+'</span>'+
-     '<div style="flex:1"><div class="gn">'+E(ev.what)+'</div>'+
-     '<div class="gq">'+E(ev.from||'')+(ev.to?' - '+E(ev.to):'')+(ev.where?' &middot; '+E(ev.where):'')+'</div></div>'+
-     '<button class="x" data-evd="'+i+'">&times;</button></div>';}).join('')+'</div>'
-     :'<div class="empty sm">Nothing planned.</div>')+
-   freeSlots(d)+'</div>'+
-   '<div class="card pad"><h3 style="font-size:15px;margin-bottom:10px">The day</h3>'+
+   '<span><i class="dot m" style="display:inline-block"></i> meals</span></div></div>'+
+   '<div class="sec"><div class="spread"><h2>'+pretty(calSel)+'</h2>'+
+   '<div class="row"><button class="b" id="evAdd">Add plan</button>'+
+   '<button class="b o" id="mealAdd">Log meal</button>'+
+   '<button class="b o" id="spAdd">Log spend</button></div></div>'+
+   '<div class="grid g2"><div class="card pad">'+tl(calSel)+freeSlots(d)+'</div>'+
+   '<div class="card pad"><h3 style="font-size:15px;margin-bottom:12px">The day</h3>'+
    '<label class="f"><span>Training</span><select id="schWorkout">'+
    Object.keys(TRAIN).map(function(k){return '<option value="'+k+'"'+(d.workout===k?' selected':'')+'>'+TRAIN[k].n+'</option>';}).join('')+
    '</select></label>'+
+   (d.workout!=='rest'?'<label class="f"><span>Session time</span><input id="schTrainAt" type="time" value="'+(d.trainAt||'17:30')+'"></label>':'')+
    bar('Calories',got.kcal,t.kcal,'pk')+bar('Protein',got.p,t.p,'pp')+
-   '<div class="spread sm" style="margin-top:12px"><span class="muted">Food logged</span><b>'+$$$(got.cost)+'</b></div>'+
+   '<div class="spread sm" style="margin-top:12px"><span class="muted">Food</span><b>'+$$$(got.cost)+'</b></div>'+
    '<div class="spread sm"><span class="muted">Other spend</span><b>'+$$$(spend)+'</b></div>'+
    '<div class="spread" style="margin-top:6px;padding-top:8px;border-top:1px solid var(--line)">'+
-   '<span><b>Day total</b></span><b style="color:var(--forest)">'+$$$(got.cost+spend)+'</b></div>'+
-   '<div class="row" style="margin-top:12px"><button class="b o s" id="spAdd">Log a spend</button>'+
-   '<button class="b o s" id="mealAdd">Log a meal</button></div>'+
-   ((d.spend||[]).length?'<div style="margin-top:10px">'+d.spend.map(function(x,i){
-     return '<div class="spread sm" style="padding:5px 0;border-bottom:1px solid var(--line)">'+
-     '<span>'+E(x.what)+' <span class="chip">'+E(x.who||'Both')+'</span></span>'+
-     '<span><b>'+$$$(x.amt)+'</b> <button class="x" data-spd="'+i+'">&times;</button></span></div>';}).join('')+'</div>':'')+
+   '<span><b>Day total</b></span><b style="color:var(--brass)">'+$$$(got.cost+spend)+'</b></div>'+
    '</div></div></div></div>';
 }
 function freeSlots(d){
@@ -899,21 +1039,22 @@ function freeSlots(d){
 function vWeekTemplate(){
   var t=S.sched.tmpl||{};
   return '<div class="page"><div class="phead"><h1>Weekly template</h1>'+
-   '<p>The normal week. Put the regular stuff here once, then push it onto the calendar whenever.</p></div>'+
+   '<p>The regular week: work, class, church, gym. Put it in once with times and places, then push '+
+   'it onto any week.</p></div>'+
    '<div class="row" style="margin-bottom:14px"><button class="b o" data-nav="schedule">&larr; Calendar</button>'+
    '<button class="b" id="applyTmpl2">Apply to this week</button></div>'+
-   '<div class="grid g3">'+DOW.map(function(dn,i){var items=t[i]||[];
+   '<div class="grid g3">'+DOW.map(function(dn,i){
+     var items=(t[i]||[]).slice().sort(function(a,b){return (a.from||'')<(b.from||'')?-1:1;});
      return '<div class="card pad"><div class="spread"><h3 style="font-size:16px">'+dn+'</h3>'+
      '<button class="b o s" data-tadd="'+i+'">Add</button></div>'+
-     (items.length?'<div style="margin-top:10px">'+items.map(function(x,j){
-       return '<div class="gitem" style="padding:8px 0"><span class="chip'+(x.who==='Aaliyah'?' t':'')+'">'+E(x.who)+'</span>'+
-       '<div style="flex:1"><div class="gn" style="font-size:13.5px">'+E(x.what)+'</div>'+
-       '<div class="gq">'+E(x.from||'')+(x.to?' - '+E(x.to):'')+'</div></div>'+
-       '<button class="x" data-td="'+i+'|'+j+'">&times;</button></div>';}).join('')+'</div>'
-       :'<p class="empty sm" style="padding:16px 0">Nothing regular.</p>')+'</div>';}).join('')+
+     (items.length?'<ul class="tl" style="margin-top:12px">'+items.map(function(x,j){
+       return '<li><div class="tm">'+E(x.from||'')+'</div><span class="pip e"></span>'+
+       '<div class="bd"><div class="ti">'+E(x.what)+' <span class="chip">'+E(x.who)+'</span></div>'+
+       '<div class="ts">'+[(x.from?x.from+(x.to?' - '+x.to:''):''),x.where||''].filter(Boolean).join('  \u00B7  ')+
+       '</div></div><button class="x" data-td="'+i+'|'+j+'">&times;</button></li>';}).join('')+'</ul>'
+       :'<p class="empty sm" style="padding:14px 0">Nothing regular.</p>')+'</div>';}).join('')+
    '</div></div>';
 }
-
 /* ============================ shared UI ============================ */
 function statRow(t){
   return '<div class="stats"><div class="stat acc"><b>'+N(t.kcal)+'</b><span>Calories</span></div>'+
@@ -964,6 +1105,9 @@ function chrome(){
     ICO[t[0]]+'</svg><span>'+t[1]+'</span></button>';}).join('');
   $('#who').innerHTML=['j','a'].map(function(k){return '<button data-w="'+k+'"'+
     (S.who===k?' class="on"':'')+'>'+E(S.prof[k].name)+'</button>';}).join('');
+  var g=$('#settings');
+  if(g) g.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">'+
+    '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6h.09A1.65 1.65 0 0010.6 3.09V3a2 2 0 114 0v.09A1.65 1.65 0 0015 4.6a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9v.09A1.65 1.65 0 0021 10.6a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>';
 }
 function route(){
   var h=(location.hash||'#/meals').slice(2).split('/'), v=h[0]||'meals', sub=h[1]||'';
@@ -1016,7 +1160,8 @@ function bind(){
     on('#exhero','click',function(){exFlt.hero=!exFlt.hero;this.classList.toggle('on');drawEx();});
   }
   if(v==='training'&&h[1]!=='exercises'){
-    on('#tWorkout','change',function(){dayLog(today()).workout=this.value;save();route();});
+    on('#tWorkout','change',function(){var dd=dayLog(today());dd.workout=this.value;
+    dd.trainWho=ME(); if(!dd.trainAt)dd.trainAt='17:30'; save();route();});
     on('#tSave','click',function(){var d=dayLog(today());d.notes=$('#tNotes').value;
       var w=parseFloat($('#tW').value); if(w)d.w=w; save();toast('Saved');});
   }
@@ -1139,15 +1284,26 @@ function shopCsv(){
 function bindFin(sub){
   on('#finMode','change',function(){S.fin.costMode=this.value;save();route();});
   on('#finPath','change',function(){S.fin.path=this.value;save();route();});
-  on('#finScen','change',function(){var s=S.fin.scenarios[this.value];
-    if(s){S.fin.costMode=s.mode;S.fin.path=s.path;save();route();toast('Loaded '+this.value);}});
-  on('#scenSave','click',function(){
-    var n=prompt('Name this scenario','e.g. Renting, both grinding'); if(!n)return;
-    S.fin.scenarios[n]={mode:S.fin.costMode||'real',path:S.fin.path||'rent',
-      inc:finIncome('both',S.fin.costMode||'real'),cost:finCost(S.fin.costMode||'real',S.fin.path||'rent'),
-      saved:today()}; save();route();toast('Scenario saved');});
-  on('#scenDel','click',function(){var v=$('#finScen').value;
-    if(v&&confirm('Delete "'+v+'"?')){delete S.fin.scenarios[v];save();route();}});
+  on('#finScen','change',function(){
+    var v=this.value;
+    if(!v){S.fin.activeScenario=null;save();route();return;}
+    if(scenDirty()&&!confirm('"'+S.fin.activeScenario+'" has unsaved changes. Open "'+v+
+      '" anyway and lose them?')){route();return;}
+    scenLoad(v);route();toast('Opened '+v);});
+  on('#scenNew','click',function(){
+    var n=prompt('Name the new scenario','Renting, both grinding'); if(!n)return;
+    if(S.fin.scenarios[n]&&!confirm('"'+n+'" exists. Overwrite it?'))return;
+    scenSave(n);route();toast('"'+n+'" created from the current numbers');});
+  on('#scenSaveAs','click',function(){
+    var n=prompt('Save these numbers as','Copy of '+(S.fin.activeScenario||'working')); if(!n)return;
+    scenSave(n);route();toast('Saved as "'+n+'"');});
+  on('#scenUpdate','click',function(){
+    if(!S.fin.activeScenario)return;
+    scenSave(S.fin.activeScenario);route();toast('Saved');});
+  on('#scenRevert','click',function(){
+    if(!S.fin.activeScenario)return;
+    if(!confirm('Throw away the changes and go back to the saved "'+S.fin.activeScenario+'"?'))return;
+    scenRevert();route();toast('Reverted');});
   ['#jobAdd','#jobAdd2'].forEach(function(s){on(s,'click',function(){jobEditor(null);});});
   on('#costAdd','click',function(){costEditor(null);});
   on('#shAdd','click',function(){shiftEditor();});
@@ -1249,7 +1405,9 @@ function bpItemEditor(listName){
 function bindSched(sub){
   on('#cPrev','click',function(){calM--;if(calM<0){calM=11;calY--;}route();});
   on('#cNext','click',function(){calM++;if(calM>11){calM=0;calY++;}route();});
-  on('#schWorkout','change',function(){dayLog(calSel).workout=this.value;save();route();});
+  on('#schWorkout','change',function(){var dd=dayLog(calSel);dd.workout=this.value;
+    dd.trainWho=ME(); if(!dd.trainAt)dd.trainAt='17:30'; save();route();});
+  on('#schTrainAt','change',function(){dayLog(calSel).trainAt=this.value;save();route();});
   on('#evAdd','click',function(){evEditor(calSel);});
   on('#spAdd','click',function(){spendEditor(calSel);});
   on('#mealAdd','click',function(){mealPicker(calSel);});
@@ -1265,7 +1423,7 @@ function bindSched(sub){
 }
 function evEditor(ds){
   var m=modal('Add to '+shortD(ds),
-    form([{id:'ew',l:'Who',t:'select',o:[['Jaron','Jaron'],['Aaliyah','Aaliyah'],['Both','Both of us']],v:S.who==='j'?'Jaron':'Aaliyah'},
+    form([{id:'ew',l:'Who',t:'select',o:whoOpts(),v:ME()},
       {id:'ex',l:'What',v:'',ph:'Class, shift, gym'},
       {id:'ef',l:'From',t:'time',v:'09:00'},{id:'et',l:'To',t:'time',v:'17:00'},
       {id:'el',l:'Where',v:''}]),
@@ -1277,13 +1435,14 @@ function evEditor(ds){
 }
 function spendEditor(ds){
   var m=modal('Log a spend',
-    form([{id:'sw',l:'Who',t:'select',o:[['Both','Both'],['Jaron','Jaron'],['Aaliyah','Aaliyah']],v:'Both'},
+    form([{id:'sw',l:'Who',t:'select',o:whoOpts(),v:ME()},
       {id:'sx',l:'What',v:'',ph:'Gas, coffee, parts'},
-      {id:'sa',l:'Amount',t:'number',step:'0.01',v:''}]),
+      {id:'sa',l:'Amount',t:'number',step:'0.01',v:''},
+      {id:'sat',l:'Time',t:'time',v:''}]),
     '<button class="b o" data-close>Cancel</button><button class="b" id="spSave">Add</button>');
   $('#spSave',m).onclick=function(){
     dayLog(ds).spend.push({who:$('#sw',m).value,what:$('#sx',m).value.trim()||'Spend',
-      amt:num($('#sa',m).value)});
+      amt:num($('#sa',m).value),at:$('#sat',m).value});
     save();m.remove();route();};
 }
 function mealPicker(ds){
@@ -1298,19 +1457,20 @@ function mealPicker(ds){
       '<div class="xs muted">'+Math.round(r.k)+' kcal &middot; '+Math.round(r.p)+'g protein &middot; '+$$$(cps(r))+'</div></div>'+
       '<span class="b s">Add</span></div>';}).join('');
     $$('[data-a]',m).forEach(function(row){row.onclick=function(){
-      dayLog(ds).meals.push({id:row.dataset.a,q:1});save();toast('Logged');};});}
+      var dd=dayLog(ds);dd.meals.push({id:row.dataset.a,q:1,who:ME(),at:defMealTime(dd.meals.length)});save();toast('Logged for '+ME());};});}
   draw('');$('#mpq',m).oninput=function(){draw(this.value);};
 }
 function tmplEditor(dayIdx){
-  var m=modal('Regular '+DOW[dayIdx],
-    form([{id:'tw',l:'Who',t:'select',o:[['Jaron','Jaron'],['Aaliyah','Aaliyah'],['Both','Both of us']],v:S.who==='j'?'Jaron':'Aaliyah'},
-      {id:'tx',l:'What',v:'',ph:'Work, class, gym'},
+  var m=modal('Every '+DOW[dayIdx],
+    form([{id:'tw',l:'Who',t:'select',o:whoOpts(),v:ME()},
+      {id:'tx',l:'What',v:'',ph:'Church, work, class, gym'},
+      {id:'tl',l:'Where',v:'',ph:'Fort Collins SDA, the shop, CSU'},
       {id:'tf',l:'From',t:'time',v:'09:00'},{id:'tt',l:'To',t:'time',v:'17:00'}]),
     '<button class="b o" data-close>Cancel</button><button class="b" id="tSave2">Add</button>');
   $('#tSave2',m).onclick=function(){
     if(!S.sched.tmpl[dayIdx])S.sched.tmpl[dayIdx]=[];
     S.sched.tmpl[dayIdx].push({who:$('#tw',m).value,what:$('#tx',m).value.trim()||'Busy',
-      from:$('#tf',m).value,to:$('#tt',m).value});
+      where:$('#tl',m).value.trim(),from:$('#tf',m).value,to:$('#tt',m).value});
     save();m.remove();route();};
 }
 function applyTemplate(){
@@ -1322,7 +1482,7 @@ function applyTemplate(){
     (t[i]||[]).forEach(function(x){
       var log=dayLog(ds);
       var dupe=log.sched.some(function(e){return e.what===x.what&&e.who===x.who&&e.from===x.from;});
-      if(!dupe){log.sched.push({who:x.who,what:x.what,from:x.from,to:x.to,where:''});n++;}
+      if(!dupe){log.sched.push({who:x.who,what:x.what,from:x.from,to:x.to,where:x.where||''});n++;}
     });
   }
   save();route();toast(n?n+' items added to this week':'Already applied');
@@ -1337,8 +1497,9 @@ document.addEventListener('click',function(e){
     var id=el.dataset.fav,i=S.fav.indexOf(id);
     if(i>=0)S.fav.splice(i,1);else S.fav.push(id); save();route();return;}
   if((el=e.target.closest('[data-go]'))){nav('r/'+el.dataset.go);return;}
-  if((el=e.target.closest('[data-log]'))){dayLog(today()).meals.push({id:el.dataset.log,q:1});
-    save();toast('Logged to today');return;}
+  if((el=e.target.closest('[data-log]'))){var dt=dayLog(today());
+    dt.meals.push({id:el.dataset.log,q:1,who:ME(),at:defMealTime(dt.meals.length)});
+    save();toast('Logged to today for '+ME());return;}
   if((el=e.target.closest('[data-groc]'))){addRecipeToShop(byId(el.dataset.groc));
     toast('Added to '+S.shop.active);return;}
   if((el=e.target.closest('[data-tolist]'))){listModal(el.dataset.tolist);return;}
@@ -1355,6 +1516,14 @@ document.addEventListener('click',function(e){
   if((el=e.target.closest('[data-coste]'))){costEditor(el.dataset.coste);return;}
   if((el=e.target.closest('[data-shd]'))){S.fin.shifts=S.fin.shifts.filter(function(x){
     return x.id!==el.dataset.shd;});save();route();return;}
+  if((el=e.target.closest('[data-scload]'))){
+    if(scenDirty()&&!confirm('Unsaved changes will be lost. Continue?')){return;}
+    scenLoad(el.dataset.scload);route();toast('Opened '+el.dataset.scload);return;}
+  if((el=e.target.closest('[data-scdel]'))){
+    if(confirm('Delete scenario "'+el.dataset.scdel+'"?')){
+      delete S.fin.scenarios[el.dataset.scdel];
+      if(S.fin.activeScenario===el.dataset.scdel)S.fin.activeScenario=null;
+      save();route();}return;}
   if((el=e.target.closest('[data-bpadd]'))){bpItemEditor(el.dataset.bpadd);return;}
   if((el=e.target.closest('[data-bpdel]'))){if(confirm('Delete list?')){
     delete S.fin.purchases[el.dataset.bpdel];save();route();}return;}
@@ -1363,14 +1532,80 @@ document.addEventListener('click',function(e){
   if((el=e.target.closest('[data-d]'))){calSel=el.dataset.d;route();return;}
   if((el=e.target.closest('[data-evd]'))){dayLog(calSel).sched.splice(+el.dataset.evd,1);save();route();return;}
   if((el=e.target.closest('[data-spd]'))){dayLog(calSel).spend.splice(+el.dataset.spd,1);save();route();return;}
+  if((el=e.target.closest('[data-mld]'))){dayLog(calSel).meals.splice(+el.dataset.mld,1);save();route();return;}
   if((el=e.target.closest('[data-tadd]'))){tmplEditor(+el.dataset.tadd);return;}
   if((el=e.target.closest('[data-td]'))){var q=el.dataset.td.split('|');
     S.sched.tmpl[q[0]].splice(+q[1],1);save();route();return;}
-  if(e.target.id==='saveFile'){exportAll();return;}
-  if(e.target.id==='loadFile'){var i=document.createElement('input');i.type='file';i.accept='.json';
-    i.onchange=function(){importAll(i.files[0],function(ok){if(ok){toast('Loaded');route();}});};
-    i.click();return;}
+  if(e.target.closest('#settings')){settingsModal();return;}
 });
+function settingsModal(){
+  var when=S.savedAt?new Date(S.savedAt).toLocaleString():'never';
+  var size=0; try{size=(localStorage.getItem(KEY)||'').length;}catch(e){}
+  var body=
+   '<h4 class="lbl">Your data</h4>'+
+   '<p class="sm muted" style="margin:8px 0 14px">Everything lives in this browser on this device. '+
+   'Nothing is uploaded. Save to a file to move it, back it up, or hand it over for changes.</p>'+
+   '<div class="stats" style="margin-bottom:16px">'+
+   '<div class="stat"><b>'+all().length+'</b><span>Recipes</span></div>'+
+   '<div class="stat"><b>'+Object.keys(S.ingOv).length+'</b><span>Ingredient edits</span></div>'+
+   '<div class="stat"><b>'+Object.keys(S.days).length+'</b><span>Days logged</span></div>'+
+   '<div class="stat"><b>'+Math.round(size/1024)+'k</b><span>Stored</span></div></div>'+
+   '<div class="row" style="margin-bottom:18px">'+
+   '<button class="b" id="stSave">Save to a file</button>'+
+   '<button class="b o" id="stLoad">Load a file</button></div>'+
+   '<p class="xs muted">Last saved: '+E(when)+'</p>'+
+   '<div class="hr"></div>'+
+   '<h4 class="lbl">Profiles</h4><div class="fr" style="margin-top:10px">'+
+   '<label class="f"><span>My name</span><input id="stJ" value="'+E(S.prof.j.name)+'"></label>'+
+   '<label class="f"><span>Her name</span><input id="stA" value="'+E(S.prof.a.name)+'"></label></div>'+
+   '<p class="xs muted">Whoever is selected in the top bar is who new entries get logged as. '+
+   'You can still change it on any entry.</p>'+
+   '<div class="hr"></div>'+
+   '<h4 class="lbl">Exports</h4><div class="row" style="margin-top:10px">'+
+   '<button class="b o s" id="stIng">Ingredients CSV</button>'+
+   '<button class="b o s" id="stLog">Daily log CSV</button>'+
+   '<button class="b o s" id="stShift">Shifts CSV</button>'+
+   '<button class="b o s" id="stFin">Budget CSV</button></div>'+
+   '<div class="hr"></div>'+
+   '<h4 class="lbl">Danger</h4>'+
+   '<p class="sm muted" style="margin:8px 0 12px">This wipes everything on this device. '+
+   'Save a file first.</p>'+
+   '<button class="b dz" id="stReset">Erase all data</button>';
+  var m=modal('Settings',body,'<button class="b o" data-close>Close</button>');
+  $('#stSave',m).onclick=function(){exportAll();};
+  $('#stLoad',m).onclick=function(){var i=document.createElement('input');i.type='file';i.accept='.json';
+    i.onchange=function(){importAll(i.files[0],function(ok){if(ok){m.remove();route();toast('Loaded');}});};
+    i.click();};
+  $('#stJ',m).onchange=function(){S.prof.j.name=this.value||'Me';save();chrome();};
+  $('#stA',m).onchange=function(){S.prof.a.name=this.value||'Aaliyah';save();chrome();};
+  $('#stIng',m).onclick=function(){
+    var rows=[['Ingredient','Aisle','Walmart/100g','Costco/100g','Best','Store','UsedIn','Edited']];
+    allIngKeys().forEach(function(k){var g=ING(k);
+      rows.push([g.n,g.a||'',g.w,g.c,best(g).toFixed(3),bestStore(g),ingUsage(k),S.ingOv[k]?'yes':'']);});
+    dl('ingredients-'+today()+'.csv',toCSV(rows),'text/csv');};
+  $('#stLog',m).onclick=function(){
+    var rows=[['Date','Training','Kcal','Protein','FoodCost','OtherSpend','Plans','Notes']];
+    Object.keys(S.days).sort().forEach(function(d){var r=S.days[d],e=eaten(d);
+      var sp=(r.spend||[]).reduce(function(a,x){return a+(x.amt||0);},0);
+      rows.push([d,TRAIN[r.workout]?TRAIN[r.workout].n:r.workout,Math.round(e.kcal),
+        Math.round(e.p),e.cost.toFixed(2),sp.toFixed(2),
+        (r.sched||[]).map(function(x){return x.who+':'+x.what;}).join('; '),r.notes||'']);});
+    dl('daily-log-'+today()+'.csv',toCSV(rows),'text/csv');};
+  $('#stShift',m).onclick=function(){
+    var rows=[['Date','Who','Job','Hours','Gross','Net','Note']];
+    S.fin.shifts.forEach(function(s){var j=S.fin.jobs.filter(function(x){return x.id===s.jobId;})[0];
+      rows.push([s.date,j?j.who:'',j?j.name:'',s.hours,s.gross,s.net,s.note||'']);});
+    dl('shifts-'+today()+'.csv',toCSV(rows),'text/csv');};
+  $('#stFin',m).onclick=function(){
+    var rows=[['Type','Section','Name','Who','Low','Realistic','High','Actual']];
+    S.fin.jobs.forEach(function(j){rows.push(['Income','',j.name,j.who,j.low,j.real,j.high,j.actual||'']);});
+    S.fin.costs.forEach(function(c){rows.push(['Cost',c.section,c.name,c.who,c.low,c.real,c.high,c.actual||'']);});
+    dl('budget-'+today()+'.csv',toCSV(rows),'text/csv');};
+  $('#stReset',m).onclick=function(){
+    if(!confirm('Erase every list, log, edit and photo on this device?'))return;
+    if(!confirm('Really sure? This cannot be undone without a saved file.'))return;
+    try{localStorage.removeItem(KEY);}catch(e){} location.reload();};
+}
 function shopItemEditor(idx){
   var it=curList().items[idx];
   var m=modal('Edit '+it.name,
