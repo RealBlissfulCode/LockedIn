@@ -46,6 +46,20 @@ by locking.
 Decryption needs `crypto.subtle`, which browsers only expose over **https or
 localhost**. The gate says so if it is opened over plain http.
 
+## Time and mobile
+
+Times are stored as 24h `HH:MM`, because that is what `<input type="time">`
+speaks and what sorts correctly, and never shown that way. Everything on screen
+goes through `t12()` / `range12()`: "8am", "8am – 5pm".
+
+On a phone the editors rise from the bottom as a sheet with a sticky header and
+a full-width Save, rather than floating in the middle where the keyboard covers
+them. Fields are 16px, which is the threshold below which iOS zooms the page on
+focus and leaves it zoomed. Buttons and close targets are sized for a thumb.
+Under 560px a calendar cell is about 45px wide, so instead of 8px event text
+ellipsised to nothing, each day carries one dot per kind of thing on it and the
+day panel underneath holds the detail.
+
 ## Schedule templates
 
 A template is a named set of things that repeat, keyed by weekday. There can be

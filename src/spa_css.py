@@ -290,7 +290,7 @@ text-overflow:ellipsis;padding-left:8px;position:relative}
 .day.sel .dev{color:var(--ink-2)}
 .day.sel .dev:before{background:var(--brass)}
 .dmore{font:600 9px/1 var(--f-body);color:var(--ink-4);padding-left:8px}
-.dots{display:flex;gap:2px;margin-top:3px;flex-wrap:wrap}
+.dots{display:none;gap:3px;margin-top:4px;flex-wrap:wrap}
 .dot{width:4px;height:4px;border-radius:50%;background:var(--brass)}
 .dot.w{background:var(--sage)}.dot.e{background:var(--steel)}.dot.m{background:var(--amber)}
 
@@ -572,7 +572,69 @@ body{padding-bottom:80px}
 .pad{padding:16px}
 ol.stp li{padding-left:38px}
 .tl:before{left:46px}.tl .tm{width:42px}.tl .pip{left:43px}
+
+/* ------------------------------------------------------ mobile usability */
+/* iOS zooms the entire page when a focused field is under 16px, and then
+   leaves it zoomed. This is the whole fix. */
+.f input,.f select,.f textarea,input,select,textarea{font-size:16px}
+/* Sized for thumbs. 28px targets are a cursor size, not a finger size. */
+.b{padding:11px 18px;font-size:14px}
+.b.s,.sec>.spread .b{padding:9px 15px;font-size:13px}
+.x{width:36px;height:36px;font-size:18px}
+.pill{padding:9px 16px}
+.gitem input[type=checkbox],.pitem input[type=checkbox]{width:22px;height:22px}
+.iconbtn,.syncpill{flex:0 0 auto}
+.fav{width:34px;height:34px}
+
+/* Editors rise from the bottom instead of floating in the middle, so the
+   fields sit above the keyboard and Save is always within reach. */
+.mask{padding:0;align-items:flex-end}
+.modal{max-width:none;width:100%;max-height:92vh;
+border-radius:var(--r-l) var(--r-l) 0 0;animation:sheet .26s var(--ez)}
+@keyframes sheet{from{transform:translateY(100%)}to{transform:none}}
+.modal:before{content:"";position:absolute;left:50%;top:7px;transform:translateX(-50%);
+width:36px;height:4px;border-radius:99px;background:var(--line-2);opacity:.9}
+.mhead{position:sticky;top:0;z-index:2;background:var(--panel);padding:20px 18px 14px}
+.mbody{padding:16px 18px}
+.mfoot{position:sticky;bottom:0;z-index:2;
+padding:14px 18px calc(14px + env(safe-area-inset-bottom));
+flex-direction:column-reverse;align-items:stretch;gap:8px}
+.mfoot .b{width:100%}
+
+/* One card per screen is a lot of thumb. Two fits and still reads. */
+.g3{grid-template-columns:repeat(2,minmax(0,1fr))}
+.rcart{height:104px}
+.rcn{font-size:14px}
+.rcm b{font-size:13px}
+.rcm span{font-size:7px;letter-spacing:.1em}
+.chip{font-size:10px;padding:4px 7px}
+
+/* Wide tables scroll; say so rather than letting the edge look like the end. */
+.tw{position:relative}
+.tw:after{content:"";position:absolute;top:0;right:0;bottom:0;width:26px;
+pointer-events:none;border-radius:0 var(--r) var(--r) 0;
+background:linear-gradient(to right,transparent,var(--panel))}
 }
+
+/* At this width a calendar cell is about 45px. Event text was 8.5px and
+   ellipsised to nothing, so show what KIND of thing is on each day and let the
+   day panel below carry the detail. */
+@media (max-width:560px){
+.cal{gap:2px}
+.day{min-height:56px;padding:4px 3px;border-radius:5px}
+.devs{display:none}
+.dots{display:flex;justify-content:center;margin-top:auto}
+.dot{width:6px;height:6px}
+.dn{font-size:12px}
+.dk{display:none}
+.tl .tm{width:38px;font-size:10.5px}
+.tl:before{left:42px}.tl .pip{left:39px}
+.tl .bd{padding-left:11px}
+.stgrid{grid-template-columns:repeat(2,1fr)}
+.phead h1{font-size:26px}
+.sec{margin:30px 0}
+}
+
 @media (max-width:440px){.g4{grid-template-columns:1fr}}
 .stats{display:flex;flex-wrap:wrap}.stat{flex:1 1 110px}
 .grid{display:flex;flex-wrap:wrap}.grid>*{flex:1 1 300px;min-width:0}

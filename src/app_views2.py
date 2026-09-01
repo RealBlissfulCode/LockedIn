@@ -425,7 +425,7 @@ function dayTimeline(ds){
   var d=S.days[ds]||{workout:'rest',meals:[],sched:[],spend:[]}, out=[];
   (d.sched||[]).forEach(function(e,i){
     out.push({t:e.from||'',kind:'e',who:e.who,title:e.what,
-      sub:[(e.from?e.from+(e.to?' - '+e.to:''):''),e.where||''].filter(Boolean).join('  \u00B7  '),
+      sub:[range12(e.from,e.to),e.where||''].filter(Boolean).join('  \u00B7  '),
       rm:i});});
   if(d.workout&&d.workout!=='rest')
     out.push({t:d.trainAt||'17:30',kind:'w',who:d.trainWho||ME(),
@@ -440,7 +440,7 @@ function dayTimeline(ds){
   /* Anything from a running template, worked out now rather than copied in. */
   tmplItemsFor(ds).forEach(function(x){
     out.push({t:x.from||'',kind:'e',who:x.who,title:x.what,
-      sub:[(x.from?x.from+(x.to?' - '+x.to:''):''),x.where||''].filter(Boolean).join('  ·  '),
+      sub:[range12(x.from,x.to),x.where||''].filter(Boolean).join('  ·  '),
       tmpl:x.col});});
   out.sort(function(a,b){
     if(!a.t&&!b.t)return 0; if(!a.t)return 1; if(!b.t)return -1;
@@ -453,7 +453,7 @@ function tl(ds){
   if(!items.length) return '<div class="empty sm"><p>Nothing on this day yet.</p>'+
     '<p class="xs">Training and meals logged elsewhere show up here automatically.</p></div>';
   return '<ul class="tl">'+items.map(function(x){
-    return '<li><div class="tm">'+(x.t?E(x.t):'&mdash;')+'</div>'+
+    return '<li><div class="tm">'+(x.t?E(t12(x.t)):'&mdash;')+'</div>'+
     '<span class="pip '+x.kind+'"></span><div class="bd">'+
     '<div class="ti">'+E(x.title)+' <span class="chip">'+E(WHO(x.who)||'Both of us')+'</span>'+
     (x.tmpl?' <span class="chip t" title="From a running template">'+E(x.tmpl)+'</span>':'')+'</div>'+
@@ -476,11 +476,17 @@ function vSchedule(sub){
     var items=dayTimeline(ds);
     var show=items.slice(0,3).map(function(x){
       return '<span class="dev '+x.kind+'" title="'+E(x.title)+'">'+
-        (x.t?'<b>'+E(x.t.slice(0,5))+'</b> ':'')+E(x.title)+'</span>';}).join('');
+        (x.t?'<b>'+E(t12(x.t))+'</b> ':'')+E(x.title)+'</span>';}).join('');
     var more=items.length>3?'<span class="dmore">+'+(items.length-3)+' more</span>':'';
-    cells+='<div class="day'+(ds===today()?' today':'')+(ds===calSel?' sel':'')+'" data-d="'+ds+'">'+
+    /* On a narrow screen the cell is too small for text, so the same
+       information is carried as one dot per kind of thing on that day. */
+    var kinds={}, dots='';
+    items.forEach(function(x){kinds[x.kind]=1;});
+    ['e','w','m','s'].forEach(function(k){ if(kinds[k]) dots+='<i class="dot '+k+'"></i>'; });
+    cells+='<div class="day'+(ds===today()?' today':'')+(ds===calSel?' sel':'')+'" data-d="'+ds+'"'+
+      (items.length?' aria-label="'+E(shortD(ds)+', '+items.length+' item'+(items.length===1?'':'s'))+'"':'')+'>'+
       '<span class="dn">'+dn+'</span>'+
-      (items.length?'<span class="devs">'+show+more+'</span>':'')+
+      (items.length?'<span class="devs">'+show+more+'</span><span class="dots">'+dots+'</span>':'')+
       '</div>';}
   var d=dayLog(calSel), t=dayTarget(S.who,d.workout), got=eaten(calSel);
   var spend=(d.spend||[]).reduce(function(a,x){return a+(x.amt||0);},0);
@@ -531,8 +537,7 @@ function freeSlots(d){
   var blocks=[],cur=[free[0],free[0]+step];
   for(var i=1;i<free.length;i++){ if(free[i]===cur[1])cur[1]=free[i]+step; else {blocks.push(cur);cur=[free[i],free[i]+step];} }
   blocks.push(cur);
-  var fmt=function(m){var h=Math.floor(m/60),mm=m%60;var ap=h>=12?'pm':'am';var hh=h%12||12;
-    return hh+(mm?':'+p2(mm):'')+ap;};
+  var fmt=t12m;
   return '<div class="note" style="margin-top:12px"><b>Both free.</b> '+
     blocks.filter(function(b){return b[1]-b[0]>=60;}).map(function(b){return fmt(b[0])+' to '+fmt(b[1]);}).join(', ')+'</div>';
 }
@@ -600,9 +605,9 @@ function vTemplateEdit(id){
      return '<div class="card pad"><div class="spread"><h3 class="ctitle" style="margin:0">'+dn+'</h3>'+
      '<button class="b o s" data-tadd="'+c.id+'|'+i+'">Add</button></div>'+
      (items.length?'<ul class="tl" style="margin-top:14px">'+items.map(function(x,j){
-       return '<li><div class="tm">'+E(x.from||'')+'</div><span class="pip e"></span>'+
+       return '<li><div class="tm">'+E(t12(x.from))+'</div><span class="pip e"></span>'+
        '<div class="bd"><div class="ti">'+E(x.what)+' <span class="chip">'+E(WHO(x.who))+'</span></div>'+
-       '<div class="ts">'+E([(x.from?x.from+(x.to?' - '+x.to:''):''),x.where||'']
+       '<div class="ts">'+E([range12(x.from,x.to),x.where||'']
          .filter(Boolean).join('  \u00B7  '))+'</div></div>'+
        '<button class="x" data-td="'+c.id+'|'+i+'|'+j+'">&times;</button></li>';}).join('')+'</ul>'
        :'<p class="empty sm" style="padding:14px 0">Nothing regular.</p>')+'</div>';}).join('')+

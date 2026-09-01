@@ -198,6 +198,23 @@ function M(v){var n=Math.round(Number(v)||0);
   return (n<0?'-$':'$')+commas(Math.abs(n));}
 function N(v){return commas(Math.round(Number(v)||0));}
 function p2(n){n=String(n);return n.length<2?'0'+n:n;}
+/* Times are stored as 24h "HH:MM" because that is what <input type="time">
+   speaks and what sorts correctly. Nothing is ever SHOWN that way. */
+function t12(t){
+  if(!t) return '';
+  var p=String(t).split(':'), h=parseInt(p[0],10), m=parseInt(p[1]||'0',10);
+  if(isNaN(h)||isNaN(m)) return t;
+  return (h%12||12)+(m?':'+p2(m):'')+(h>=12?'pm':'am');
+}
+/* Same thing from minutes past midnight, for the free-time finder. */
+function t12m(mins){
+  var h=Math.floor(mins/60), m=mins%60;
+  return (h%12||12)+(m?':'+p2(m):'')+(h>=12?'pm':'am');
+}
+function range12(from,to){
+  if(!from) return '';
+  return t12(from)+(to?' – '+t12(to):'');
+}
 function today(){var d=new Date();return d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate());}
 function dOf(ds){var p=ds.split('-');return new Date(+p[0],+p[1]-1,+p[2]);}
 function pretty(ds){return dOf(ds).toLocaleDateString(undefined,{weekday:'long',month:'short',day:'numeric'});}
