@@ -133,6 +133,7 @@ function shiftsFor(who,from){
 }
 function vFinancial(sub){
   if(sub==='purchases') return vPurchases();
+  if(sub==='strategies') return vStrategies();
   if(sub==='actual') return vActual();
   var mode=S.fin.costMode||'real', path=S.fin.path||'rent';
   var inc=finIncome('both',mode), cost=finCost(mode,path), gap=inc-cost;
@@ -173,6 +174,7 @@ function vFinancial(sub){
 
    '<div class="sec"><div class="spread"><h2>'+(act?E(act):'Working numbers')+'</h2>'+
    '<div class="row">'+(dirty?'<span class="dirty">Unsaved changes</span>':'')+
+   '<button class="b o s" data-nav="financial/strategies">Strategies</button>'+
    '<button class="b o s" data-nav="financial/actual">Actual earnings</button>'+
    '<button class="b o s" data-nav="financial/purchases">Big purchases</button></div></div>'+
 
@@ -298,24 +300,118 @@ function vActual(){
 function vPurchases(){
   var P_=S.fin.purchases||{}, names=Object.keys(P_);
   return '<div class="page"><div class="phead"><h1>Big purchases</h1>'+
-   '<p>Houses, cars, anything worth comparing side by side before committing.</p></div>'+
+   '<p>Places, houses, cars, anything worth comparing side by side before committing. '+
+   'Every list here is yours to rename, edit or delete.</p></div>'+
    '<div class="row" style="margin-bottom:14px"><button class="b" id="bpNew">New list</button>'+
    '<button class="b o" data-nav="financial">&larr; Financial</button></div>'+
-   (names.length?names.map(function(n){var L=P_[n];
-     return '<div class="sec"><div class="spread"><h2>'+E(n)+' <span class="chip">'+E(L.cat||'')+'</span></h2>'+
+   (names.length?names.map(function(n){var L=P_[n], its=L.items||[];
+     var prices=its.map(function(i){return num(i.price);}).filter(function(x){return x>0;});
+     var lo=prices.length?Math.min.apply(null,prices):0;
+     var av=prices.length?prices.reduce(function(a,b){return a+b;},0)/prices.length:0;
+     return '<div class="sec"><div class="spread"><h2>'+E(n)+
+     (L.cat?' <span class="chip">'+E(L.cat)+'</span>':'')+'</h2>'+
      '<div class="row"><button class="b o s" data-bpadd="'+E(n)+'">Add item</button>'+
-     '<button class="b o s dz" data-bpdel="'+E(n)+'">Delete list</button></div></div>'+
-     (L.items.length?'<div class="grid g3">'+L.items.map(function(it,i){
-       return '<div class="card pad"><div class="spread"><b style="font-family:var(--fd);font-size:16px">'+E(it.name)+'</b>'+
-       '<button class="x" data-bpi="'+E(n)+'|'+i+'">&times;</button></div>'+
-       '<div style="font-size:22px;font-weight:700;color:var(--forest);margin:6px 0">'+M(it.price)+'</div>'+
+     '<button class="b o s" data-bple="'+E(n)+'">Edit list</button>'+
+     '<button class="b o s dz" data-bpdel="'+E(n)+'">Delete</button></div></div>'+
+     (L.note?'<p class="sub">'+E(L.note)+'</p>':'')+
+     (prices.length>1?'<div class="stats" style="margin-bottom:14px">'+
+       '<div class="stat"><b>'+its.length+'</b><span>Options</span></div>'+
+       '<div class="stat acc"><b>'+M(lo)+'</b><span>Cheapest</span></div>'+
+       '<div class="stat"><b>'+M(av)+'</b><span>Average</span></div></div>':'')+
+     (its.length?'<div class="grid g3">'+its.map(function(it,i){
+       var cheapest=prices.length>1&&num(it.price)===lo;
+       return '<div class="card pad bpc'+(cheapest?' best':'')+'">'+
+       '<div class="spread"><b class="bpn">'+E(it.name)+'</b>'+
+       '<button class="x" data-bpi="'+E(n)+'|'+i+'" title="Remove">&times;</button></div>'+
+       (cheapest?'<span class="chip t" style="margin-top:6px;display:inline-block">Cheapest</span>':'')+
+       '<div class="bpp">'+M(it.price)+'</div>'+
        (it.fields?Object.keys(it.fields).map(function(k){
-         return '<div class="spread sm" style="border-bottom:1px solid var(--line);padding:5px 0">'+
+         return '<div class="spread sm bpf">'+
          '<span class="muted">'+E(k)+'</span><b>'+E(it.fields[k])+'</b></div>';}).join(''):'')+
-       (it.notes?'<p class="sm muted" style="margin-top:8px">'+E(it.notes)+'</p>':'')+
-       (it.link?'<a class="b o s" href="'+E(it.link)+'" target="_blank" rel="noopener" style="margin-top:10px">Open link</a>':'')+
-       '</div>';}).join('')+'</div>':'<div class="empty sm">Nothing on this list yet.</div>')+'</div>';}).join('')
-    :'<div class="empty"><p>No lists yet.</p><p class="sm">Make one for apartments, or cars, or anything you are comparing.</p></div>')+
+       (it.notes?'<p class="sm muted" style="margin-top:10px">'+E(it.notes)+'</p>':'')+
+       '<div class="row" style="margin-top:12px">'+
+       '<button class="b o s" data-bpie="'+E(n)+'|'+i+'">Edit</button>'+
+       (it.link?'<a class="b o s" href="'+E(it.link)+'" target="_blank" rel="noopener">Open link</a>':'')+
+       '</div></div>';}).join('')+'</div>':'<div class="empty sm">Nothing on this list yet.</div>')+
+     '</div>';}).join('')
+    :'<div class="empty"><p>No lists yet.</p><p class="sm">Make one for apartments, or houses, '+
+     'or anything you are comparing.</p></div>')+
+   '</div>';
+}
+
+/* ---------------------------- STRATEGIES ----------------------------
+   Ways to close the gap, grouped into lists you own. Same rules as every
+   other list in the app: make them, rename them, delete them. */
+function stratClass(st){
+  var s=String(st||'').toUpperCase();
+  if(s==='DEAD'||s==='BLOCKED'||s==='N/A'||s==='NEGLIGIBLE') return 'd3';
+  if(s==='CRITICAL'||s==='LOCKED'||s==='KEY') return 'd2';
+  if(s==='ACTIVE'||s==='READY'||s==='ON TRACK'||s==='STAGED'||s==='DONE') return 'd1';
+  return '';
+}
+function stratDead(st){
+  var s=String(st||'').toUpperCase();
+  return s==='DEAD'||s==='N/A'||s==='NEGLIGIBLE'||s==='BLOCKED';
+}
+function stratTotal(list,mode){
+  return (list.items||[]).reduce(function(a,x){
+    return a+(stratDead(x.status)?0:num(x[mode]));},0);
+}
+function vStrategies(){
+  var G=S.fin.strategies||{}, names=Object.keys(G);
+  var mode=S.fin.stratMode||'real';
+  var grand=names.reduce(function(a,n){return a+stratTotal(G[n],mode);},0);
+  var live=names.reduce(function(a,n){return a+(G[n].items||[]).filter(function(x){
+    return !stratDead(x.status);}).length;},0);
+  var dead=names.reduce(function(a,n){return a+(G[n].items||[]).filter(function(x){
+    return stratDead(x.status);}).length;},0);
+  return '<div class="page"><div class="phead"><h1>Strategies</h1>'+
+   '<p>Ways to close the gap, sorted by what they are worth against what they cost you. '+
+   'Anything marked dead has been checked and is dead, so it does not get researched twice.</p></div>'+
+   '<div class="row" style="margin-bottom:14px"><button class="b" id="stNew">New list</button>'+
+   '<button class="b o" data-nav="financial">&larr; Financial</button>'+
+   '<label class="f inline"><span>Column</span><select id="stMode">'+
+   opt([['low','Lean (low)'],['real','Realistic'],['high','Good month (high)']],mode)+
+   '</select></label></div>'+
+   (names.length?'<div class="stats" style="margin-bottom:8px">'+
+     '<div class="stat acc"><b>'+M(grand)+'</b><span>Swing / mo</span></div>'+
+     '<div class="stat"><b>'+M(grand*12)+'</b><span>Per year</span></div>'+
+     '<div class="stat"><b>'+live+'</b><span>Live moves</span></div>'+
+     '<div class="stat"><b>'+dead+'</b><span>Ruled out</span></div></div>'+
+     '<div class="note warn"><b>That total is a ceiling, not a plan.</b> It assumes every live '+
+     'move runs at once, which is a 70 hour week. Pick three.</div>':'')+
+   (names.length?names.map(function(n){
+     var L=G[n], its=L.items||[], sub=stratTotal(L,mode);
+     return '<div class="sec"><div class="spread"><h2>'+E(n)+'</h2>'+
+     '<div class="row">'+(sub?'<span class="chip p">'+M(sub)+' / mo</span>':'')+
+     '<button class="b o s" data-stadd="'+E(n)+'">Add</button>'+
+     '<button class="b o s" data-stle="'+E(n)+'">Edit list</button>'+
+     '<button class="b o s dz" data-stdel="'+E(n)+'">Delete</button></div></div>'+
+     (L.note?'<p class="sub">'+E(L.note)+'</p>':'')+
+     (its.length?its.map(function(it,i){
+       var v=num(it[mode]);
+       return '<details class="strat'+(stratDead(it.status)?' dead':'')+'"><summary>'+
+       '<span class="stn">'+E(it.name)+'</span>'+
+       '<span class="stmeta">'+
+       (it.status?'<span class="chip '+stratClass(it.status)+'">'+E(it.status)+'</span>':'')+
+       '<b class="stv'+(v<0?' neg':'')+'">'+(v?M(v)+'/mo':'&mdash;')+'</b></span></summary>'+
+       '<div class="dc">'+
+       '<div class="stgrid">'+
+       '<div><span class="lbl">Low</span><b>'+M(it.low)+'</b></div>'+
+       '<div><span class="lbl">Realistic</span><b>'+M(it.real)+'</b></div>'+
+       '<div><span class="lbl">High</span><b>'+M(it.high)+'</b></div>'+
+       (it.rate&&it.rate!=='n/a'?'<div><span class="lbl">Per hour</span><b>'+E(it.rate)+'</b></div>':'')+
+       (it.effort?'<div><span class="lbl">Effort</span><b>'+E(it.effort)+'</b></div>':'')+
+       (it.when?'<div><span class="lbl">When</span><b>'+E(it.when)+'</b></div>':'')+
+       '</div>'+
+       (it.how?'<p>'+E(it.how)+'</p>':'')+
+       '<div class="row"><button class="b o s" data-stie="'+E(n)+'|'+i+'">Edit</button>'+
+       '<button class="b o s dz" data-stid="'+E(n)+'|'+i+'">Delete</button></div>'+
+       '</div></details>';}).join('')
+      :'<div class="empty sm">Nothing on this list yet.</div>')+'</div>';}).join('')
+    :'<div class="empty"><p>No strategy lists yet.</p>'+
+     '<p class="sm">Make one for anything you are weighing: ways to earn more, bills to cut, '+
+     'things to negotiate.</p></div>')+
    '</div>';
 }
 
@@ -448,6 +544,77 @@ function vWeekTemplate(){
        :'<p class="empty sm" style="padding:14px 0">Nothing regular.</p>')+'</div>';}).join('')+
    '</div></div>';
 }
+/* ============================ PLANNING ============================
+   General plans. A collection holds subsections, a subsection holds items.
+   All three levels can be created, renamed and deleted. */
+function planCols(){ return (S.plan&&S.plan.cols)||[]; }
+function planCol(id){ var c=planCols().filter(function(x){return x.id===id;}); return c[0]||null; }
+function planCount(c){
+  var t=0,d=0;
+  (c.subs||[]).forEach(function(s){(s.items||[]).forEach(function(i){t++; if(i.done)d++;});});
+  return {total:t,done:d,pct:t?Math.round(d/t*100):0};
+}
+function vPlanning(sub){
+  if(sub) return vPlanCol(sub);
+  var cols=planCols();
+  return '<div class="page"><div class="phead"><h1>Planning</h1>'+
+   '<p>Plans that are not about money or food. Make a collection for anything, break it into '+
+   'subsections, and tick things off as they happen.</p></div>'+
+   '<div class="row" style="margin-bottom:16px"><button class="b" id="plNew">New collection</button></div>'+
+   (cols.length?'<div class="grid g2">'+cols.map(function(c){
+     var n=planCount(c);
+     return '<button class="card pad plcard" data-plgo="'+c.id+'">'+
+     '<div class="spread"><h3 class="pln">'+E(c.name)+'</h3>'+
+     '<span class="chip p">'+n.done+' / '+n.total+'</span></div>'+
+     (c.note?'<p class="sm muted" style="margin:8px 0 0">'+E(c.note)+'</p>':'')+
+     '<div class="bar" style="margin-top:14px"><i class="pp" style="width:'+n.pct+'%"></i></div>'+
+     '<div class="xs muted" style="margin-top:8px">'+
+     (c.subs||[]).length+' section'+((c.subs||[]).length===1?'':'s')+
+     (n.total?' &middot; '+n.pct+'% done':'')+'</div>'+
+     '</button>';}).join('')+'</div>'
+    :'<div class="empty"><p>No plans yet.</p><p class="sm">Start one for moving in, or a trip, '+
+     'or anything with more than three steps.</p></div>')+
+   '</div>';
+}
+function vPlanCol(id){
+  var c=planCol(id);
+  if(!c) return '<div class="page"><div class="empty"><p>That plan is gone.</p>'+
+    '<button class="b o" data-nav="planning">Back to Planning</button></div></div>';
+  var n=planCount(c);
+  return '<div class="page"><div class="phead"><h1>'+E(c.name)+'</h1>'+
+   (c.note?'<p>'+E(c.note)+'</p>':'')+'</div>'+
+   '<div class="row" style="margin-bottom:14px">'+
+   '<button class="b" data-plsadd="'+c.id+'">New section</button>'+
+   '<button class="b o" data-ple="'+c.id+'">Rename</button>'+
+   '<button class="b o dz" data-pld="'+c.id+'">Delete plan</button>'+
+   '<button class="b o" data-nav="planning">&larr; All plans</button></div>'+
+   (n.total?'<div class="stats" style="margin-bottom:18px">'+
+     '<div class="stat acc"><b>'+n.pct+'%</b><span>Done</span></div>'+
+     '<div class="stat"><b>'+n.done+'</b><span>Ticked off</span></div>'+
+     '<div class="stat"><b>'+(n.total-n.done)+'</b><span>Left</span></div>'+
+     '<div class="stat"><b>'+(c.subs||[]).length+'</b><span>Sections</span></div></div>':'')+
+   ((c.subs||[]).length?(c.subs||[]).map(function(s){
+     var si=s.items||[], sd=si.filter(function(i){return i.done;}).length;
+     return '<div class="sec"><div class="spread"><h2>'+E(s.name)+'</h2>'+
+     '<div class="row"><span class="chip p">'+sd+' / '+si.length+'</span>'+
+     '<button class="b o s" data-pliadd="'+c.id+'|'+s.id+'">Add item</button>'+
+     '<button class="b o s" data-plse="'+c.id+'|'+s.id+'">Edit</button>'+
+     '<button class="b o s dz" data-plsd="'+c.id+'|'+s.id+'">Delete</button></div></div>'+
+     (s.note?'<p class="sub">'+E(s.note)+'</p>':'')+
+     (si.length?'<div class="card">'+si.map(function(i){
+       return '<div class="pitem'+(i.done?' done':'')+'">'+
+       '<input type="checkbox" data-plck="'+c.id+'|'+s.id+'|'+i.id+'"'+(i.done?' checked':'')+'>'+
+       '<div class="pbody"><div class="pt">'+E(i.text)+'</div>'+
+       (i.note?'<div class="pn">'+E(i.note)+'</div>':'')+'</div>'+
+       '<button class="b o s" data-plie="'+c.id+'|'+s.id+'|'+i.id+'">Edit</button>'+
+       '<button class="x" data-plid="'+c.id+'|'+s.id+'|'+i.id+'">&times;</button>'+
+       '</div>';}).join('')+'</div>'
+      :'<div class="empty sm">Nothing in this section yet.</div>')+'</div>';}).join('')
+    :'<div class="empty"><p>No sections yet.</p>'+
+     '<p class="sm">Break the plan into parts, then put the actual to-dos inside them.</p></div>')+
+   '</div>';
+}
+
 /* ============================ shared UI ============================ */
 function statRow(t){
   return '<div class="stats"><div class="stat acc"><b>'+N(t.kcal)+'</b><span>Calories</span></div>'+

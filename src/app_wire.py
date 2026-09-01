@@ -1,18 +1,22 @@
 # -*- coding: utf-8 -*-
 APP_WIRE = r"""
 /* ============================ router ============================ */
-var TABS=[['meals','Meals'],['training','Training'],['shopping','Shopping'],
-          ['financial','Financial'],['schedule','Schedule']];
+/* [route, desktop label, bottom-bar label]. Six tabs is the most the bottom bar
+   holds on a 360px phone, which is why the short labels exist. */
+var TABS=[['meals','Meals','Meals'],['training','Training','Train'],
+          ['shopping','Shopping','Shop'],['financial','Financial','Money'],
+          ['planning','Planning','Plans'],['schedule','Schedule','Cal']];
 var ICO={meals:'<path d="M4 3v8a3 3 0 006 0V3M7 11v10M16 3c-1.5 2-2 4-2 6s.5 3 2 3 2-1 2-3-.5-4-2-6zM16 12v9"/>',
  training:'<path d="M6 8v8M18 8v8M3 10v4M21 10v4M6 12h12"/>',
  shopping:'<path d="M3 4h2l2 12h11M7 8h14l-2 6H8"/><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/>',
  financial:'<path d="M12 2v20M17 6H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>',
+ planning:'<path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 13l2 2 4-4"/>',
  schedule:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>'};
 function chrome(){
   $('#tabs').innerHTML=TABS.map(function(t){return '<button class="tab" data-v="'+t[0]+'" data-nav="'+t[0]+'">'+t[1]+'</button>';}).join('');
-  $('#btm').innerHTML=TABS.map(function(t){return '<button data-v="'+t[0]+'" data-nav="'+t[0]+'">'+
+  $('#btm').innerHTML=TABS.map(function(t){return '<button data-v="'+t[0]+'" data-nav="'+t[0]+'" aria-label="'+t[1]+'">'+
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">'+
-    ICO[t[0]]+'</svg><span>'+t[1]+'</span></button>';}).join('');
+    ICO[t[0]]+'</svg><span>'+t[2]+'</span></button>';}).join('');
   $('#who').innerHTML=['j','a'].map(function(k){return '<button data-w="'+k+'"'+
     (S.who===k?' class="on"':'')+'>'+E(S.prof[k].name)+'</button>';}).join('');
   var th=$('#themeBtn');
@@ -42,7 +46,8 @@ function route(){
   var html;
   try{
     html = v==='r'?vRecipe(sub) : v==='training'?vTraining(sub) : v==='shopping'?vShopping(sub)
-      : v==='financial'?vFinancial(sub) : v==='schedule'?vSchedule(sub) : vMeals();
+      : v==='financial'?vFinancial(sub) : v==='planning'?vPlanning(sub)
+      : v==='schedule'?vSchedule(sub) : vMeals();
   }catch(e){ html=errPanel(v.charAt(0).toUpperCase()+v.slice(1),e);
     if(window.console&&console.error)console.error(e); }
   m.innerHTML=html;
@@ -100,6 +105,7 @@ function bind(){
       var w=parseFloat($('#tW').value); if(w)d.w=w; save();toast('Saved');});
   }
   if(v==='financial') bindFin(h[1]);
+  if(v==='planning') bindPlan(h[1]);
   if(v==='schedule') bindSched(h[1]);
 }
 function on(sel,ev,fn){var e=$(sel); if(e)e.addEventListener(ev,fn);}
@@ -253,10 +259,9 @@ function bindFin(sub){
     S.fin.scenarios['From actual earnings']={mode:'actual',path:S.fin.path||'rent',
       inc:Math.round(net),cost:finCost('real',S.fin.path||'rent'),saved:today(),auto:true};
     save();toast('Saved from real data');route();});
-  on('#bpNew','click',function(){
-    var n=prompt('List name','Apartments'); if(!n)return;
-    var c=prompt('What kind? (Housing, Cars, Furniture...)','Housing')||'Other';
-    S.fin.purchases[n]={cat:c,items:[]}; save(); route();});
+  on('#bpNew','click',function(){bpListEditor(null);});
+  on('#stNew','click',function(){stratListEditor(null);});
+  on('#stMode','change',function(){S.fin.stratMode=this.value;save();route();});
 }
 function jobEditor(id){
   var j=id?S.fin.jobs.filter(function(x){return x.id===id;})[0]:{who:'Jaron',name:'',employer:'',title:'',rate:'',low:'',real:'',high:''};
@@ -319,19 +324,171 @@ function shiftEditor(){
       gross:Math.round(g*100)/100,net:Math.round(n*100)/100,note:$('#sx',m).value});
     save();m.remove();route();toast('Shift logged');};
 }
-function bpItemEditor(listName){
-  var L=S.fin.purchases[listName]; var cat=(L.cat||'').toLowerCase();
-  var extra = cat.indexOf('hous')>=0 ? [{id:'f1',l:'Beds'},{id:'f2',l:'Baths'},{id:'f3',l:'Sq ft'},{id:'f4',l:'To CSU (min)'}]
-            : cat.indexOf('car')>=0 ? [{id:'f1',l:'Year'},{id:'f2',l:'Miles'},{id:'f3',l:'MPG'},{id:'f4',l:'Condition'}]
-            : [{id:'f1',l:'Detail 1'},{id:'f2',l:'Detail 2'}];
-  var m=modal('Add to '+listName,
-    form([{id:'bn',l:'Name',v:''},{id:'bp',l:'Price / rent',t:'number',v:''},
-      {id:'bl',l:'Link',v:''}].concat(extra).concat([{id:'bo',l:'Notes',t:'area',v:''}])),
+/* Lists are keyed by their name, so renaming one means rebuilding the object.
+   Done in place rather than delete-and-add so the list keeps its position. */
+function renameKey(obj,from,to){
+  if(from===to) return true;
+  if(obj[to]) { toast('"'+to+'" already exists'); return false; }
+  var out={};
+  Object.keys(obj).forEach(function(k){ out[k===from?to:k]=obj[k]; });
+  Object.keys(obj).forEach(function(k){ delete obj[k]; });
+  Object.keys(out).forEach(function(k){ obj[k]=out[k]; });
+  return true;
+}
+function bpListEditor(name){
+  var isNew=!name, L=isNew?{cat:'Housing',note:'',items:[]}:S.fin.purchases[name];
+  if(!isNew&&!L) return;
+  var m=modal(isNew?'New list':'Edit list',
+    form([{id:'ln',l:'List name',v:isNew?'':name,ph:'Places we could rent'},
+      {id:'lc',l:'What kind',v:L.cat||'',ph:'Housing, Cars, Furniture...'},
+      {id:'lo',l:'Note',t:'area',v:L.note||''}]),
+    '<button class="b o" data-close>Cancel</button><button class="b" id="lSave">Save</button>');
+  $('#lSave',m).onclick=function(){
+    var n=$('#ln',m).value.trim(); if(!n){toast('Give it a name');return;}
+    if(isNew){
+      if(S.fin.purchases[n]){toast('"'+n+'" already exists');return;}
+      S.fin.purchases[n]={cat:$('#lc',m).value.trim(),note:$('#lo',m).value.trim(),items:[]};
+    }else{
+      if(!renameKey(S.fin.purchases,name,n)) return;
+      S.fin.purchases[n].cat=$('#lc',m).value.trim();
+      S.fin.purchases[n].note=$('#lo',m).value.trim();
+    }
+    save();m.remove();route();};
+}
+function bpItemEditor(listName,idx){
+  var L=S.fin.purchases[listName]; if(!L) return;
+  var editing=(idx!==null&&idx!==undefined);
+  var it=editing?L.items[idx]:{name:'',price:'',link:'',notes:'',fields:{}};
+  if(!it) return;
+  var cat=(L.cat||'').toLowerCase();
+  var labels = cat.indexOf('hous')>=0 ? ['City','Beds','Baths','Sq ft','To CSU','All in']
+             : cat.indexOf('car')>=0 ? ['Year','Miles','MPG','Condition']
+             : ['Detail 1','Detail 2','Detail 3'];
+  /* Keep whatever fields the item already carries, even ones this category
+     would not have offered, so editing a seeded row never drops data. */
+  Object.keys(it.fields||{}).forEach(function(k){
+    if(labels.indexOf(k)<0) labels.push(k);});
+  var extra=labels.map(function(l,i){return {id:'f'+i,l:l,v:(it.fields||{})[l]||''};});
+  var m=modal(editing?'Edit '+it.name:'Add to '+listName,
+    form([{id:'bn',l:'Name',v:it.name},{id:'bp',l:'Price / rent',t:'number',v:it.price},
+      {id:'bl',l:'Link',v:it.link||''}].concat(extra)
+      .concat([{id:'bo',l:'Notes',t:'area',v:it.notes||''}])),
+    (editing?'<button class="b o dz" id="bDel">Delete</button>':'')+
     '<button class="b o" data-close>Cancel</button><button class="b" id="bSave">Save</button>');
+  var d=$('#bDel',m); if(d)d.onclick=function(){
+    L.items.splice(idx,1);save();m.remove();route();};
   $('#bSave',m).onclick=function(){
-    var f={}; extra.forEach(function(x){var v=$('#'+x.id,m).value; if(v)f[x.l]=v;});
-    L.items.push({name:$('#bn',m).value.trim()||'Item',price:num($('#bp',m).value),
-      link:$('#bl',m).value,notes:$('#bo',m).value,fields:f});
+    var f={}; extra.forEach(function(x){var v=$('#'+x.id,m).value.trim(); if(v)f[x.l]=v;});
+    var o={id:it.id||uid(),name:$('#bn',m).value.trim()||'Item',price:num($('#bp',m).value),
+      link:$('#bl',m).value.trim(),notes:$('#bo',m).value.trim(),fields:f};
+    if(editing) L.items[idx]=o; else L.items.push(o);
+    save();m.remove();route();};
+}
+
+/* ============================ strategies wiring ============================ */
+function stratListEditor(name){
+  var isNew=!name, L=isNew?{note:'',items:[]}:S.fin.strategies[name];
+  if(!isNew&&!L) return;
+  var m=modal(isNew?'New strategy list':'Edit list',
+    form([{id:'sn',l:'List name',v:isNew?'':name,ph:'Ways to earn more'},
+      {id:'so',l:'Note',t:'area',v:L.note||''}]),
+    '<button class="b o" data-close>Cancel</button><button class="b" id="slSave">Save</button>');
+  $('#slSave',m).onclick=function(){
+    var n=$('#sn',m).value.trim(); if(!n){toast('Give it a name');return;}
+    if(isNew){
+      if(S.fin.strategies[n]){toast('"'+n+'" already exists');return;}
+      S.fin.strategies[n]={note:$('#so',m).value.trim(),items:[]};
+    }else{
+      if(!renameKey(S.fin.strategies,name,n)) return;
+      S.fin.strategies[n].note=$('#so',m).value.trim();
+    }
+    save();m.remove();route();};
+}
+function stratEditor(listName,idx){
+  var L=S.fin.strategies[listName]; if(!L) return;
+  var editing=(idx!==null&&idx!==undefined);
+  var it=editing?L.items[idx]:{name:'',low:'',real:'',high:'',rate:'',effort:'',
+    when:'',status:'NOT DONE',how:''};
+  if(!it) return;
+  var STATUS=['NOT DONE','READY','ACTIVE','PENDING','ON TRACK','STAGED','IN PROGRESS','DONE',
+    'CRITICAL','LOCKED','KEY','CHECK FIRST','HOLD','BLOCKED','DEAD','N/A'];
+  if(it.status&&STATUS.indexOf(it.status)<0) STATUS.unshift(it.status);
+  var m=modal(editing?'Edit strategy':'New strategy',
+    form([{id:'xn',l:'Move',v:it.name,ph:'Shop auto insurance properly'},
+      {id:'xs',l:'Status',t:'select',o:STATUS.map(function(s){return [s,s];}),v:it.status},
+      {id:'xl',l:'Low / mo',t:'number',v:it.low},
+      {id:'xr',l:'Realistic / mo',t:'number',v:it.real},
+      {id:'xh',l:'High / mo',t:'number',v:it.high},
+      {id:'xp',l:'Per hour',v:it.rate,ph:'$50'},
+      {id:'xe',l:'Effort',v:it.effort,ph:'1 afternoon'},
+      {id:'xw',l:'When',v:it.when,ph:'Before lease'},
+      {id:'xo',l:'How and why',t:'area',v:it.how}])+
+    '<p class="sm muted">Anything marked Dead, Blocked or N/A is left out of the totals, so '+
+    'ruling something out does not quietly inflate the plan.</p>',
+    (editing?'<button class="b o dz" id="xDel">Delete</button>':'')+
+    '<button class="b o" data-close>Cancel</button><button class="b" id="xSave">Save</button>');
+  var d=$('#xDel',m); if(d)d.onclick=function(){
+    L.items.splice(idx,1);save();m.remove();route();};
+  $('#xSave',m).onclick=function(){
+    var o={id:it.id||uid(),name:$('#xn',m).value.trim()||'Move',
+      low:num($('#xl',m).value),real:num($('#xr',m).value),high:num($('#xh',m).value),
+      rate:$('#xp',m).value.trim(),effort:$('#xe',m).value.trim(),
+      when:$('#xw',m).value.trim(),status:$('#xs',m).value,how:$('#xo',m).value.trim()};
+    if(editing) L.items[idx]=o; else L.items.push(o);
+    save();m.remove();route();};
+}
+
+/* ============================ planning wiring ============================ */
+function bindPlan(){
+  on('#plNew','click',function(){planColEditor(null);});
+}
+function planSub(colId,subId){
+  var c=planCol(colId); if(!c) return null;
+  var s=(c.subs||[]).filter(function(x){return x.id===subId;});
+  return s[0]||null;
+}
+function planColEditor(id){
+  var c=id?planCol(id):{name:'',note:''};
+  if(!c) return;
+  var m=modal(id?'Edit plan':'New collection',
+    form([{id:'pn',l:'Name',v:c.name,ph:'Moving in together'},
+      {id:'po',l:'Note',t:'area',v:c.note||''}]),
+    '<button class="b o" data-close>Cancel</button><button class="b" id="pSave">Save</button>');
+  $('#pSave',m).onclick=function(){
+    var n=$('#pn',m).value.trim(); if(!n){toast('Give it a name');return;}
+    if(id){ c.name=n; c.note=$('#po',m).value.trim(); }
+    else { S.plan.cols.push({id:uid(),name:n,note:$('#po',m).value.trim(),subs:[]}); }
+    save();m.remove();route();};
+}
+function planSubEditor(colId,subId){
+  var c=planCol(colId); if(!c) return;
+  var s=subId?planSub(colId,subId):{name:'',note:''};
+  if(!s) return;
+  var m=modal(subId?'Edit section':'New section',
+    form([{id:'qn',l:'Section name',v:s.name,ph:'Memberships and accounts'},
+      {id:'qo',l:'Note',t:'area',v:s.note||''}]),
+    '<button class="b o" data-close>Cancel</button><button class="b" id="qSave">Save</button>');
+  $('#qSave',m).onclick=function(){
+    var n=$('#qn',m).value.trim(); if(!n){toast('Give it a name');return;}
+    if(subId){ s.name=n; s.note=$('#qo',m).value.trim(); }
+    else { c.subs.push({id:uid(),name:n,note:$('#qo',m).value.trim(),items:[]}); }
+    save();m.remove();route();};
+}
+function planItemEditor(colId,subId,itemId){
+  var s=planSub(colId,subId); if(!s) return;
+  var it=itemId?(s.items||[]).filter(function(x){return x.id===itemId;})[0]:{text:'',note:''};
+  if(!it) return;
+  var m=modal(itemId?'Edit item':'New item',
+    form([{id:'in',l:'Item',v:it.text,ph:'Costco Gold Star membership'},
+      {id:'io',l:'Note',t:'area',v:it.note||''}]),
+    (itemId?'<button class="b o dz" id="iDel">Delete</button>':'')+
+    '<button class="b o" data-close>Cancel</button><button class="b" id="iSave">Save</button>');
+  var d=$('#iDel',m); if(d)d.onclick=function(){
+    s.items=s.items.filter(function(x){return x.id!==itemId;});save();m.remove();route();};
+  $('#iSave',m).onclick=function(){
+    var t=$('#in',m).value.trim(); if(!t){toast('Say what it is');return;}
+    if(itemId){ it.text=t; it.note=$('#io',m).value.trim(); }
+    else { s.items.push({id:uid(),text:t,note:$('#io',m).value.trim(),done:false}); }
     save();m.remove();route();};
 }
 
@@ -460,11 +617,65 @@ document.addEventListener('click',function(e){
       delete S.fin.scenarios[el.dataset.scdel];
       if(S.fin.activeScenario===el.dataset.scdel)S.fin.activeScenario=null;
       save();route();}return;}
-  if((el=t.closest('[data-bpadd]'))){bpItemEditor(el.dataset.bpadd);return;}
-  if((el=t.closest('[data-bpdel]'))){if(confirm('Delete list?')){
-    delete S.fin.purchases[el.dataset.bpdel];save();route();}return;}
+  if((el=t.closest('[data-bpadd]'))){bpItemEditor(el.dataset.bpadd,null);return;}
+  if((el=t.closest('[data-bple]'))){bpListEditor(el.dataset.bple);return;}
+  if((el=t.closest('[data-bpdel]'))){var bn=el.dataset.bpdel;
+    if(confirm('Delete the list "'+bn+'" and everything on it?')){
+      delete S.fin.purchases[bn];save();route();}return;}
+  if((el=t.closest('[data-bpie]'))){var pe=el.dataset.bpie.split('|');
+    bpItemEditor(pe[0],+pe[1]);return;}
   if((el=t.closest('[data-bpi]'))){var p=el.dataset.bpi.split('|');
     S.fin.purchases[p[0]].items.splice(+p[1],1);save();route();return;}
+
+  /* strategies */
+  if((el=t.closest('[data-stadd]'))){stratEditor(el.dataset.stadd,null);return;}
+  if((el=t.closest('[data-stle]'))){stratListEditor(el.dataset.stle);return;}
+  if((el=t.closest('[data-stdel]'))){var sn=el.dataset.stdel;
+    if(confirm('Delete the list "'+sn+'" and every strategy on it?')){
+      delete S.fin.strategies[sn];save();route();}return;}
+  if((el=t.closest('[data-stie]'))){var se=el.dataset.stie.split('|');
+    stratEditor(se[0],+se[1]);return;}
+  if((el=t.closest('[data-stid]'))){var sd=el.dataset.stid.split('|');
+    if(confirm('Delete this strategy?')){
+      S.fin.strategies[sd[0]].items.splice(+sd[1],1);save();route();}return;}
+
+  /* planning */
+  if((el=t.closest('[data-plgo]'))){nav('planning/'+el.dataset.plgo);return;}
+  if((el=t.closest('[data-ple]'))){planColEditor(el.dataset.ple);return;}
+  if((el=t.closest('[data-pld]'))){var pc=planCol(el.dataset.pld);
+    if(pc&&confirm('Delete "'+pc.name+'" and every section in it?')){
+      S.plan.cols=S.plan.cols.filter(function(x){return x.id!==el.dataset.pld;});
+      save();nav('planning');}return;}
+  if((el=t.closest('[data-plsadd]'))){planSubEditor(el.dataset.plsadd,null);return;}
+  if((el=t.closest('[data-plse]'))){var q=el.dataset.plse.split('|');
+    planSubEditor(q[0],q[1]);return;}
+  if((el=t.closest('[data-plsd]'))){var qd=el.dataset.plsd.split('|');
+    var pcol=planCol(qd[0]), psub=planSub(qd[0],qd[1]);
+    if(pcol&&psub&&confirm('Delete the section "'+psub.name+'"?')){
+      pcol.subs=pcol.subs.filter(function(x){return x.id!==qd[1];});save();route();}return;}
+  if((el=t.closest('[data-pliadd]'))){var ia=el.dataset.pliadd.split('|');
+    planItemEditor(ia[0],ia[1],null);return;}
+  if((el=t.closest('[data-plie]'))){var ie=el.dataset.plie.split('|');
+    planItemEditor(ie[0],ie[1],ie[2]);return;}
+  if((el=t.closest('[data-plid]'))){var idl=el.dataset.plid.split('|');
+    var dsub=planSub(idl[0],idl[1]);
+    if(dsub){dsub.items=dsub.items.filter(function(x){return x.id!==idl[2];});save();route();}
+    return;}
+  if((el=t.closest('[data-plck]'))){var ck=el.dataset.plck.split('|');
+    var csub=planSub(ck[0],ck[1]);
+    if(csub){csub.items.forEach(function(x){ if(x.id===ck[2]) x.done=el.checked; });
+      save();
+      /* Repaint just this row and the counters, so ticking a box does not
+         scroll the page back to the top mid-list. */
+      var row=el.closest('.pitem'); if(row) row.classList.toggle('done',el.checked);
+      var c2=planCol(ck[0]);
+      if(c2){var n2=planCount(c2);
+        $$('.stat b').forEach(function(b,i){ if(i===0)b.textContent=n2.pct+'%';
+          if(i===1)b.textContent=n2.done; if(i===2)b.textContent=n2.total-n2.done; });
+        var sd2=(csub.items||[]).filter(function(x){return x.done;}).length;
+        var chip=row&&row.closest('.sec')&&row.closest('.sec').querySelector('.chip.p');
+        if(chip) chip.textContent=sd2+' / '+csub.items.length;}}
+    return;}
   if((el=t.closest('[data-d]'))){calSel=el.dataset.d;route();return;}
   if((el=t.closest('[data-evd]'))){dayLog(calSel).sched.splice(+el.dataset.evd,1);save();route();return;}
   if((el=t.closest('[data-spd]'))){dayLog(calSel).spend.splice(+el.dataset.spd,1);save();route();return;}
@@ -509,7 +720,13 @@ function settingsModal(){
    '<button class="b o s" id="stIng">Ingredients CSV</button>'+
    '<button class="b o s" id="stLog">Daily log CSV</button>'+
    '<button class="b o s" id="stShift">Shifts CSV</button>'+
-   '<button class="b o s" id="stFin">Budget CSV</button></div>'+
+   '<button class="b o s" id="stFin">Budget CSV</button>'+
+   '<button class="b o s" id="stPlan">Plans CSV</button></div>'+
+   '<div class="hr"></div>'+
+   '<h4 class="lbl">Lock</h4>'+
+   '<p class="sm muted" style="margin:8px 0 12px">This device remembers the code so it does not '+
+   'ask every time. Locking forgets it. Your data is not touched either way.</p>'+
+   '<button class="b o" id="stLock">Lock this device</button>'+
    '<div class="hr"></div>'+
    '<h4 class="lbl">Danger</h4>'+
    '<p class="sm muted" style="margin:8px 0 12px">This wipes everything on this device. '+
@@ -549,6 +766,14 @@ function settingsModal(){
     S.fin.jobs.forEach(function(j){rows.push(['Income','',j.name,j.who,j.low,j.real,j.high,j.actual||'']);});
     S.fin.costs.forEach(function(c){rows.push(['Cost',c.section,c.name,c.who,c.low,c.real,c.high,c.actual||'']);});
     dl('budget-'+today()+'.csv',toCSV(rows),'text/csv');};
+  $('#stPlan',m).onclick=function(){
+    var rows=[['Plan','Section','Item','Done','Note']];
+    planCols().forEach(function(c){(c.subs||[]).forEach(function(s){
+      (s.items||[]).forEach(function(i){
+        rows.push([c.name,s.name,i.text,i.done?'yes':'',i.note||'']);});});});
+    dl('plans-'+today()+'.csv',toCSV(rows),'text/csv');};
+  $('#stLock',m).onclick=function(){
+    if(confirm('Ask for the code again next time this device opens the Handbook?')) lock();};
   $('#stReset',m).onclick=function(){
     if(!confirm('Erase every list, log, edit and photo on this device?'))return;
     if(!confirm('Really sure? This cannot be undone without a saved file.'))return;

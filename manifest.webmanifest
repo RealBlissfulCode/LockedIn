@@ -1,12 +1,12 @@
 {
   "name": "The Handbook",
   "short_name": "Handbook",
-  "description": "Meals, training, shopping, money and schedule for two people.",
+  "description": "Private.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#0B0C0E",
-  "theme_color": "#0B0C0E",
+  "background_color": "#0A0A0C",
+  "theme_color": "#0A0A0C",
   "icons": [
     {
       "src": "icons/icon-192.png",
@@ -39,6 +39,10 @@
     {
       "name": "Financial",
       "url": "./#/financial"
+    },
+    {
+      "name": "Planning",
+      "url": "./#/planning"
     },
     {
       "name": "Schedule",

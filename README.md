@@ -1,65 +1,130 @@
 # The Handbook
 
-Meals, training, shopping, money and schedule for two people. One HTML file,
-no framework, no build step, no backend, no database, no accounts.
+Meals, training, shopping, money, plans and schedule for two people. One HTML
+file, no framework, no backend, no database, no accounts.
 
 - 251 recipes, gluten-free, macros computed from gram weights
-- 168 ingredients priced at whichever of Walmart Fort Collins or Costco Timnath is cheaper
+- 168 ingredients priced at whichever of Walmart or Costco is cheaper
 - 211 exercises, 32 sessions, and a session suggested from what has not been trained lately
-- Financial planning with full scenario snapshots, plus real earnings tracking
+- Financial planning with scenario snapshots, real earnings tracking, strategy
+  lists and big-purchase comparisons
+- Planning: collections, subsections and checklists for anything that is not money or food
 - Schedule with recurring weekly rules and a time-ordered shared calendar
-- Dark and light themes
+- Dark and light themes, and it installs to a phone home screen
 
-## Deploying with Hostinger + GitHub
+## The passcode
 
-Hostinger can pull straight from a repo, so a push becomes a deploy.
+The app is behind a four digit code. It is **2121**, set in `PASSCODE` at the top
+of `src/build.py`. Change it there and rebuild and it changes everywhere.
 
-**Once, to set it up:**
+**Be clear about what this protects.** Everything personal — what we earn, what we
+owe, where we might live, the strategy lists, the plans, and the application code
+itself, which carries our names and the placeholder text in every editor — is
+encrypted into the page at build time. Until the right code is entered, View
+Source shows a lock screen, the recipe database and a block of base64. There is
+no readable copy of any of it anywhere in the file.
 
-1. Push this folder to GitHub.
-   ```
-   git init
-   git add .
-   git commit -m "Handbook"
-   git branch -M main
-   git remote add origin https://github.com/YOURNAME/Meal-App.git
-   git push -u origin main
-   ```
-2. hPanel, then **Website**, then **GIT**.
-3. Repository: your repo URL. Branch: `main`. Directory: leave blank for
-   `public_html`, or type a subfolder name to serve it from
-   `yourdomain.com/thatname`.
-4. **Create**. Hostinger clones it.
+What it does **not** do is survive someone determined. Four digits is ten thousand
+guesses. The key derivation is deliberately slow (200,000 PBKDF2 rounds, about
+80 ms per guess) so a full sweep costs hours rather than seconds, but that is the
+ceiling of what a four digit code can buy. It stops anyone who finds the URL. It
+would not stop somebody who wanted in.
 
-**Every time after:** push, then hit **Deploy** in hPanel. If you want it automatic,
-copy the webhook URL Hostinger shows you and paste it into GitHub under
-Settings, Webhooks. Then a push deploys on its own.
+The recipe and exercise database ships **unencrypted**, because it is generic and
+because base64 does not compress: sealing it would turn ~150 KB over the wire into
+~1.3 MB. That trade only holds while nothing personal is in it, so `src/build.py`
+keeps a `FORBIDDEN` list and **refuses to build** if one of our names, employers,
+towns or diagnoses reaches the unencrypted half. If it stops you, either reword
+the text or move it into `src/private_seed.py`.
 
-There is **no build step**. Build command stays empty. Hostinger serves the files
-exactly as they sit in the repo.
+The browser remembers the code so it does not ask every time. Settings has a
+**Lock this device** button that forgets it. The data itself is never touched
+by locking.
 
-### If the repo is private
+Decryption needs `crypto.subtle`, which browsers only expose over **https or
+localhost**. The gate says so if it is opened over plain http.
 
-Hostinger shows an SSH key on the GIT page. Copy it into GitHub under
-Settings, Deploy keys, read access is enough.
+## Rebuilding
 
-## What ends up in the web root
+The app is generated from the Python in `src/`. Nothing is typed by hand into
+`index.html`.
 
-Hostinger clones everything, `src` and `README.md` included. That is harmless:
-`.htaccess` blocks `.py`, `.json` and `.md` from being served, so the Python and
-this file are in the repo but not reachable from the web.
+```
+python3 src/build.py
+```
+
+That rewrites `index.html`. Commit it and push.
+
+```
+python3 src/build.py --check
+```
+
+Rebuilds in memory and exits non-zero if the committed `index.html` is stale or
+if a recipe fails validation. Worth running before a deploy.
+
+| Where | What is in it |
+| --- | --- |
+| `src/build.py` | The only build script. Recipe maths, the encryption, the HTML shell. |
+| `src/private_seed.py` | Everything personal. The only file that knows where we might live. |
+| `src/gate.py` | The lock screen and the decryption client. |
+| `src/app_core.py` | State, storage, scenarios, the one-time seed. |
+| `src/app_views1.py` | Meals, recipe detail, shopping, ingredients. |
+| `src/app_views2.py` | Training, financial, strategies, purchases, planning, schedule. |
+| `src/app_wire.py` | Router, event wiring, every editor modal. |
+| `src/spa_css.py` | The whole stylesheet. |
+| `src/recipes_1..6.py`, `ingredients.py`, `prices.py` | The food database. |
+| `src/exercises.json`, `sessions.json` | The training database. |
+| `src/costs.json`, `jobs.json` | Seed budget lines. Encrypted into the page. |
+
+Prices are in `src/prices.py` as dollars per 100 g, two columns. Editing a price
+inside the app is easier and updates every recipe that uses it.
+
+## The seeded lists are not templates
+
+The apartments, the houses, the strategy tiers and the plans seed **once**, the
+first time a browser unlocks the app. From that moment they are ordinary rows.
+Rename them, edit them, delete them, and they stay however you left them. A
+deleted list does not come back on the next deploy, and a rebuild does not
+overwrite an edit. Two flags in `app_core.py`, `seeded` and `seeded6`, are the
+whole mechanism.
+
+If you want a clean re-seed, Settings has **Erase all data**.
+
+## Deploying to a subdomain with Hostinger
+
+Hostinger pulls straight from the repo, so a push becomes a deploy.
+
+1. hPanel, then **Websites**, then create the subdomain (e.g. `handbook.jaronnorris.com`).
+   Note the folder it makes, usually `public_html/handbook` or a separate
+   `domains/handbook.jaronnorris.com/public_html`.
+2. hPanel, then **GIT**. Repository: this repo's URL. Branch: `main`.
+   Directory: the subdomain folder from step 1.
+3. **Create**. Hostinger clones it.
+4. Every push after that: hit **Deploy**, or paste Hostinger's webhook URL into
+   GitHub under Settings, Webhooks, and a push deploys on its own.
+
+There is no build step on the server. The build runs here, `index.html` is
+committed, and Hostinger serves the files exactly as they sit in the repo.
+
+If the repo is private, Hostinger shows an SSH key on the GIT page. Copy it into
+GitHub under Settings, Deploy keys. Read access is enough.
+
+### What ends up in the web root
 
 ```
 index.html               the entire app, self-contained
-.htaccess                gzip, caching, https redirect, security headers, blocks src
+.htaccess                gzip, caching, https redirect, security headers, noindex
+robots.txt               keeps it out of search results
 manifest.webmanifest     lets it install to a phone home screen
 icons/                   app icons
-src/                     Python that regenerates index.html, never served
+src/                     the Python that regenerates index.html, never served
 ```
 
-`.htaccess` is a hidden file but git tracks it normally. Confirm it made it with
-`git ls-files` before deploying, because without it you lose gzip and the https
-redirect.
+`.htaccess` blocks `.py`, `.json` and `.md`, and `src/.htaccess` denies that
+directory outright, so the Python is in the repo but not reachable from the web.
+Both are hidden files that git tracks normally — confirm they made it with
+`git ls-files` before deploying, because without the top one you lose gzip, the
+https redirect and the noindex header.
 
 Paths are all relative, so a subfolder deploy works without changing anything.
 
@@ -73,32 +138,25 @@ backend and no analytics. Hostinger only ever serves the file.
 
 The gear icon opens Settings. **Save to a file** downloads everything as
 `handbook-data-YYYY-MM-DD.json`: profiles, ingredient edits, shopping lists,
-favourites, custom recipes, photos, every logged day, shifts, costs, scenarios and
-the schedule. **Load a file** restores it. That file is also how to hand the data
-over for changes, so a new version can be built on top of real entries.
+favourites, custom recipes, photos, every logged day, shifts, costs, scenarios,
+strategies, purchases, plans and the schedule. **Load a file** restores it.
 
-Because storage is per browser and per device, it does not sync between a phone and
-a laptop on its own. Save on one, Load on the other. Storage caps around 5 MB, and
-photos are the only thing large enough to matter.
+Because storage is per browser and per device, it does not sync between a phone
+and a laptop on its own. Save on one, Load on the other. Storage caps around
+5 MB, and photos are the only thing large enough to matter.
 
-## Rebuilding index.html
-
-The app is generated from the Python in `src`. Recipes, prices, the exercise
-database and the seed budget all live there.
+## Local preview
 
 ```
-cd src
-python3 -c "import build, build_app"
+python3 tools/serve.py 8080
 ```
 
-That rewrites `index.html`. Commit it and push.
-
-Prices are in `src/prices.py` as dollars per 100 g, two columns. Editing an
-ingredient price inside the app is easier and updates every recipe that uses it.
+`localhost` counts as a secure context, so the gate works there.
 
 ## Known limits
 
 - No sync between devices, by design, since there is no server.
-- Prices are Aug 2026 estimates for Fort Collins and drift.
+- A four digit passcode is a speed bump, not security. See above.
+- Prices are Aug 2026 estimates for Northern Colorado and drift.
 - Leucine is an estimate within about 10 percent where USDA has no amino acid profile.
 - Recipe photos are yours to add. No stock imagery is bundled.

@@ -7,21 +7,25 @@ APP_CORE = r"""
    from a real .json file so it can be handed back for edits.
    ============================================================ */
 var R=_D.recipes, BASEING=_D.ing, AISLES=_D.aisles, LEARN=_D.learn;
-var EX=_D.exercises, SESS=_D.sessions, SEEDCOST=_D.costs, SEEDJOB=_D.jobs;
+var EX=_D.exercises, SESS=_D.sessions;
+/* Everything personal arrives decrypted from the gate, never from _D. */
+var SEED=window._SEED||{};
+var SEEDCOST=SEED.costs||[], SEEDJOB=SEED.jobs||[];
 var KEY='handbook.v5';
 
 /* ---------------- state ---------------- */
 function DEF(){return{
- v:5, who:'j', savedAt:null, theme:'dark',
+ v:6, who:'j', savedAt:null, theme:'dark',
  prof:{j:{name:'Me',sex:'m',w:150,h:68,age:20,bf:20,act:1.55,goal:1.09,pf:1.1},
        a:{name:'Aaliyah',sex:'f',w:120,h:66.5,age:20,bf:24,act:1.45,goal:1.0,pf:0.8}},
  ingOv:{}, fav:[], lists:{}, mine:[], photos:{},
  shop:{active:'Weekly shop', lists:{'Weekly shop':{cat:'Groceries',fav:true,items:[]}}},
  days:{},
- fin:{jobs:[],shifts:[],costs:[],scenarios:{},purchases:{},costMode:'real',path:'rent',
-      activeScenario:null, draft:null},
+ fin:{jobs:[],shifts:[],costs:[],scenarios:{},purchases:{},strategies:{},
+      costMode:'real',path:'rent',activeScenario:null, draft:null},
+ plan:{cols:[]},
  sched:{tmpl:{}, },
- exLog:{}, seeded:false
+ exLog:{}, seeded:false, seeded6:false
 };}
 var S=(function(){
   try{var raw=localStorage.getItem(KEY);
@@ -37,13 +41,48 @@ function save(){ S.savedAt=Date.now();
   try{localStorage.setItem(KEY,JSON.stringify(S));}
   catch(e){toast('Storage full. Save to file, then remove some photos.');}}
 
-/* seed financial data from the Moving In workbook, once */
+/* Seed from the Moving In workbook, ONCE per browser.
+
+   These are not templates and they are not owned by the app. The moment they
+   land they are ordinary rows: rename them, edit them, delete them, and they
+   stay however you left them. Nothing here re-appears on the next deploy, and
+   deleting the last strategy list does not bring it back. The flags below are
+   the whole mechanism. */
 if(!S.seeded){
   S.fin.costs=SEEDCOST.map(function(c,i){return{id:'c'+i,name:c.name,section:c.section,
     who:c.who,low:c.low,real:c.real,high:c.high,actual:c.exact||null};});
   S.fin.jobs=SEEDJOB.map(function(j,i){return{id:'j'+i,who:j.who,name:j.name,
     employer:j.employer,title:j.title,rate:null,low:j.low,real:j.real,high:j.high};});
   S.seeded=true; save();
+}
+if(!S.seeded6){
+  var SP=SEED.purchases||{}, SS=SEED.strategies||{}, SL=SEED.planning||[];
+  /* Only fill a slot that is genuinely empty, so nothing you already made is
+     touched and a list you deleted before this build does not come back. */
+  Object.keys(SP).forEach(function(n){
+    if(S.fin.purchases[n]) return;
+    S.fin.purchases[n]={cat:SP[n].cat,note:SP[n].note||'',
+      items:SP[n].items.map(function(it){
+        return {id:uid(),name:it.name,price:it.price,link:it.link||'',
+                notes:it.notes||'',fields:it.fields||{}};})};
+  });
+  Object.keys(SS).forEach(function(n){
+    if(S.fin.strategies[n]) return;
+    S.fin.strategies[n]={note:SS[n].note||'',
+      items:SS[n].items.map(function(it){
+        return {id:uid(),name:it.name,low:it.low,real:it.real,high:it.high,
+                rate:it.rate||'',effort:it.effort||'',when:it.when||'',
+                status:it.status||'',how:it.how||''};})};
+  });
+  SL.forEach(function(c){
+    if(S.plan.cols.some(function(x){return x.name===c.name;})) return;
+    S.plan.cols.push({id:uid(),name:c.name,note:c.note||'',
+      subs:(c.subs||[]).map(function(s){
+        return {id:uid(),name:s.name,note:s.note||'',
+          items:(s.items||[]).map(function(i){
+            return {id:uid(),text:i.text,note:i.note||'',done:false};})};})});
+  });
+  S.seeded6=true; save();
 }
 
 /* ---------------- helpers ---------------- */
@@ -186,8 +225,14 @@ function estDayCost(t,mode){
 }
 
 /* ---------------- file persistence ---------------- */
+/* Forget the passcode on this device. The data itself is untouched; the next
+   load just asks for the code again. */
+function lock(){
+  try{localStorage.removeItem('handbook.unlocked');}catch(e){}
+  location.reload();
+}
 function exportAll(){
-  var blob={app:'handbook',version:5,exported:new Date().toISOString(),state:S};
+  var blob={app:'handbook',version:6,exported:new Date().toISOString(),state:S};
   dl('handbook-data-'+today()+'.json',JSON.stringify(blob,null,1),'application/json');
   toast('Saved to file');
 }

@@ -28,6 +28,8 @@ DirectoryIndex index.html
   Header set X-Frame-Options "SAMEORIGIN"
   Header set Referrer-Policy "strict-origin-when-cross-origin"
   Header set Permissions-Policy "geolocation=(), microphone=(), camera=(self)"
+  # This is a private subdomain. Keep it out of every index.
+  Header set X-Robots-Tag "noindex, nofollow, noarchive"
 </IfModule>
 
 # ---- correct MIME type for the web manifest ----

@@ -1,0 +1,6 @@
+# index.html is generated, and `python3 src/build.py --check` compares it byte for
+# byte against a fresh build. If git rewrote the line endings on checkout, that
+# check would fail on a clean clone for no real reason. Pin everything to LF.
+* text=auto eol=lf
+
+*.png binary
