@@ -51,7 +51,7 @@
       sched: { tmpl: {} },
       prefs: {
         costMode: 'all', dayBudget: null, remindBackup: true, planSlots: 4,
-        hideChecked: false, closedAisles: []
+        hideChecked: false, closedAisles: [], calView: null
       },
       seeded: false
     };
@@ -181,7 +181,7 @@
   function csvEsc(v) { return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; }
   function toCSV(rows) { return rows.map(function (r) { return r.map(csvEsc).join(','); }).join('\n'); }
 
-  H.E = E; H.money = money; H.money0 = money0; H.p2 = p2;
+  H.E = E; H.money = money; H.money0 = money0; H.p2 = p2; H.dstr = dstr;
   H.today = today; H.dOf = dOf; H.addDays = addDays; H.pretty = pretty; H.shortD = shortD;
   H.uid = uid; H.num = num; H.toCSV = toCSV;
 

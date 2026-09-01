@@ -38,7 +38,16 @@ async function okEventually(page, name, fn, arg, detail) {
     await page.waitForFunction(fn, arg, { timeout: 4000, polling: 60 });
     ok(name, true);
   } catch (e) {
-    ok(name, false, detail || 'still false after 4s');
+    let why = '';
+    try {
+      why = await page.evaluate(() => ({
+        hash: location.hash,
+        masks: document.querySelectorAll('.mask').length,
+        menus: document.querySelectorAll('.menumask').length,
+        mine: window.Handbook.state().mine.map(r => r.n).join(',')
+      })).then(JSON.stringify);
+    } catch (e2) { why = '(no page state)'; }
+    ok(name, false, (detail || 'still false after 4s') + ' ' + why);
   }
 }
 function read(rel) { return fs.readFileSync(path.join(ROOT, rel), 'utf8'); }
@@ -536,9 +545,14 @@ async function browserTests() {
     await dialog('new comparison list asks for a name', () => page.click('#bpNew'));
 
     await goto('#/schedule');
-    await dialog('event editor opens and saves', () => page.click('#evAdd'), () => page.click('#eSave'));
-    await dialog('spend editor opens and saves', () => page.click('#spAdd'), () => page.click('#spSave'));
-    await dialog('meal picker opens', () => page.click('#mealAdd'));
+    await dialog('event editor opens and saves',
+      () => page.click('[data-act="sched|0"]'), () => page.click('#eSave'));
+    await dialog('spend editor opens and saves', async () => {
+      await page.click('[data-more="sched"]');
+      await page.waitForSelector('.menu');
+      await page.click('.menuitem:nth-child(1)');
+    }, () => page.click('#spSave'));
+    await dialog('meal picker opens', () => page.click('[data-act="sched|1"]'));
     await okEventually(page, 'the event reached the day', () => {
       const H = window.Handbook;
       return H.dayLog(H.calSel).sched.length > 0 && H.dayLog(H.calSel).spend.length > 0;
@@ -592,6 +606,52 @@ async function browserTests() {
       await page.click('.menuitem:nth-child(1)');
     });
 
+    group('Calendar');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.evaluate(() => {
+      // Clear the remembered choice so the width-based default is what is tested.
+      window.Handbook.state().prefs.calView = null;
+      location.hash = '#/schedule';
+      window.Handbook.refresh();
+    });
+    await page.waitForTimeout(500);
+    ok('a phone gets the week strip, not a month grid it cannot show anything in',
+      await page.evaluate(() =>
+        document.querySelectorAll('.wday').length === 7 && !document.querySelector('.cal')));
+    ok('each day in the strip is a real target',
+      await page.evaluate(() => {
+        const n = document.querySelector('.wday');
+        if (!n) return false;
+        const r = n.getBoundingClientRect();
+        return r.height >= 70 && r.width >= 40;
+      }));
+    await page.click('[data-calview="month"]');
+    await okEventually(page, 'the month grid is still one toggle away',
+      () => !!document.querySelector('.cal'));
+    await okEventually(page, 'and the choice is remembered',
+      () => window.Handbook.state().prefs.calView === 'month');
+
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.evaluate(() => { location.hash = '#/meals'; });
+    await page.waitForTimeout(200);
+    await page.evaluate(() => { location.hash = '#/schedule'; });
+    await page.waitForTimeout(500);
+    ok('on a laptop a day says what is on it rather than showing a dot',
+      await page.evaluate(() => document.querySelectorAll('.day .dl').length > 0));
+
+    /* A view that throws must say so rather than leaving the page blank. */
+    ok('a broken view shows an error instead of nothing',
+      await page.evaluate(() => {
+        const V = window.Handbook.views;
+        const real = V.schedule;
+        V.schedule = function () { throw new Error('deliberate test failure'); };
+        window.Handbook.refresh();
+        const text = document.querySelector('#view').innerText;
+        V.schedule = real;
+        window.Handbook.refresh();
+        return text.includes('deliberate test failure') && text.includes('error');
+      }));
+
     group('Layout and reach');
     /* The complaint that started this: content running off the right edge with
        nothing to say it was there. Nothing may overflow the viewport, at any
@@ -616,7 +676,7 @@ async function browserTests() {
             }
             // Clipped with no way to scroll to the rest.
             if (n.scrollWidth - n.clientWidth > 2 && !/auto|scroll/.test(cs.overflowX) &&
-              cs.overflowX !== 'visible') {
+              cs.overflowX !== 'visible' && cs.textOverflow !== 'ellipsis') {
               out.push('clipped ' + n.tagName.toLowerCase() + '.' + String(n.className || '').split(' ')[0]);
             }
           });
@@ -630,15 +690,23 @@ async function browserTests() {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate(() => { location.hash = '#/shopping/ingredients'; });
     await page.waitForTimeout(400);
-    ok('a wide table becomes labelled cards on a phone',
-      await page.evaluate(() => {
+    {
+      const diag = await page.evaluate(() => {
         const td = document.querySelector('.tw td[data-l]');
         const tr = document.querySelector('.tw tbody tr');
-        if (!td || !tr) return false;
-        return getComputedStyle(td).display === 'flex' &&
-          getComputedStyle(tr).display === 'block' &&
-          getComputedStyle(document.querySelector('.tw thead')).display === 'none';
-      }));
+        const th = document.querySelector('.tw thead');
+        return {
+          w: window.innerWidth, hash: location.hash,
+          hasTable: !!document.querySelector('.tw'),
+          td: td ? getComputedStyle(td).display : null,
+          tr: tr ? getComputedStyle(tr).display : null,
+          thead: th ? getComputedStyle(th).display : null
+        };
+      });
+      ok('a wide table becomes labelled cards on a phone',
+        diag.td === 'flex' && diag.tr === 'block' && diag.thead === 'none',
+        JSON.stringify(diag));
+    }
     ok('and every value still carries its column name',
       await page.evaluate(() => {
         const tds = [...document.querySelectorAll('.tw tbody tr:first-child td')];

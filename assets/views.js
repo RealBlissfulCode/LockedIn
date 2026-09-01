@@ -988,91 +988,181 @@
   };
 
   /* ============================================================ SCHEDULE */
-  V.schedule = function (sub) {
-    if (sub === 'week') return V.weekTemplate();
+  /* A month grid on a 390px screen gives each day about 46px, which is not
+     enough to show anything — you get a dot and a guess. So a phone gets a week
+     strip and the day itself; the month grid is there when you ask for it, and
+     is the default where there is room for it to say something. */
+  function defaultCalView() {
+    if (global.matchMedia) {
+      return global.matchMedia('(max-width: 700px)').matches ? 'week' : 'month';
+    }
+    return (global.innerWidth || 1024) <= 700 ? 'week' : 'month';
+  }
+
+  function dayDots(ds) {
+    var st = S(), rec = st.days[ds];
+    var planned = (st.plan[ds] || []).length;
+    return (rec && rec.meals.length ? '<i class="dot" title="meals logged"></i>' : '') +
+      (rec && rec.workout && rec.workout !== 'rest' ? '<i class="dot w" title="training"></i>' : '') +
+      (rec && rec.sched && rec.sched.length ? '<i class="dot e" title="plans"></i>' : '') +
+      (planned ? '<i class="dot p" title="meals planned"></i>' : '');
+  }
+
+  function weekStrip() {
+    var start = H.dOf(H.calSel);
+    start.setDate(start.getDate() - start.getDay());
+    var cells = '';
+    for (var i = 0; i < 7; i++) {
+      var d = new Date(start);
+      d.setDate(start.getDate() + i);
+      var ds = H.dstr(d);
+      cells += '<button class="wday' + (ds === H.today() ? ' today' : '') +
+        (ds === H.calSel ? ' sel' : '') + '" data-d="' + ds + '" ' +
+        'aria-label="' + E(H.pretty(ds)) + '" aria-pressed="' + (ds === H.calSel) + '">' +
+        '<span class="wl">' + H.DOW[d.getDay()].charAt(0) + '</span>' +
+        '<span class="wn">' + d.getDate() + '</span>' +
+        '<span class="dots">' + dayDots(ds) + '</span></button>';
+    }
+    var endD = new Date(start);
+    endD.setDate(start.getDate() + 6);
+    var label = start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) +
+      ' – ' + endD.toLocaleDateString(undefined,
+        start.getMonth() === endD.getMonth() ? { day: 'numeric' } : { month: 'short', day: 'numeric' });
+
+    return '<div class="card pad">' +
+      '<div class="spread" style="margin-bottom:12px">' +
+      '<button class="icobtn" id="wPrev" aria-label="Previous week">' + ARROW_L + '</button>' +
+      '<b style="font-family:var(--fd);font-size:17px">' + E(label) + '</b>' +
+      '<button class="icobtn" id="wNext" aria-label="Next week">' + ARROW_R + '</button></div>' +
+      '<div class="wstrip">' + cells + '</div></div>';
+  }
+
+  /* Where there is room, a day shows what is actually on it rather than a dot. */
+  function monthGrid() {
     var st = S();
     var first = new Date(H.calY, H.calM, 1);
-    var start = first.getDay();
+    var lead = first.getDay();
     var days = new Date(H.calY, H.calM + 1, 0).getDate();
-
     var cells = '';
-    for (var i = 0; i < start; i++) cells += '<div class="day out"></div>';
+    for (var i = 0; i < lead; i++) cells += '<div class="day out"></div>';
     for (var dn = 1; dn <= days; dn++) {
       var ds = H.calY + '-' + H.p2(H.calM + 1) + '-' + H.p2(dn);
       var rec = st.days[ds];
-      var ev = rec && rec.sched ? rec.sched.length : 0;
-      var planned = (st.plan[ds] || []).length;
+      var evs = (rec && rec.sched) || [];
+      var planned = st.plan[ds] || [];
+      var lines = evs.slice(0, 2).map(function (e) {
+        return '<span class="dl ev">' + E(e.what) + '</span>';
+      });
+      if (!lines.length && planned.length) {
+        var r0 = H.byId(planned[0].id);
+        lines.push('<span class="dl pl">' + (r0 ? E(r0.n) : planned.length + ' meals') + '</span>');
+      }
+      if (!lines.length && rec && rec.workout && rec.workout !== 'rest') {
+        lines.push('<span class="dl tr">' + E(H.TRAIN[rec.workout].n) + '</span>');
+      }
+      var extra = evs.length > 2 ? '<span class="dl more">+' + (evs.length - 2) + ' more</span>' : '';
+
       cells += '<button class="day' + (ds === H.today() ? ' today' : '') +
         (ds === H.calSel ? ' sel' : '') + '" data-d="' + ds + '" ' +
         'aria-label="' + E(H.pretty(ds)) + '">' +
-        '<span class="dn">' + dn + '</span><span class="dots">' +
-        (rec && rec.meals.length ? '<i class="dot"></i>' : '') +
-        (rec && rec.workout && rec.workout !== 'rest' ? '<i class="dot w"></i>' : '') +
-        (ev ? '<i class="dot e"></i>' : '') + '</span>' +
-        '<span class="dk">' + (planned ? planned + ' pl' : ev ? ev + ' ev' : '') + '</span></button>';
+        '<span class="dhead"><span class="dn">' + dn + '</span>' +
+        '<span class="dots">' + dayDots(ds) + '</span></span>' +
+        '<span class="dlines">' + lines.join('') + extra + '</span></button>';
     }
+
+    return '<div class="card pad">' +
+      '<div class="spread" style="margin-bottom:12px">' +
+      '<button class="icobtn" id="cPrev" aria-label="Previous month">' + ARROW_L + '</button>' +
+      '<h3>' + E(new Date(H.calY, H.calM, 1)
+        .toLocaleDateString(undefined, { month: 'long', year: 'numeric' })) + '</h3>' +
+      '<button class="icobtn" id="cNext" aria-label="Next month">' + ARROW_R + '</button></div>' +
+      '<div class="cal">' + H.DOW.map(function (x) {
+        return '<div class="dow"><span class="full">' + x + '</span>' +
+          '<span class="abbr">' + x.charAt(0) + '</span></div>';
+      }).join('') + cells + '</div></div>';
+  }
+
+  var ARROW_L = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+    'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>';
+  var ARROW_R = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+    'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>';
+
+  V.schedule = function (sub) {
+    if (sub === 'week') return V.weekTemplate();
+    var st = S();
+    var view = st.prefs.calView || defaultCalView();
 
     var d = H.dayLog(H.calSel);
     var t = H.dayTarget(st.who, d.workout);
     var got = H.eaten(H.calSel);
     var spend = H.daySpend(H.calSel);
     var blocks = H.freeBlocks(d, 60);
-    var planned2 = st.plan[H.calSel] || [];
+    var planned = st.plan[H.calSel] || [];
     var spendData = H.spendSeries(30);
     var anySpend = spendData.some(function (x) { return x.food || x.other; });
+    var isToday = H.calSel === H.today();
 
-    return '<div class="page"><div class="phead"><h1>Schedule</h1>' +
+    return '<div class="page"><div class="phead tight"><h1>Schedule</h1>' +
       '<p>What each of us is doing, when we are both free, and what the day cost.</p></div>' +
-      '<div class="row" style="margin-bottom:14px">' +
-      '<button class="b o" data-nav="schedule/week">Weekly template</button>' +
-      '<button class="b o" id="applyTmpl">Apply template to this week</button>' +
-      '<button class="b o" id="calCsv">Export the log</button></div>' +
 
-      '<div class="card pad"><div class="spread" style="margin-bottom:12px">' +
-      '<button class="b o s" id="cPrev" aria-label="Previous month">&larr;</button>' +
-      '<h3>' + E(new Date(H.calY, H.calM, 1)
-        .toLocaleDateString(undefined, { month: 'long', year: 'numeric' })) + '</h3>' +
-      '<button class="b o s" id="cNext" aria-label="Next month">&rarr;</button></div>' +
-      '<div class="cal">' + H.DOW.map(function (x) {
-        return '<div class="dow">' + x + '</div>';
-      }).join('') + cells + '</div>' +
-      '<div class="row sm muted" style="margin-top:12px">' +
-      '<span><i class="dot"></i> meals</span>' +
+      '<div class="spread" style="margin-bottom:14px">' +
+      '<div class="seg" role="group" aria-label="Calendar view">' +
+      '<button' + (view === 'week' ? ' class="on"' : '') + ' data-calview="week" ' +
+      'aria-pressed="' + (view === 'week') + '">Week</button>' +
+      '<button' + (view === 'month' ? ' class="on"' : '') + ' data-calview="month" ' +
+      'aria-pressed="' + (view === 'month') + '">Month</button></div>' +
+      (isToday ? '' : '<button class="b o s" id="calToday">Back to today</button>') +
+      '</div>' +
+
+      (view === 'week' ? weekStrip() : monthGrid()) +
+
+      '<div class="row sm muted" style="margin-top:10px">' +
+      '<span><i class="dot"></i> meals logged</span>' +
+      '<span><i class="dot p"></i> planned</span>' +
       '<span><i class="dot w"></i> training</span>' +
-      '<span><i class="dot e"></i> plans</span></div></div>' +
+      '<span><i class="dot e"></i> plans</span></div>' +
 
-      '<div class="sec"><h2>' + E(H.pretty(H.calSel)) + '</h2><div class="grid g2">' +
-      '<div class="card pad"><div class="spread"><h3 style="font-size:15px">Plans</h3>' +
-      '<button class="b o s" id="evAdd">Add</button></div>' +
+      '<div class="sec"><div class="spread"><h2>' + E(H.pretty(H.calSel)) + '</h2>' +
+      (isToday ? '<span class="chip t">Today</span>' : '') + '</div>' +
+      H.actionBar('sched', [
+        { label: 'Add a plan', primary: true, run: function () { H.act.evAdd(); } },
+        { label: 'Log a meal', keep: true, run: function () { H.act.mealAdd(); } },
+        { label: 'Log a spend', run: function () { H.act.spendAdd(); } },
+        { label: 'Set the training', run: function () { H.act.setWorkout(); } },
+        { label: 'Weekly template', hint: 'the regular week', run: function () { H.nav('schedule/week'); } },
+        { label: 'Apply the template to this week', run: function () { H.act.applyTmpl(); } },
+        { label: 'Export the log as CSV', run: function () { H.act.calCsv(); } }
+      ]) +
+
+      '<div class="grid g2">' +
+      '<div class="card pad"><h3 style="font-size:15px;margin-bottom:10px">Plans</h3>' +
       ((d.sched || []).length
-        ? '<div style="margin-top:10px">' + d.sched.map(function (ev, i) {
-          return '<div class="gitem"><span class="chip' + (ev.who === 'Aaliyah' ? ' t' : '') + '">' +
+        ? '<div>' + d.sched.map(function (ev, i) {
+          return '<div class="gitem" style="padding:10px 0">' +
+            '<span class="chip' + (ev.who === 'Aaliyah' ? ' t' : '') + '">' +
             E(H.nameOf(ev.who)) + '</span>' +
-            '<div style="flex:1"><div class="gn">' + E(ev.what) + '</div>' +
+            '<div style="flex:1;min-width:0"><div class="gn">' + E(ev.what) + '</div>' +
             '<div class="gq">' + E(ev.from || '') + (ev.to ? ' – ' + E(ev.to) : '') +
             (ev.where ? ' &middot; ' + E(ev.where) : '') + '</div></div>' +
             '<button class="x" data-evd="' + i + '" aria-label="Remove">&times;</button></div>';
         }).join('') + '</div>'
-        : '<div class="empty sm">Nothing planned.</div>') +
+        : '<p class="empty sm" style="padding:20px 0">Nothing planned.</p>') +
       (blocks === null ? ''
         : blocks.length
-          ? '<div class="note" style="margin-top:12px"><b>Both free.</b> ' +
+          ? '<div class="note" style="margin-bottom:0"><b>Both free.</b> ' +
           blocks.map(function (b) { return H.fmtMin(b[0]) + ' to ' + H.fmtMin(b[1]); }).join(', ') +
           '</div>'
-          : '<div class="note warn" style="margin-top:12px">No overlapping free time today.</div>') +
+          : '<div class="note warn" style="margin-bottom:0">No overlapping free time.</div>') +
       '</div>' +
 
-      '<div class="card pad"><h3 style="font-size:15px;margin-bottom:10px">The day</h3>' +
-      '<label class="f"><span>Training</span><select id="schWorkout">' +
-      Object.keys(H.TRAIN).map(function (k) {
-        return '<option value="' + k + '"' + (d.workout === k ? ' selected' : '') + '>' +
-          E(H.TRAIN[k].n) + '</option>';
-      }).join('') + '</select></label>' +
+      '<div class="card pad"><div class="spread" style="margin-bottom:10px">' +
+      '<h3 style="font-size:15px">The day</h3>' +
+      '<button class="pill" id="schWorkoutBtn">' + E(H.TRAIN[d.workout].n) + '</button></div>' +
       H.bar('Calories', got.kcal, t.kcal, 'pk') +
       H.bar('Protein', got.p, t.p, 'pp') +
-      (planned2.length
+      (planned.length
         ? '<div class="note" style="margin:12px 0"><b>Planned.</b> ' +
-        planned2.map(function (m) {
+        planned.map(function (m) {
           var r = H.byId(m.id);
           return r ? E(r.n) : '';
         }).filter(Boolean).join(', ') +
@@ -1085,22 +1175,19 @@
       '<div class="spread" style="margin-top:6px;padding-top:8px;border-top:1px solid var(--line)">' +
       '<span><b>Day total</b></span>' +
       '<b class="num" style="color:var(--forest)">' + money(spend.total) + '</b></div>' +
-      '<div class="row" style="margin-top:12px">' +
-      '<button class="b o s" id="spAdd">Log a spend</button>' +
-      '<button class="b o s" id="mealAdd">Log a meal</button></div>' +
       ((d.meals || []).length
-        ? '<div style="margin-top:10px">' + d.meals.map(function (m, i) {
+        ? '<div style="margin-top:12px">' + d.meals.map(function (m, i) {
           var r = H.byId(m.id);
           if (!r) return '';
-          return '<div class="spread sm" style="padding:5px 0;border-bottom:1px solid var(--line)">' +
+          return '<div class="spread sm" style="padding:6px 0;border-bottom:1px solid var(--line)">' +
             '<span>' + E(r.n) + (m.q !== 1 ? ' ×' + m.q : '') + '</span>' +
             '<span><b class="num">' + Math.round(r.k * (m.q || 1)) + '</b> ' +
             '<button class="x" data-mld="' + i + '" aria-label="Remove">&times;</button></span></div>';
         }).join('') + '</div>'
         : '') +
       ((d.spend || []).length
-        ? '<div style="margin-top:10px">' + d.spend.map(function (x, i) {
-          return '<div class="spread sm" style="padding:5px 0;border-bottom:1px solid var(--line)">' +
+        ? '<div style="margin-top:8px">' + d.spend.map(function (x, i) {
+          return '<div class="spread sm" style="padding:6px 0;border-bottom:1px solid var(--line)">' +
             '<span>' + E(x.what) + ' <span class="chip">' + E(H.nameOf(x.who || 'Both')) + '</span></span>' +
             '<span><b class="num">' + money(x.amt) + '</b> ' +
             '<button class="x" data-spd="' + i + '" aria-label="Remove">&times;</button></span></div>';

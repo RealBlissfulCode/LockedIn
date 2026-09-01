@@ -452,28 +452,54 @@ tr.hl td{background:var(--moss)}
 }
 
 /* ---------------------------------------------------------- calendar */
+/* Week strip: what a phone gets instead of a month grid, because seven columns
+   on a 390px screen leaves 46px a day and nothing fits in it. */
+.wstrip{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.wday{border:1px solid var(--line);border-radius:var(--r);background:var(--card);
+  padding:10px 2px 8px;cursor:pointer;display:flex;flex-direction:column;align-items:center;
+  gap:5px;font:inherit;color:inherit;min-height:74px;
+  transition:transform var(--t-2) var(--ez),border-color var(--t-2) var(--ez),
+             background-color var(--t-2) var(--ez)}
+.wday:hover{border-color:var(--forest);transform:translateY(-2px)}
+.wl{font:700 10px/1 var(--ff);letter-spacing:.1em;color:var(--ink-4)}
+.wn{font-family:var(--fd);font-size:19px;font-weight:600;line-height:1;color:var(--ink)}
+.wday.today .wn{color:var(--forest)}
+.wday.today{border-color:var(--forest)}
+.wday.sel{background:var(--forest);border-color:var(--forest)}
+.wday.sel .wl{color:var(--on-forest-dim)}
+.wday.sel .wn{color:var(--on-forest)}
+.wday.sel .dot{background:var(--on-forest)}
+
 .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:7px}
-.cal .dow{text-align:center;font:700 9.5px/1 var(--ff);letter-spacing:.14em;color:var(--ink-4);padding:7px 0}
-.day{min-height:74px;border:1px solid var(--line);border-radius:var(--r-s);background:var(--card);
-  padding:8px;cursor:pointer;display:flex;flex-direction:column;position:relative;
-  font:inherit;color:inherit;text-align:left;
+.cal .dow{text-align:center;font:700 9.5px/1 var(--ff);letter-spacing:.14em;color:var(--ink-4);
+  padding:7px 0}
+.cal .dow .abbr{display:none}
+.day{min-height:96px;border:1px solid var(--line);border-radius:var(--r-s);background:var(--card);
+  padding:8px;cursor:pointer;display:flex;flex-direction:column;gap:5px;position:relative;
+  font:inherit;color:inherit;text-align:left;overflow:hidden;
   transition:transform var(--t-2) var(--ez),border-color var(--t-2) var(--ez),
              box-shadow var(--t-2) var(--ez)}
 .day:hover{border-color:var(--forest);transform:translateY(-2px);box-shadow:var(--sh-2)}
 .day.out{opacity:0;pointer-events:none}
 .day.today{border-color:var(--forest);box-shadow:inset 0 0 0 1px var(--forest)}
 .day.sel{background:var(--forest);border-color:var(--forest)}
-.day.sel .dn,.day.sel .dk{color:var(--on-forest)}
-.dn{font-family:var(--fd);font-size:15px;font-weight:600;color:var(--ink)}
-.dk{font:600 10px/1 var(--ff);color:var(--ink-4);margin-top:auto;font-variant-numeric:tabular-nums}
-.dots{display:flex;gap:3px;margin-top:4px}
-.dot{width:5px;height:5px;border-radius:50%;background:var(--forest);display:inline-block}
+.day.sel .dn{color:var(--on-forest)}
+.day.sel .dl{background:rgba(255,255,255,.16);color:var(--on-forest)}
+.day.sel .dot{background:var(--on-forest)}
+.dhead{display:flex;align-items:center;justify-content:space-between;gap:4px}
+.dn{font-family:var(--fd);font-size:15px;font-weight:600;color:var(--ink);line-height:1}
+/* What is actually on the day, where there is room to say it. */
+.dlines{display:flex;flex-direction:column;gap:3px;min-width:0}
+.dl{font:600 10.5px/1.25 var(--ff);padding:3px 5px;border-radius:5px;background:var(--sand);
+  color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dl.pl{background:var(--moss);color:var(--forest)}
+.dl.tr{background:var(--amber-bg);color:var(--amber-ink)}
+.dl.more{background:none;color:var(--ink-4);padding-left:0;font-weight:500}
+.dots{display:flex;gap:3px}
+.dot{width:5px;height:5px;border-radius:50%;background:var(--forest);display:inline-block;flex:none}
 .dot.w{background:var(--amber)}
 .dot.e{background:var(--plum)}
-
-/* A list of short rows should not stretch to 1180px; the price ends up a hand's
-   width from the name it belongs to. */
-.col{max-width:900px}
+.dot.p{background:var(--forest-3)}
 
 /* ---------------------------------------------------------- shopping */
 /* The list picker is one horizontal strip. Stacked category sections pushed the
@@ -717,8 +743,13 @@ details .dc ul{margin:0 0 12px;padding-left:20px}
   .stat:nth-child(odd){border-right:1px solid var(--line)}
   .stat:nth-child(even){border-right:0}
   .dhero{min-height:210px;padding:22px;border-radius:var(--r)}
-  .cal{gap:4px}
-  .day{padding:5px;border-radius:7px;min-height:54px}
+  .cal{gap:5px}
+  .cal .dow{letter-spacing:0}
+  .cal .dow .full{display:none}
+  .cal .dow .abbr{display:inline}
+  .day{padding:6px 4px;border-radius:8px;min-height:56px;gap:3px}
+  .dlines{display:none}
+  .dhead{flex-direction:column;align-items:flex-start;gap:4px}
   .pad{padding:18px}
   ol.stp li{padding-left:40px}
   .filterbar,.searchbar{position:static}

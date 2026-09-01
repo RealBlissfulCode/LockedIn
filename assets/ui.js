@@ -130,7 +130,13 @@
     openModals.push(m);
 
     var focusFirst = $(opts.focus || FOCUSABLE, m);
-    if (focusFirst) setTimeout(function () { try { focusFirst.focus(); } catch (e) { } }, 30);
+    if (focusFirst) {
+      requestAnimationFrame(function () {
+        // Never steal focus from a field the user has already moved to.
+        if (m.contains(document.activeElement) && document.activeElement !== document.body) return;
+        try { focusFirst.focus(); } catch (e) { }
+      });
+    }
     return m;
   }
   H.modal = modal;

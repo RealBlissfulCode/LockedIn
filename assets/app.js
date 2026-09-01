@@ -101,7 +101,24 @@
     return { v: h[0] || 'meals', sub: h[1] || '', rest: h.slice(2) };
   }
 
+  /* A view that throws used to leave the page blank with nothing to say why.
+     Failing loudly is the difference between "the calendar is broken" and
+     "the calendar shows nothing". */
   function viewHTML(r) {
+    try {
+      return renderView(r);
+    } catch (err) {
+      return '<div class="page"><div class="phead"><h1>That page hit an error</h1>' +
+        '<p>The rest of the app still works, and nothing you have saved is affected.</p></div>' +
+        '<div class="note bad"><b>' + E(err && err.message ? err.message : String(err)) +
+        '</b><p class="sm muted" style="margin:8px 0 0">' +
+        E(((err && err.stack) || '').split('\n')[1] || '') + '</p></div>' +
+        '<div class="row"><button class="b" data-nav="meals">Back to Meals</button>' +
+        '<button class="b o" id="errReload">Reload the app</button></div></div>';
+    }
+  }
+
+  function renderView(r) {
     switch (r.v) {
       case 'r': return V.recipe(r.sub);
       case 'plan': return V.plan();
@@ -194,6 +211,7 @@
     else if (r.v === 'financial') bindFin(r.sub);
     else if (r.v === 'schedule') bindSched(r.sub);
     else if (r.v === 'settings') bindSettings();
+    on('#errReload', 'click', function () { location.reload(); });
   }
 
   function debounce(fn, ms) {
@@ -1435,7 +1453,58 @@
   }
 
   /* ---------------------------------------------------------- schedule */
+  H.act.evAdd = function () { evEditor(H.calSel); };
+  H.act.spendAdd = function () { spendEditor(H.calSel); };
+  H.act.mealAdd = function () { mealPicker(H.calSel); };
+  H.act.applyTmpl = function () {
+    var n = H.applyTemplate(H.calSel);
+    refresh();
+    toast(n ? n + ' items added to that week' : 'Already applied');
+  };
+  H.act.setWorkout = function () {
+    var cur = H.dayLog(H.calSel).workout;
+    H.menu(null, Object.keys(H.TRAIN).map(function (k) {
+      return {
+        label: H.TRAIN[k].n,
+        hint: k === cur ? 'current' : '',
+        run: function () {
+          H.dayLog(H.calSel).workout = k;
+          H.save(true); refresh();
+        }
+      };
+    }));
+  };
+  H.act.calCsv = function () {
+    var rows = [['Date', 'Training', 'Kcal', 'Protein', 'FoodCost', 'OtherSpend',
+      'Plans', 'Bodyweight', 'Notes']];
+    Object.keys(S().days).sort().forEach(function (d) {
+      var rec = S().days[d], e = H.eaten(d);
+      var sp = (rec.spend || []).reduce(function (a, x) { return a + (x.amt || 0); }, 0);
+      rows.push([d, H.TRAIN[rec.workout] ? H.TRAIN[rec.workout].n : rec.workout,
+      Math.round(e.kcal), Math.round(e.p), e.cost.toFixed(2), sp.toFixed(2),
+      (rec.sched || []).map(function (x) { return H.nameOf(x.who) + ':' + x.what; }).join('; '),
+      rec.w || '', rec.notes || '']);
+    });
+    H.dl('log-' + H.today() + '.csv', H.toCSV(rows), 'text/csv');
+    toast('Log exported');
+  };
+
   function bindSched() {
+    $$('[data-calview]').forEach(function (b) {
+      b.onclick = function () {
+        S().prefs.calView = b.dataset.calview;
+        H.save(true);
+        refresh();
+      };
+    });
+    on('#calToday', 'click', function () {
+      H.calSel = H.today();
+      H.calY = new Date().getFullYear();
+      H.calM = new Date().getMonth();
+      refresh();
+    });
+    on('#wPrev', 'click', function () { H.calSel = H.addDays(H.calSel, -7); syncMonth(); refresh(); });
+    on('#wNext', 'click', function () { H.calSel = H.addDays(H.calSel, 7); syncMonth(); refresh(); });
     on('#cPrev', 'click', function () {
       H.calM--;
       if (H.calM < 0) { H.calM = 11; H.calY--; }
@@ -1446,34 +1515,15 @@
       if (H.calM > 11) { H.calM = 0; H.calY++; }
       refresh();
     });
-    on('#schWorkout', 'change', function () {
-      H.dayLog(H.calSel).workout = this.value;
-      H.save(true); refresh();
-    });
-    on('#evAdd', 'click', function () { evEditor(H.calSel); });
-    on('#spAdd', 'click', function () { spendEditor(H.calSel); });
-    on('#mealAdd', 'click', function () { mealPicker(H.calSel); });
+    on('#schWorkoutBtn', 'click', function () { H.act.setWorkout(); });
     on('#logPlannedDay', 'click', function () { logPlanned(H.calSel); });
-    ['#applyTmpl', '#applyTmpl2'].forEach(function (s) {
-      on(s, 'click', function () {
-        var n = H.applyTemplate(H.calSel);
-        refresh();
-        toast(n ? n + ' items added to that week' : 'Already applied');
-      });
-    });
-    on('#calCsv', 'click', function () {
-      var rows = [['Date', 'Training', 'Kcal', 'Protein', 'FoodCost', 'OtherSpend',
-        'Plans', 'Bodyweight', 'Notes']];
-      Object.keys(S().days).sort().forEach(function (d) {
-        var rec = S().days[d], e = H.eaten(d);
-        var sp = (rec.spend || []).reduce(function (a, x) { return a + (x.amt || 0); }, 0);
-        rows.push([d, H.TRAIN[rec.workout] ? H.TRAIN[rec.workout].n : rec.workout,
-        Math.round(e.kcal), Math.round(e.p), e.cost.toFixed(2), sp.toFixed(2),
-        (rec.sched || []).map(function (x) { return H.nameOf(x.who) + ':' + x.what; }).join('; '),
-        rec.w || '', rec.notes || '']);
-      });
-      H.dl('log-' + H.today() + '.csv', H.toCSV(rows), 'text/csv');
-    });
+  }
+
+  /* Paging the week past a month boundary should move the month grid with it. */
+  function syncMonth() {
+    var d = H.dOf(H.calSel);
+    H.calY = d.getFullYear();
+    H.calM = d.getMonth();
   }
 
   function whoOptions() {
