@@ -19,6 +19,7 @@ function chrome(){
     ICO[t[0]]+'</svg><span>'+t[2]+'</span></button>';}).join('');
   $('#who').innerHTML=['j','a'].map(function(k){return '<button data-w="'+k+'"'+
     (S.who===k?' class="on"':'')+'>'+E(S.prof[k].name)+'</button>';}).join('');
+  var sp=$('#syncSlot'); if(sp) sp.innerHTML=syncPill();
   var th=$('#themeBtn');
   if(th){var cur=S.theme||'dark';
     th.title='Theme: '+cur;
@@ -683,6 +684,8 @@ document.addEventListener('click',function(e){
   if((el=t.closest('[data-tadd]'))){tmplEditor(+el.dataset.tadd);return;}
   if((el=t.closest('[data-td]'))){var q=el.dataset.td.split('|');
     S.sched.tmpl[q[0]].splice(+q[1],1);save();route();return;}
+  if(t.closest('#syncPill')){
+    if(syncOn){syncFlush();syncPull();toast('Syncing');} else settingsModal(); return;}
   if(t.closest('#settings')){settingsModal();return;}
   }catch(err){ if(window.console&&console.error)console.error('click',err);
     toast('Something went wrong: '+(err.message||err)); }
@@ -700,7 +703,7 @@ function settingsModal(){
    '<h4 class="lbl">Your data</h4>'+
    '<p class="sm muted" style="margin:8px 0 14px">Everything lives in this browser on this device. '+
    'Nothing is uploaded. Save to a file to move it, back it up, or hand it over for changes.</p>'+
-   '<div class="stats" style="margin-bottom:16px">'+
+   '<div class="stats gap-b">'+
    '<div class="stat"><b>'+all().length+'</b><span>Recipes</span></div>'+
    '<div class="stat"><b>'+Object.keys(S.ingOv).length+'</b><span>Ingredient edits</span></div>'+
    '<div class="stat"><b>'+Object.keys(S.days).length+'</b><span>Days logged</span></div>'+
@@ -722,6 +725,21 @@ function settingsModal(){
    '<button class="b o s" id="stShift">Shifts CSV</button>'+
    '<button class="b o s" id="stFin">Budget CSV</button>'+
    '<button class="b o s" id="stPlan">Plans CSV</button></div>'+
+   '<div class="hr"></div>'+
+   '<h4 class="lbl">Sync</h4>'+
+   '<p class="sm muted" style="margin:8px 0 12px">'+
+   (syncOn
+     ? 'Shared with every device that knows the code. Changes push a moment after you '+
+       'make them and pull when a device comes back to the front.'
+     : 'Not syncing right now. Everything still saves on this device.')+
+   (syncMsg?' <b>'+E(syncMsg)+'</b>':'')+'</p>'+
+   '<div class="stats gap-b">'+
+   '<div class="stat"><b>'+E({off:'Local',idle:'On',pull:'On',push:'On',
+      offline:'Offline',error:'Error'}[syncState]||syncState)+'</b><span>State</span></div>'+
+   '<div class="stat"><b>'+(S.__v||0)+'</b><span>Version</span></div>'+
+   '<div class="stat"><b>'+E(syncAt?new Date(syncAt).toLocaleTimeString():'never')+'</b>'+
+   '<span>Last synced</span></div></div>'+
+   '<div class="row"><button class="b o" id="stSync">Sync now</button></div>'+
    '<div class="hr"></div>'+
    '<h4 class="lbl">Lock</h4>'+
    '<p class="sm muted" style="margin:8px 0 12px">This device remembers the code so it does not '+
@@ -772,6 +790,9 @@ function settingsModal(){
       (s.items||[]).forEach(function(i){
         rows.push([c.name,s.name,i.text,i.done?'yes':'',i.note||'']);});});});
     dl('plans-'+today()+'.csv',toCSV(rows),'text/csv');};
+  var sy=$('#stSync',m); if(sy) sy.onclick=function(){
+    if(!syncOn){toast('Sync is not available on this host');return;}
+    syncFlush(); syncPull(); toast('Syncing');};
   $('#stLock',m).onclick=function(){
     if(confirm('Ask for the code again next time this device opens the Handbook?')) lock();};
   $('#stReset',m).onclick=function(){
@@ -892,6 +913,11 @@ try{ applyTheme(); }catch(e){}
 try{ chrome(); }catch(e){ if(window.console)console.error('chrome',e); }
 if(!location.hash)location.hash='#/meals';
 route();
+/* Take a baseline of every branch before anything can change, so the first
+   save does not stamp the whole document as freshly edited. */
+try{ syncTouch(); }catch(e){}
+try{ if(SEED.__token) syncInit(SEED.__token); else syncSet('off','No sync token in this build.'); }
+catch(e){ if(window.console)console.error('sync',e); }
 window.onerror=function(msg,src,ln,col,err){
   var v=$('#view');
   if(v&&!v.innerHTML){ v.innerHTML=errPanel('The app',err||{message:msg}); }

@@ -105,7 +105,13 @@ function open_(code){
   }).then(function(ks){
     var plain=new Uint8Array(cipher.length);
     for(var i=0;i<cipher.length;i++) plain[i]=cipher[i]^ks[i];
-    return JSON.parse(new TextDecoder().decode(plain));
+    var obj=JSON.parse(new TextDecoder().decode(plain));
+    /* The sync token is a hash of the mac key, so the server is exactly as
+       private as the passcode and nothing extra has to be remembered. */
+    return window.crypto.subtle.digest('SHA-256',keys.mac).then(function(h){
+      obj.__token=hex(h);
+      return obj;
+    });
   });
 }
 

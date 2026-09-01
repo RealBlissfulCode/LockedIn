@@ -38,11 +38,13 @@ from recipes_5 import RECIPES_5                  # noqa: E402
 from recipes_6 import RECIPES_6                  # noqa: E402
 import private_seed as SEED                      # noqa: E402
 from app_core import APP_CORE                    # noqa: E402
+from app_sync import APP_SYNC                    # noqa: E402
 from app_views1 import APP_VIEWS1                # noqa: E402
 from app_views2 import APP_VIEWS2                # noqa: E402
 from app_wire import APP_WIRE                    # noqa: E402
 from spa_css import APP_CSS                      # noqa: E402
 from gate import GATE_HTML, GATE_JS              # noqa: E402
+from sync_php import SYNC_PHP                    # noqa: E402
 
 RECIPES = RECIPES_1 + RECIPES_2 + RECIPES_3 + RECIPES_4 + RECIPES_5 + RECIPES_6
 
@@ -87,6 +89,18 @@ def _keystream(key, nbytes):
         out += block
         counter += 1
     return bytes(out[:nbytes])
+
+
+def sync_token(passcode):
+    """What the browser will send to api/sync.php.
+
+    It is a hash of the mac key the gate already derives, so the endpoint is
+    exactly as private as the passcode and the client has nothing extra to
+    remember. Storing the hash rather than the key means the PHP file does not
+    contain anything that can be replayed as-is.
+    """
+    _enc, mac = _derive(passcode)
+    return hashlib.sha256(mac).hexdigest()
 
 
 def crypto_box(obj, passcode):
@@ -330,6 +344,7 @@ SHELL_BODY = (
     '<header class="top"><div class="topin">'
     '<div class="brand">The <em>Handbook</em></div>'
     '<div class="whoswitch" id="who"></div>'
+    '<div id="syncSlot"></div>'
     '<nav class="tabs" id="tabs"></nav>'
     '<button class="iconbtn" id="themeBtn" title="Theme"></button>'
     '<button class="iconbtn" id="settings" title="Settings"></button>'
@@ -337,6 +352,18 @@ SHELL_BODY = (
     '<nav class="btmnav" id="btm"></nav>'
     '</div>'
 )
+
+
+def sync_php_text():
+    return SYNC_PHP.replace("__TOKEN__", sync_token(PASSCODE))
+
+
+def write_sync_php():
+    d = os.path.join(ROOT, "api")
+    if not os.path.isdir(d):
+        os.makedirs(d)
+    with open(os.path.join(d, "sync.php"), "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(sync_php_text())
 
 
 def render_html():
@@ -349,7 +376,7 @@ def render_html():
                          + "\n\nEither reword it in src/, or move it into private_seed.py.")
 
     app_js = ("(function(){\n'use strict';\nvar _D=window._DATA;\n"
-              + APP_CORE + APP_VIEWS1 + APP_VIEWS2 + APP_WIRE + "\n})();\n")
+              + APP_CORE + APP_SYNC + APP_VIEWS1 + APP_VIEWS2 + APP_WIRE + "\n})();\n")
 
     # The application code is sealed along with the data. It carries our names,
     # our employers and the placeholder text in every editor, so shipping it in
@@ -390,8 +417,18 @@ def main():
             print("VALIDATION ISSUES: %d" % len(issues))
             for i in issues:
                 print("  -", i)
+        stale = []
         if current != html:
-            print("STALE: index.html")
+            stale.append("index.html")
+        php_path = os.path.join(ROOT, "api", "sync.php")
+        php_now = ""
+        if os.path.exists(php_path):
+            with open(php_path, encoding="utf-8", newline="") as fh:
+                php_now = fh.read()
+        if php_now != sync_php_text():
+            stale.append("api/sync.php")
+        if stale:
+            print("STALE: %s" % ", ".join(stale))
             print("Run: python3 src/build.py")
             return 1
         if not args.quiet:
@@ -403,6 +440,8 @@ def main():
     # byte-identical on every platform or --check means nothing.
     with open(out, "w", encoding="utf-8", newline="\n") as fh:
         fh.write(html)
+
+    write_sync_php()
 
     if not args.quiet:
         print("index.html  %.0f KB" % (len(html) / 1024.0))

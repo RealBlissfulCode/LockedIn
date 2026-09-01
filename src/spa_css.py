@@ -43,9 +43,8 @@ html[data-theme="light"] .b{color:#fff}
 html[data-theme="light"] .b.o{color:var(--ink)}
 html[data-theme="light"] .b.dz{color:var(--clay)}
 html[data-theme="light"] .b.o:hover{color:var(--brass-2)}
-html[data-theme="light"] .day.sel .dn,html[data-theme="light"] .day.sel .dk,
-html[data-theme="light"] .day.sel .dev{color:#fff}
-html[data-theme="light"] .day.sel .dev:before{background:rgba(255,255,255,.7)}
+html[data-theme="light"] .day.sel{background:rgba(126,34,206,.09)}
+html[data-theme="light"] .day.sel .dev{color:var(--ink-2)}
 html[data-theme="light"] .toast{color:#fff}
 html[data-theme="light"] .pill.on{color:#fff}
 html[data-theme="light"] .rcbadge{background:rgba(255,255,255,.9);color:var(--ink-2)}
@@ -112,12 +111,31 @@ letter-spacing:.08em;transition:.18s var(--ez);text-transform:uppercase}
 /* page */
 .page{animation:rise .4s var(--ez)}
 @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-.phead{padding:36px 0 20px;max-width:68ch;border-bottom:1px solid var(--line);margin-bottom:26px}
+.phead{padding:38px 0 22px;border-bottom:1px solid var(--line);margin-bottom:30px}
+.phead h1,.phead p{max-width:68ch}
 .phead h1{font-size:clamp(28px,4.2vw,44px);letter-spacing:-.035em}
 .phead p{color:var(--ink-3);margin:10px 0 0;font-size:16px;line-height:1.55}
-.sec{margin:34px 0}
-.sec>h2{font-size:21px;letter-spacing:-.028em;margin-bottom:3px;min-width:0;overflow-wrap:break-word}
-.sec>.sub{color:var(--ink-3);font-size:13.5px;margin:0 0 14px;max-width:72ch}
+.sec{margin:40px 0}
+.sec:first-child{margin-top:0}
+/* Section header rhythm. A header always leaves the same gap before its
+   content, whether or not it carries a subtitle or a row of buttons. Getting
+   this wrong is what had action buttons sitting a few pixels off the card
+   below them. */
+.sec>h2,.sec>.spread{margin-bottom:18px}
+.sec>h2+.sub,.sec>.spread+.sub{margin-top:-12px;margin-bottom:18px}
+.sec>h2{font-size:21px;letter-spacing:-.028em;min-width:0;overflow-wrap:break-word}
+.sec>.sub{color:var(--ink-3);font-size:13.5px;max-width:72ch}
+.sec>.spread{align-items:center;gap:12px 18px}
+/* Buttons in a section header answer to the heading, so they sit a step down
+   from a primary action rather than competing with it. */
+.sec>.spread .row{gap:8px}
+.sec>.spread .b{padding:7px 14px;font-size:12.5px}
+/* A toolbar under the page head, above the first block of content. */
+.toolbar{margin-bottom:24px}
+/* Card headings, instead of a hand-set font-size at every call site. */
+.ctitle{font-size:15px;letter-spacing:-.01em;margin-bottom:14px;color:var(--ink)}
+.stats+.note,.note+.stats{margin-top:16px}
+.gap-b{margin-bottom:16px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--sh)}
 .pad{padding:20px 22px}
 .grid{display:grid;gap:14px}
@@ -250,14 +268,17 @@ background:var(--panel)}
 /* calendar */
 .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
 .cal .dow{text-align:center;font:700 9px/1 var(--f-body);letter-spacing:.18em;color:var(--ink-4);padding:7px 0}
-.day{min-height:96px;border:1px solid var(--line);border-radius:var(--r-s);background:var(--panel);
+.day{min-height:82px;border:1px solid var(--line);border-radius:var(--r-s);background:var(--panel);
 padding:6px 7px;cursor:pointer;display:flex;flex-direction:column;transition:.18s var(--ez);
 position:relative;overflow:hidden;text-align:left}
 .day:hover{border-color:var(--brass);transform:translateY(-2px)}
 .day.out{opacity:0;pointer-events:none}
-.day.today{border-color:var(--brass)}
-.day.sel{background:var(--brass);border-color:var(--brass)}
-.day.sel .dn,.day.sel .dk{color:var(--on-accent)}
+.day.today{border-color:var(--line-2)}
+.day.today .dn{color:var(--brass)}
+.day.sel{background:rgba(168,85,247,.13);border-color:var(--brass);
+box-shadow:inset 0 0 0 1px var(--brass)}
+.day.sel .dn{color:var(--brass)}
+.day.sel .dk{color:var(--brass-2)}
 .dn{font-family:var(--f-mono);font-size:13px;font-weight:700;color:var(--ink)}
 .dk{font:600 9px/1 var(--f-mono);color:var(--ink-4);margin-top:auto}
 .devs{margin-top:5px;display:flex;flex-direction:column;gap:2px;overflow:hidden}
@@ -265,8 +286,8 @@ position:relative;overflow:hidden;text-align:left}
 text-overflow:ellipsis;padding-left:8px;position:relative}
 .dev:before{content:"";position:absolute;left:0;top:4px;width:4px;height:4px;border-radius:50%;background:var(--steel)}
 .dev.w:before{background:var(--sage)}.dev.m:before{background:var(--amber)}
-.day.sel .dev{color:rgba(10,10,12,.82)}
-.day.sel .dev:before{background:rgba(10,10,12,.6)}
+.day.sel .dev{color:var(--ink-2)}
+.day.sel .dev:before{background:var(--brass)}
 .dmore{font:600 9px/1 var(--f-body);color:var(--ink-4);padding-left:8px}
 .dots{display:flex;gap:2px;margin-top:3px;flex-wrap:wrap}
 .dot{width:4px;height:4px;border-radius:50%;background:var(--brass)}
@@ -472,6 +493,20 @@ cursor:pointer;margin-top:1px}
 .pitem.done .pn{color:var(--ink-4)}
 .pitem .b.s,.pitem .x{flex:none;align-self:center}
 
+/* ------------------------------------------------------- sync status pill */
+.syncpill{display:inline-flex;align-items:center;gap:7px;background:var(--panel);
+border:1px solid var(--line);border-radius:999px;padding:5px 12px 5px 10px;cursor:pointer;
+color:var(--ink-3);font:600 11.5px/1 var(--f-body);white-space:nowrap;
+transition:.18s var(--ez)}
+.syncpill:hover{border-color:var(--line-2);color:var(--ink-2)}
+.syncpill i{width:6px;height:6px;border-radius:50%;background:var(--ink-4);flex:none}
+.syncpill.ok i{background:var(--sage);box-shadow:0 0 8px rgba(74,222,128,.5)}
+.syncpill.busy i{background:var(--brass);animation:syncblink 1s ease-in-out infinite}
+.syncpill.warn i{background:var(--amber)}
+.syncpill.bad i{background:var(--clay)}
+.syncpill.warn,.syncpill.bad{color:var(--ink-2)}
+@keyframes syncblink{0%,100%{opacity:.35}50%{opacity:1}}
+
 /* ------------------------------------------------------------ misc polish */
 :focus-visible{outline:2px solid var(--brass);outline-offset:2px;border-radius:3px}
 .tw table{min-width:560px}
@@ -479,6 +514,20 @@ cursor:pointer;margin-top:1px}
 
 @media (max-width:860px){
 .wrap{padding:0 15px}
+/* Six things have to share 375px: brand, who, sync, theme, settings. Every one
+   of them gives up a little so the bar stays a single row instead of eating
+   twice the height on every screen. */
+.syncpill span{display:none}
+.syncpill{padding:0;width:26px;height:26px;justify-content:center}
+/* The wordmark is the one thing here the phone does not need: the icon, the
+   bottom bar and the page title all say what this is. Dropping to the mark
+   alone buys about 100px and keeps the bar one row even with longer names. */
+.brand{font-size:0;gap:0;flex:0 0 auto}
+.brand:before{width:9px;height:9px}
+.whoswitch button{padding:5px 12px;font-size:12px}
+.whoswitch button.on:before{width:5px;height:5px;margin-right:5px}
+.iconbtn{width:31px;height:31px}
+.iconbtn svg{width:15px;height:15px}
 .gatebox{max-width:300px}
 .gpad button{min-height:52px;font-size:19px}
 #gate h1{font-size:20px}
@@ -494,7 +543,7 @@ details.strat .dc{padding:2px 15px 16px}
 body{padding-bottom:80px}
 .tabs{display:none}
 .btmnav{display:flex}
-.topin{padding:10px 15px;gap:10px}
+.topin{padding:10px 15px;gap:9px;flex-wrap:nowrap}
 .whoswitch{margin-left:auto}
 .phead{padding:22px 0 14px;margin-bottom:20px}
 .g2,.g3{grid-template-columns:1fr}

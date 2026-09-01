@@ -88,7 +88,7 @@ function vMeals(){
    (S.fav.length?'<div class="sec"><h2>Favourites</h2><div class="grid g3">'+
      S.fav.map(byId).filter(Boolean).map(rcard).join('')+'</div></div>':'')+
 
-   '<div class="sec"><h2>Everything</h2><div class="card pad" style="margin-bottom:14px"><div class="fr">'+
+   '<div class="sec"><h2>Everything</h2><div class="card pad gap-b"><div class="fr">'+
    '<label class="f"><span>Search</span><input id="fq" placeholder="tofu, oats, burger..." value="'+E(flt.q)+'"></label>'+
    '<label class="f"><span>Category</span><select id="fcat">'+opt([['','All'],['Breakfast','Breakfast'],
      ['Lunch/Dinner','Mains'],['Snack','Snacks'],['Drink','Drinks'],['SDA Meat/Fish','Meat and fish'],
@@ -224,7 +224,7 @@ function vRecipe(id){
    '<ul class="ing" id="ingList"></ul>'+
    '<p class="xs muted" style="margin-top:10px">Prices come from the ingredient list. '+
    '<a href="#/shopping/ingredients">Edit an ingredient</a> and every recipe using it updates.</p></div>'+
-   '<div class="card pad"><h3 style="font-size:16px;margin-bottom:12px">Method</h3><ol class="stp">'+
+   '<div class="card pad"><h3 class="ctitle">Method</h3><ol class="stp">'+
    (r.st||[]).map(function(s){return '<li>'+E(s)+'</li>';}).join('')+'</ol></div></div>'+
    (r.prep?'<div class="note"><b>Note.</b> '+E(r.prep)+'</div>':'')+
    '<div class="grid g2" style="margin-top:14px">'+
@@ -289,7 +289,7 @@ function vShopping(sub){
    '<div class="stat"><b>'+items.length+'</b><span>Items</span></div>'+
    '<div class="stat"><b>'+M(got)+'</b><span>In the cart</span></div>'+
    '<div class="stat"><b>'+Object.keys(byA).length+'</b><span>Aisles</span></div></div>'+
-   '<div class="row" style="margin-bottom:14px">'+
+   '<div class="row toolbar">'+
    '<button class="b" id="gAdd">Add item</button>'+
    '<button class="b o" id="gRecipe">Add from a recipe</button>'+
    '<button class="b o" id="gTxt">Checklist</button>'+
@@ -319,7 +319,7 @@ function vIngredients(){
   return '<div class="page"><div class="phead"><h1>Ingredient list</h1>'+
    '<p>The master list every recipe price comes from. Edit a price here and all '+
    all().length+' recipes recost instantly. '+edited+' edited or added so far.</p></div>'+
-   '<div class="row" style="margin-bottom:14px">'+
+   '<div class="row toolbar">'+
    '<button class="b" id="ingNew">Add an ingredient</button>'+
    '<button class="b o" data-nav="shopping">&larr; Back to lists</button>'+
    '<button class="b o" id="ingCsv">Export list</button>'+

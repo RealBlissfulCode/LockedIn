@@ -38,8 +38,10 @@ var S=(function(){
   return DEF();
 })();
 function save(){ S.savedAt=Date.now();
+  try{syncTouch();}catch(e){}
   try{localStorage.setItem(KEY,JSON.stringify(S));}
-  catch(e){toast('Storage full. Save to file, then remove some photos.');}}
+  catch(e){toast('Storage full. Save to file, then remove some photos.');}
+  try{syncSchedule();}catch(e){}}
 
 /* Seed from the Moving In workbook, ONCE per browser.
 
@@ -244,7 +246,13 @@ function importAll(file,cb){
       var st=o.state||o;
       if(!st.prof) throw new Error('not a handbook file');
       var d=DEF(); for(var k in d) if(!(k in st)) st[k]=d[k];
-      S=st; save(); cb&&cb(true);
+      var keepV=S.__v;
+      S=st; S.__v=keepV;
+      /* A restored file replaces everything on purpose, so it claims every
+         branch. Otherwise the merge would treat it as older than the server
+         and quietly undo the restore on the next sync. */
+      try{syncClaimAll();}catch(e){}
+      save(); cb&&cb(true);
     }catch(e){ alert('That did not read as a handbook file.\n\n'+e.message); cb&&cb(false); }
   };
   fr.readAsText(file);

@@ -13,7 +13,7 @@ function vTraining(sub){
    '<p>'+EX.length+' exercises, '+SESS.length+' sessions, and what each session type does to the day\'s macros.</p></div>'+
 
    '<div class="sec"><div class="grid g2">'+
-   '<div class="card pad"><h3 style="font-size:16px;margin-bottom:14px">Today</h3>'+
+   '<div class="card pad"><h3 class="ctitle">Today</h3>'+
    '<label class="f"><span>Session</span><select id="tWorkout">'+
    Object.keys(TRAIN).map(function(k){return '<option value="'+k+'"'+(d.workout===k?' selected':'')+'>'+TRAIN[k].n+'</option>';}).join('')+
    '</select></label>'+
@@ -21,7 +21,7 @@ function vTraining(sub){
    '<label class="f"><span>Bodyweight this morning</span><input id="tW" type="number" step="0.1" value="'+(d.w||'')+'"></label>'+
    '<button class="b" id="tSave">Save</button>'+
    '<p class="xs muted" style="margin-top:10px">Logged as <b>'+E(ME())+'</b>. This appears on the schedule automatically.</p></div>'+
-   '<div class="card pad"><h3 style="font-size:16px;margin-bottom:12px">What the day needs</h3>'+
+   '<div class="card pad"><h3 class="ctitle">What the day needs</h3>'+
    statRow(t)+'<div class="note" style="margin-bottom:0">'+E(TRAIN[d.workout].why)+'</div></div>'+
    '</div></div>'+
 
@@ -69,7 +69,7 @@ function vExercises(){
   var mgs=[];EX.forEach(function(e){if(mgs.indexOf(e.mg)<0)mgs.push(e.mg);});mgs.sort();
   return '<div class="page"><div class="phead"><h1>Exercise database</h1>'+
    '<p>'+EX.length+' exercises with technique, mistakes, progressions and regressions.</p></div>'+
-   '<div class="card pad" style="margin-bottom:14px"><div class="fr">'+
+   '<div class="card pad gap-b"><div class="fr">'+
    '<label class="f"><span>Search</span><input id="exq" placeholder="pull-up, planche..." value="'+E(exFlt.q)+'"></label>'+
    '<label class="f"><span>Muscle group</span><select id="exmg">'+
    opt([['','All']].concat(mgs.map(function(m){return [m,m];})),exFlt.mg)+'</select></label>'+
@@ -79,7 +79,7 @@ function vExercises(){
         ['Band','Bands'],['Rings','Rings']],exFlt.eq)+'</select></label></div>'+
    '<div class="row"><button class="pill'+(exFlt.hero?' on':'')+'" id="exhero">Hero lifts only</button>'+
    '<span class="right sm muted" id="excount"></span></div></div>'+
-   '<div id="exList"></div><button class="b o" data-nav="training" style="margin-top:16px">&larr; Training</button></div>';
+   '<div id="exList"></div><button class="b o" style="margin-top:20px" data-nav="training">&larr; Training</button></div>';
 }
 function drawEx(){
   var el=$('#exList'); if(!el)return; var q=exFlt.q.toLowerCase();
@@ -198,7 +198,7 @@ function vFinancial(sub){
      'Save to keep them, or Revert to throw them away.</div>':'')+
    '</div>'+
 
-   '<div class="stats" style="margin-top:14px">'+
+   '<div class="stats">'+
    '<div class="stat"><b>'+M(inc)+'</b><span>Income / mo</span></div>'+
    '<div class="stat"><b>'+M(cost)+'</b><span>Costs / mo</span></div>'+
    '<div class="stat '+(gap>=0?'good':'bad')+'"><b>'+M(gap)+'</b><span>'+
@@ -209,12 +209,12 @@ function vFinancial(sub){
    '</div>'+cmp+
 
    '<div class="sec"><h2>Where the money goes</h2><div class="grid g2">'+
-   '<div class="card pad"><h3 style="font-size:15px;margin-bottom:12px">Costs by section</h3>'+
+   '<div class="card pad"><h3 class="ctitle">Costs by section</h3>'+
    Object.keys(byS).sort(function(a,b){return byS[b]-byS[a];}).map(function(k){
      var pct=cost?byS[k]/cost*100:0;
      return '<div class="mrow"><div class="spread"><span>'+E(k)+'</span><em>'+M(byS[k])+'</em></div>'+
      '<div class="bar"><i class="pk" style="width:'+pct+'%"></i></div></div>';}).join('')+'</div>'+
-   '<div class="card pad"><h3 style="font-size:15px;margin-bottom:12px">Income by person</h3>'+
+   '<div class="card pad"><h3 class="ctitle">Income by person</h3>'+
    ['Jaron','Aaliyah','Both'].map(function(w){
      var v=S.fin.jobs.filter(function(j){return j.who===w;})
        .reduce(function(a,j){return a+(j[mode]||0);},0);
@@ -272,13 +272,13 @@ function vActual(){
   var months=Math.max(1,90/30.4);
   return '<div class="page"><div class="phead"><h1>Actual earnings</h1>'+
    '<p>Log real shifts. Averages, effective hourly and after-tax rate all come from what actually landed, not the plan.</p></div>'+
-   '<div class="row" style="margin-bottom:14px"><button class="b" id="shAdd">Log a shift</button>'+
+   '<div class="row toolbar"><button class="b" id="shAdd">Log a shift</button>'+
    '<button class="b o" id="shCsv">Export shifts</button>'+
    '<button class="b o" data-nav="financial">&larr; Plan</button></div>'+
    '<div class="sec"><h2>Last 90 days</h2><div class="grid g2">'+
    ['Jaron','Aaliyah'].map(function(w){
      var h=w==='Jaron'?jH:aH,g=w==='Jaron'?jG:aG,n=w==='Jaron'?jN:aN;
-     return '<div class="card pad"><h3 style="font-size:16px;margin-bottom:12px">'+w+'</h3>'+
+     return '<div class="card pad"><h3 class="ctitle">'+w+'</h3>'+
      '<div class="stats"><div class="stat acc"><b>'+M(n/months)+'</b><span>Net / mo</span></div>'+
      '<div class="stat"><b>'+h.toFixed(0)+'</b><span>Hours</span></div>'+
      '<div class="stat"><b>'+$$$(eff(g,h))+'</b><span>Gross / hr</span></div>'+
@@ -302,7 +302,7 @@ function vPurchases(){
   return '<div class="page"><div class="phead"><h1>Big purchases</h1>'+
    '<p>Places, houses, cars, anything worth comparing side by side before committing. '+
    'Every list here is yours to rename, edit or delete.</p></div>'+
-   '<div class="row" style="margin-bottom:14px"><button class="b" id="bpNew">New list</button>'+
+   '<div class="row toolbar"><button class="b" id="bpNew">New list</button>'+
    '<button class="b o" data-nav="financial">&larr; Financial</button></div>'+
    (names.length?names.map(function(n){var L=P_[n], its=L.items||[];
      var prices=its.map(function(i){return num(i.price);}).filter(function(x){return x>0;});
@@ -314,7 +314,7 @@ function vPurchases(){
      '<button class="b o s" data-bple="'+E(n)+'">Edit list</button>'+
      '<button class="b o s dz" data-bpdel="'+E(n)+'">Delete</button></div></div>'+
      (L.note?'<p class="sub">'+E(L.note)+'</p>':'')+
-     (prices.length>1?'<div class="stats" style="margin-bottom:14px">'+
+     (prices.length>1?'<div class="stats gap-b">'+
        '<div class="stat"><b>'+its.length+'</b><span>Options</span></div>'+
        '<div class="stat acc"><b>'+M(lo)+'</b><span>Cheapest</span></div>'+
        '<div class="stat"><b>'+M(av)+'</b><span>Average</span></div></div>':'')+
@@ -368,12 +368,12 @@ function vStrategies(){
   return '<div class="page"><div class="phead"><h1>Strategies</h1>'+
    '<p>Ways to close the gap, sorted by what they are worth against what they cost you. '+
    'Anything marked dead has been checked and is dead, so it does not get researched twice.</p></div>'+
-   '<div class="row" style="margin-bottom:14px"><button class="b" id="stNew">New list</button>'+
+   '<div class="row toolbar"><button class="b" id="stNew">New list</button>'+
    '<button class="b o" data-nav="financial">&larr; Financial</button>'+
    '<label class="f inline"><span>Column</span><select id="stMode">'+
    opt([['low','Lean (low)'],['real','Realistic'],['high','Good month (high)']],mode)+
    '</select></label></div>'+
-   (names.length?'<div class="stats" style="margin-bottom:8px">'+
+   (names.length?'<div class="stats gap-b">'+
      '<div class="stat acc"><b>'+M(grand)+'</b><span>Swing / mo</span></div>'+
      '<div class="stat"><b>'+M(grand*12)+'</b><span>Per year</span></div>'+
      '<div class="stat"><b>'+live+'</b><span>Live moves</span></div>'+
@@ -475,7 +475,7 @@ function vSchedule(sub){
   return '<div class="page"><div class="phead"><h1>Schedule</h1>'+
    '<p>Everything either of us is doing that day, in time order. Training and meals appear here on '+
    'their own from the other tabs.</p></div>'+
-   '<div class="row" style="margin-bottom:14px"><button class="b o" data-nav="schedule/week">Weekly template</button>'+
+   '<div class="row toolbar"><button class="b o" data-nav="schedule/week">Weekly template</button>'+
    '<button class="b o" id="applyTmpl">Apply template to this week</button>'+
    '<button class="b o" id="calCsv">Export the log</button></div>'+
    '<div class="card pad"><div class="spread" style="margin-bottom:12px">'+
@@ -492,7 +492,7 @@ function vSchedule(sub){
    '<button class="b o" id="mealAdd">Log meal</button>'+
    '<button class="b o" id="spAdd">Log spend</button></div></div>'+
    '<div class="grid g2"><div class="card pad">'+tl(calSel)+freeSlots(d)+'</div>'+
-   '<div class="card pad"><h3 style="font-size:15px;margin-bottom:12px">The day</h3>'+
+   '<div class="card pad"><h3 class="ctitle">The day</h3>'+
    '<label class="f"><span>Training</span><select id="schWorkout">'+
    Object.keys(TRAIN).map(function(k){return '<option value="'+k+'"'+(d.workout===k?' selected':'')+'>'+TRAIN[k].n+'</option>';}).join('')+
    '</select></label>'+
@@ -530,7 +530,7 @@ function vWeekTemplate(){
   return '<div class="page"><div class="phead"><h1>Weekly template</h1>'+
    '<p>The regular week: work, class, church, gym. Put it in once with times and places, then push '+
    'it onto any week.</p></div>'+
-   '<div class="row" style="margin-bottom:14px"><button class="b o" data-nav="schedule">&larr; Calendar</button>'+
+   '<div class="row toolbar"><button class="b o" data-nav="schedule">&larr; Calendar</button>'+
    '<button class="b" id="applyTmpl2">Apply to this week</button></div>'+
    '<div class="grid g3">'+DOW.map(function(dn,i){
      var items=(t[i]||[]).slice().sort(function(a,b){return (a.from||'')<(b.from||'')?-1:1;});
@@ -560,7 +560,7 @@ function vPlanning(sub){
   return '<div class="page"><div class="phead"><h1>Planning</h1>'+
    '<p>Plans that are not about money or food. Make a collection for anything, break it into '+
    'subsections, and tick things off as they happen.</p></div>'+
-   '<div class="row" style="margin-bottom:16px"><button class="b" id="plNew">New collection</button></div>'+
+   '<div class="row toolbar"><button class="b" id="plNew">New collection</button></div>'+
    (cols.length?'<div class="grid g2">'+cols.map(function(c){
      var n=planCount(c);
      return '<button class="card pad plcard" data-plgo="'+c.id+'">'+
@@ -583,12 +583,12 @@ function vPlanCol(id){
   var n=planCount(c);
   return '<div class="page"><div class="phead"><h1>'+E(c.name)+'</h1>'+
    (c.note?'<p>'+E(c.note)+'</p>':'')+'</div>'+
-   '<div class="row" style="margin-bottom:14px">'+
+   '<div class="row toolbar">'+
    '<button class="b" data-plsadd="'+c.id+'">New section</button>'+
    '<button class="b o" data-ple="'+c.id+'">Rename</button>'+
    '<button class="b o dz" data-pld="'+c.id+'">Delete plan</button>'+
    '<button class="b o" data-nav="planning">&larr; All plans</button></div>'+
-   (n.total?'<div class="stats" style="margin-bottom:18px">'+
+   (n.total?'<div class="stats gap-b">'+
      '<div class="stat acc"><b>'+n.pct+'%</b><span>Done</span></div>'+
      '<div class="stat"><b>'+n.done+'</b><span>Ticked off</span></div>'+
      '<div class="stat"><b>'+(n.total-n.done)+'</b><span>Left</span></div>'+
