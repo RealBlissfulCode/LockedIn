@@ -165,8 +165,15 @@ function syncPull(after){
     S.__v=sv; syncAt=Date.now();
     try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}
     syncSet('idle');
-    /* Do not yank the page out from under an open editor. */
-    if(sv>0&&!document.querySelector('.mask')) { try{route();}catch(e){} }
+    /* Do not yank the page out from under an open editor. chrome() has to run
+       too: the header holds the profile names and the theme, and route() only
+       ever touches #view. Without it a name changed on another device stayed
+       stale up there until a full reload. */
+    if(sv>0&&!document.querySelector('.mask')){
+      try{applyTheme();}catch(e){}
+      try{chrome();}catch(e){}
+      try{route();}catch(e){}
+    }
     after&&after();
   });
 }

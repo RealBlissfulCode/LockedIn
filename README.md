@@ -1,4 +1,4 @@
-# The Handbook
+# LockedIn
 
 Meals, training, shopping, money, plans and schedule for two people. One HTML
 file, no framework, no backend, no database, no accounts.
@@ -9,7 +9,9 @@ file, no framework, no backend, no database, no accounts.
 - Financial planning with scenario snapshots, real earnings tracking, strategy
   lists and big-purchase comparisons
 - Planning: collections, subsections and checklists for anything that is not money or food
-- Schedule with recurring weekly rules and a time-ordered shared calendar
+- Schedule templates: as many as you like, each repeating weekly, every other
+  week or once a month, either left running or applied over a stretch of dates
+- Recipe lists, shopping lists, strategy lists, plans, big-purchase comparisons
 - Dark and light themes, and it installs to a phone home screen
 
 ## The passcode
@@ -43,6 +45,30 @@ by locking.
 
 Decryption needs `crypto.subtle`, which browsers only expose over **https or
 localhost**. The gate says so if it is opened over plain http.
+
+## Schedule templates
+
+A template is a named set of things that repeat, keyed by weekday. There can be
+as many as you want; star the ones you use most and they sort to the top.
+
+Each one repeats **every week**, **every other week**, **once a month in the same
+week**, or **only when you apply it**. Every other week and once a month line up
+against the "counting from" date, so an every-other-Monday shift stays on the
+right Mondays and a first-Sunday thing stays on the first Sunday.
+
+There are two ways to use one:
+
+- **Keep it running.** Its items appear on every matching day on their own.
+  Nothing is copied into a day, so turning it off clears it everywhere at once
+  and there are never stale duplicates to hunt down. Running items show with the
+  template's name next to them.
+- **Apply it.** Copies the items onto real days over **this week**, **this
+  month**, **the next 4 weeks** or **the next 3 months**, so individual days can
+  then be edited without touching the template. Days that already have the same
+  item are skipped, so applying twice is safe.
+
+The old single weekly template is folded into a collection called "My week" the
+first time the app opens, so nothing already entered is lost.
 
 ## Syncing between devices
 
@@ -110,7 +136,7 @@ if a recipe fails validation. Worth running before a deploy.
 | `src/sync_php.py` | The server endpoint, written out to `api/sync.php`. |
 | `src/app_core.py` | State, storage, scenarios, the one-time seed. |
 | `src/app_views1.py` | Meals, recipe detail, shopping, ingredients. |
-| `src/app_views2.py` | Training, financial, strategies, purchases, planning, schedule. |
+| `src/app_views2.py` | Training, financial, strategies, purchases, planning, schedule, templates. |
 | `src/app_wire.py` | Router, event wiring, every editor modal. |
 | `src/spa_css.py` | The whole stylesheet. |
 | `src/recipes_1..6.py`, `ingredients.py`, `prices.py` | The food database. |

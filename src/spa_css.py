@@ -80,6 +80,7 @@ white-space:nowrap;display:flex;align-items:center;gap:9px}
 .brand:before{content:"";width:8px;height:8px;border-radius:50%;background:var(--brass);
 box-shadow:var(--glow),0 0 14px rgba(168,85,247,.5)}
 .brand em{font-style:normal;color:var(--ink-3);font-weight:500}
+.brand>span{display:inline-flex;letter-spacing:-.03em}
 .tabs{display:flex;gap:2px;margin-left:auto}
 .tab{background:none;border:0;color:var(--ink-3);font-weight:600;font-size:13px;padding:8px 14px;
 border-radius:999px;cursor:pointer;transition:.2s var(--ez);white-space:nowrap}
@@ -492,6 +493,19 @@ cursor:pointer;margin-top:1px}
 .pitem.done .pt{text-decoration:line-through;color:var(--ink-4)}
 .pitem.done .pn{color:var(--ink-4)}
 .pitem .b.s,.pitem .x{flex:none;align-self:center}
+
+/* ----------------------------------------------------- schedule templates */
+.tcard{transition:.22s var(--ez)}
+.tcard:hover{border-color:var(--line-2);transform:translateY(-2px);box-shadow:var(--sh-2)}
+.tcard.live{border-color:rgba(74,222,128,.35)}
+.favstar{color:var(--brass);font-size:14px;line-height:1}
+
+/* --------------------------------------------------------- recipe lists */
+.rlwrap{position:relative;min-width:0}
+.rlwrap .rlrm{position:absolute;right:10px;top:46px;z-index:3;
+background:rgba(10,10,12,.78);backdrop-filter:blur(4px)}
+.rlwrap .rlrm:hover{background:var(--clay);color:var(--on-accent);border-color:var(--clay)}
+html[data-theme="light"] .rlwrap .rlrm{background:rgba(255,255,255,.9)}
 
 /* ------------------------------------------------------- sync status pill */
 .syncpill{display:inline-flex;align-items:center;gap:7px;background:var(--panel);

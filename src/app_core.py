@@ -24,7 +24,7 @@ function DEF(){return{
  fin:{jobs:[],shifts:[],costs:[],scenarios:{},purchases:{},strategies:{},
       costMode:'real',path:'rent',activeScenario:null, draft:null},
  plan:{cols:[]},
- sched:{tmpl:{}, },
+ sched:{tmpl:{}, cols:[]},
  exLog:{}, seeded:false, seeded6:false
 };}
 var S=(function(){
@@ -87,6 +87,101 @@ if(!S.seeded6){
   S.seeded6=true; save();
 }
 
+/* There used to be exactly one weekly template. Fold whatever is in it into a
+   collection so nothing already entered is lost, and clear the old slot so this
+   cannot fire twice. No flag needed, and nothing is written unless there was
+   something to move, which matters because a pointless save would stamp the
+   branch and make this device look like the newer author of it. */
+if(S.sched){
+  if(!S.sched.cols) S.sched.cols=[];
+  var _legacy=S.sched.tmpl||{}, _anyLegacy=false;
+  for(var _lk in _legacy){ if((_legacy[_lk]||[]).length){ _anyLegacy=true; break; } }
+  if(_anyLegacy){
+    var _ld={};
+    for(var _q=0;_q<7;_q++) _ld[_q]=(_legacy[_q]||[]).map(function(x){
+      return {id:uid(),who:x.who,what:x.what,where:x.where||'',
+              from:x.from||'',to:x.to||''};});
+    S.sched.cols.push({id:uid(),name:'My week',
+      note:'Brought over from the old weekly template.',
+      fav:true,active:false,repeat:'weekly',anchor:today(),days:_ld});
+    S.sched.tmpl={};
+    save();
+  }
+}
+
+/* ---------------- schedule templates ----------------
+   A template is a named set of items keyed by weekday. It can be applied once
+   over a range, or left standing, in which case its items are computed when a
+   day is drawn rather than copied in. Standing beats copying: turning one off
+   clears it everywhere at once and there are never stale duplicates to hunt. */
+var REPEATS=[['weekly','Every week'],['biweekly','Every other week'],
+             ['monthly','Once a month, same week'],['once','Only when I apply it']];
+var SCOPES=[['week','This week'],['month','This month'],
+            ['next4','The next 4 weeks'],['next3m','The next 3 months']];
+function tmplCols(){ return (S.sched&&S.sched.cols)||[]; }
+function tmplCol(id){var c=tmplCols().filter(function(x){return x.id===id;});return c[0]||null;}
+function tmplCount(c){var n=0;for(var i=0;i<7;i++)n+=((c.days||{})[i]||[]).length;return n;}
+function weekStart(d){var x=new Date(d.getFullYear(),d.getMonth(),d.getDate());
+  x.setDate(x.getDate()-x.getDay());return x;}
+function tmplMatches(c,ds){
+  var d=dOf(ds), wd=d.getDay();
+  if(!((c.days||{})[wd]||[]).length) return false;
+  var rep=c.repeat||'weekly';
+  if(rep==='once') return false;
+  if(rep==='weekly') return true;
+  var anchor=dOf(c.anchor||ds);
+  if(rep==='biweekly'){
+    var wk=Math.round((weekStart(d)-weekStart(anchor))/604800000);
+    return ((wk%2)+2)%2===0;
+  }
+  /* "Same week of the month" as the anchor, so a first-Sunday thing stays a
+     first-Sunday thing rather than drifting by date. */
+  if(rep==='monthly') return Math.ceil(d.getDate()/7)===Math.ceil(anchor.getDate()/7);
+  return true;
+}
+function tmplItemsFor(ds){
+  var out=[], wd=dOf(ds).getDay(), log=S.days[ds];
+  tmplCols().forEach(function(c){
+    if(!c.active||!tmplMatches(c,ds)) return;
+    ((c.days||{})[wd]||[]).forEach(function(x){
+      /* Already applied by hand on this day: show it once, not twice. */
+      if(log&&(log.sched||[]).some(function(e){
+        return e.what===x.what&&e.who===x.who&&(e.from||'')===(x.from||'');})) return;
+      out.push({who:x.who,what:x.what,where:x.where||'',
+                from:x.from||'',to:x.to||'',col:c.name});
+    });
+  });
+  return out;
+}
+function applyCollection(id,scope){
+  var c=tmplCol(id); if(!c) return 0;
+  var now=new Date(), start, end;
+  if(scope==='month'){ start=new Date(calY,calM,1); end=new Date(calY,calM+1,0); }
+  else if(scope==='next4'){ start=new Date(now); end=new Date(now); end.setDate(end.getDate()+27); }
+  else if(scope==='next3m'){ start=new Date(now); end=new Date(now); end.setMonth(end.getMonth()+3); }
+  else { start=new Date(now); start.setDate(start.getDate()-start.getDay());
+         end=new Date(start); end.setDate(start.getDate()+6); }
+  var n=0, cur=new Date(start);
+  while(cur<=end){
+    var ds=cur.getFullYear()+'-'+p2(cur.getMonth()+1)+'-'+p2(cur.getDate());
+    /* A one-off template has no schedule of its own, so applying it just means
+       "every matching weekday in this range". */
+    if(c.repeat==='once'||tmplMatches(c,ds)){
+      var items=((c.days||{})[cur.getDay()]||[]), log=dayLog(ds);
+      for(var i=0;i<items.length;i++){
+        var x=items[i];
+        var dupe=log.sched.some(function(e){
+          return e.what===x.what&&e.who===x.who&&(e.from||'')===(x.from||'');});
+        if(!dupe){log.sched.push({who:x.who,what:x.what,from:x.from,to:x.to,
+          where:x.where||''});n++;}
+      }
+    }
+    cur.setDate(cur.getDate()+1);
+  }
+  if(n) save();
+  return n;
+}
+
 /* ---------------- helpers ---------------- */
 function $(s,r){return (r||document).querySelector(s);}
 function $$(s,r){return [].slice.call((r||document).querySelectorAll(s));}
@@ -123,8 +218,19 @@ function applyTheme(){
 }
 function P(){return S.prof[S.who];}
 /* whoever is selected up top is the default actor for anything logged */
+/* Rows are stored against the fixed tokens 'Jaron', 'Aaliyah' and 'Both' so a
+   rename never orphans an income line or a shift. Only what is shown on screen
+   follows the profile name, which is what WHO is for. Anything user-facing goes
+   through it; anything saved keeps the token. */
 function ME(){return S.who==='j'?'Jaron':'Aaliyah';}
-function whoOpts(){return [['Jaron','Jaron'],['Aaliyah','Aaliyah'],['Both','Both of us']];}
+function WHO(tok){
+  if(tok==='Jaron') return (S.prof.j.name||'Jaron');
+  if(tok==='Aaliyah') return (S.prof.a.name||'Aaliyah');
+  if(tok==='Both') return 'Both of us';
+  return tok||'';
+}
+function MENAME(){return WHO(ME());}
+function whoOpts(){return [['Jaron',WHO('Jaron')],['Aaliyah',WHO('Aaliyah')],['Both','Both of us']];}
 function num(x,d){var n=parseFloat(x);return isNaN(n)?(d||0):n;}
 
 /* ---------------- ingredients: base + user overrides ---------------- */

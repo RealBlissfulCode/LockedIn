@@ -17,7 +17,7 @@ GATE_HTML = (
     '<div id="gate">'
     '<div class="gatebox">'
     '<div class="gatemark"></div>'
-    '<h1>The Handbook</h1>'
+    '<h1>LockedIn</h1>'
     '<p class="gsub">Private. Enter the code.</p>'
     '<div class="gdots" id="gdots">'
     '<i></i><i></i><i></i><i></i>'

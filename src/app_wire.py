@@ -48,6 +48,7 @@ function route(){
   try{
     html = v==='r'?vRecipe(sub) : v==='training'?vTraining(sub) : v==='shopping'?vShopping(sub)
       : v==='financial'?vFinancial(sub) : v==='planning'?vPlanning(sub)
+      : v==='lists'?vRecipeLists()
       : v==='schedule'?vSchedule(sub) : vMeals();
   }catch(e){ html=errPanel(v.charAt(0).toUpperCase()+v.slice(1),e);
     if(window.console&&console.error)console.error(e); }
@@ -104,6 +105,12 @@ function bind(){
     dd.trainWho=ME(); if(!dd.trainAt)dd.trainAt='17:30'; save();route();});
     on('#tSave','click',function(){var d=dayLog(today());d.notes=$('#tNotes').value;
       var w=parseFloat($('#tW').value); if(w)d.w=w; save();toast('Saved');});
+  }
+  if(v==='lists'){
+    on('#rlNew','click',function(){
+      var n=prompt('Name the list','Sunday prep'); if(!n)return;
+      if(!S.lists[n]) S.lists[n]=[];
+      save();route();});
   }
   if(v==='financial') bindFin(h[1]);
   if(v==='planning') bindPlan(h[1]);
@@ -251,7 +258,7 @@ function bindFin(sub){
   on('#shCsv','click',function(){
     var rows=[['Date','Who','Job','Hours','Gross','Net','Note']];
     S.fin.shifts.forEach(function(s){var j=S.fin.jobs.filter(function(x){return x.id===s.jobId;})[0];
-      rows.push([s.date,j?j.who:'',j?j.name:'',s.hours,s.gross,s.net,s.note||'']);});
+      rows.push([s.date,j?WHO(j.who):'',j?j.name:'',s.hours,s.gross,s.net,s.note||'']);});
     dl('shifts-'+today()+'.csv',toCSV(rows),'text/csv');});
   on('#scenFromActual','click',function(){
     var from=new Date();from.setDate(from.getDate()-90);
@@ -267,7 +274,7 @@ function bindFin(sub){
 function jobEditor(id){
   var j=id?S.fin.jobs.filter(function(x){return x.id===id;})[0]:{who:'Jaron',name:'',employer:'',title:'',rate:'',low:'',real:'',high:''};
   var m=modal(id?'Edit income':'Add income',
-    form([{id:'jw',l:'Who',t:'select',o:[['Jaron','Jaron'],['Aaliyah','Aaliyah'],['Both','Shared / gig']],v:j.who},
+    form([{id:'jw',l:'Who',t:'select',o:whoOpts(),v:j.who},
       {id:'jn',l:'Name',v:j.name,ph:'Ritchey day job'},
       {id:'je',l:'Employer',v:j.employer},{id:'jt',l:'Title',v:j.title},
       {id:'jr',l:'Hourly rate',t:'number',step:'0.01',v:j.rate},
@@ -291,7 +298,7 @@ function costEditor(id){
       {id:'cs',l:'Section',t:'select',o:[['Living','Living'],['Utilities','Utilities'],
         ['Health','Health'],['Housing (rent)','Housing (rent)'],['Housing (buy)','Housing (buy)'],
         ['Debt','Debt'],['Savings','Savings']],v:c.section},
-      {id:'cw',l:'Who',t:'select',o:[['Both','Both'],['Jaron','Jaron'],['Aaliyah','Aaliyah']],v:c.who},
+      {id:'cw',l:'Who',t:'select',o:whoOpts(),v:c.who},
       {id:'cl',l:'Low',t:'number',v:c.low},{id:'cr',l:'Realistic',t:'number',v:c.real},
       {id:'ch',l:'High',t:'number',v:c.high},{id:'ca',l:'Actual',t:'number',v:c.actual}]),
     (id?'<button class="b o dz" id="cDel">Delete</button>':'')+
@@ -309,7 +316,7 @@ function shiftEditor(){
   if(!S.fin.jobs.length){toast('Add a job first');return;}
   var m=modal('Log a shift',
     form([{id:'sd',l:'Date',t:'date',v:today()},
-      {id:'sj',l:'Job',t:'select',o:S.fin.jobs.map(function(j){return [j.id,j.who+' - '+j.name];}),v:S.fin.jobs[0].id},
+      {id:'sj',l:'Job',t:'select',o:S.fin.jobs.map(function(j){return [j.id,WHO(j.who)+' - '+j.name];}),v:S.fin.jobs[0].id},
       {id:'sh',l:'Hours',t:'number',step:'0.25',v:8},
       {id:'sg',l:'Gross $',t:'number',step:'0.01',v:''},
       {id:'sn',l:'Net (after tax) $',t:'number',step:'0.01',v:''},
@@ -503,14 +510,14 @@ function bindSched(sub){
   on('#evAdd','click',function(){evEditor(calSel);});
   on('#spAdd','click',function(){spendEditor(calSel);});
   on('#mealAdd','click',function(){mealPicker(calSel);});
-  ['#applyTmpl','#applyTmpl2'].forEach(function(s){on(s,'click',applyTemplate);});
+  on('#tcNew','click',function(){tmplColEditor(null);});
   on('#calCsv','click',function(){
     var rows=[['Date','Who','Training','Kcal','Protein','FoodCost','OtherSpend','Plans','Notes']];
     Object.keys(S.days).sort().forEach(function(d){var r=S.days[d],e=eaten(d);
       var sp=(r.spend||[]).reduce(function(a,x){return a+(x.amt||0);},0);
       rows.push([d,P().name,TRAIN[r.workout]?TRAIN[r.workout].n:r.workout,Math.round(e.kcal),
         Math.round(e.p),e.cost.toFixed(2),sp.toFixed(2),
-        (r.sched||[]).map(function(x){return x.who+':'+x.what;}).join('; '),r.notes||'']);});
+        (r.sched||[]).map(function(x){return WHO(x.who)+':'+x.what;}).join('; '),r.notes||'']);});
     dl('log-'+today()+'.csv',toCSV(rows),'text/csv');});
 }
 function evEditor(ds){
@@ -549,35 +556,69 @@ function mealPicker(ds){
       '<div class="xs muted">'+Math.round(r.k)+' kcal &middot; '+Math.round(r.p)+'g protein &middot; '+$$$(cps(r))+'</div></div>'+
       '<span class="b s">Add</span></div>';}).join('');
     $$('[data-a]',m).forEach(function(row){row.onclick=function(){
-      var dd=dayLog(ds);dd.meals.push({id:row.dataset.a,q:1,who:ME(),at:defMealTime(dd.meals.length)});save();toast('Logged for '+ME());};});}
+      var dd=dayLog(ds);dd.meals.push({id:row.dataset.a,q:1,who:ME(),at:defMealTime(dd.meals.length)});save();toast('Logged for '+MENAME());};});}
   draw('');$('#mpq',m).oninput=function(){draw(this.value);};
 }
-function tmplEditor(dayIdx){
-  var m=modal('Every '+DOW[dayIdx],
+function tmplEditor(colId,dayIdx){
+  var c=tmplCol(colId); if(!c) return;
+  var m=modal('Every '+DOW[dayIdx]+' — '+c.name,
     form([{id:'tw',l:'Who',t:'select',o:whoOpts(),v:ME()},
       {id:'tx',l:'What',v:'',ph:'Church, work, class, gym'},
-      {id:'tl',l:'Where',v:'',ph:'Fort Collins SDA, the shop, CSU'},
+      {id:'tl',l:'Where',v:'',ph:'The shop, CSU, home'},
       {id:'tf',l:'From',t:'time',v:'09:00'},{id:'tt',l:'To',t:'time',v:'17:00'}]),
     '<button class="b o" data-close>Cancel</button><button class="b" id="tSave2">Add</button>');
   $('#tSave2',m).onclick=function(){
-    if(!S.sched.tmpl[dayIdx])S.sched.tmpl[dayIdx]=[];
-    S.sched.tmpl[dayIdx].push({who:$('#tw',m).value,what:$('#tx',m).value.trim()||'Busy',
+    if(!c.days) c.days={};
+    if(!c.days[dayIdx]) c.days[dayIdx]=[];
+    c.days[dayIdx].push({id:uid(),who:$('#tw',m).value,what:$('#tx',m).value.trim()||'Busy',
       where:$('#tl',m).value.trim(),from:$('#tf',m).value,to:$('#tt',m).value});
     save();m.remove();route();};
 }
-function applyTemplate(){
-  var t=S.sched.tmpl||{}, n=0, base=new Date();
-  base.setDate(base.getDate()-base.getDay());
-  for(var i=0;i<7;i++){
-    var d=new Date(base); d.setDate(base.getDate()+i);
-    var ds=d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate());
-    (t[i]||[]).forEach(function(x){
-      var log=dayLog(ds);
-      var dupe=log.sched.some(function(e){return e.what===x.what&&e.who===x.who&&e.from===x.from;});
-      if(!dupe){log.sched.push({who:x.who,what:x.what,from:x.from,to:x.to,where:x.where||''});n++;}
-    });
-  }
-  save();route();toast(n?n+' items added to this week':'Already applied');
+function tmplColEditor(id){
+  var isNew=!id, c=isNew?{name:'',note:'',repeat:'weekly',anchor:today(),fav:false,
+    active:false,days:{}}:tmplCol(id);
+  if(!c) return;
+  var m=modal(isNew?'New template':'Template settings',
+    form([{id:'kn',l:'Name',v:c.name,ph:'The ordinary week'},
+      {id:'kr',l:'How often',t:'select',o:REPEATS,v:c.repeat||'weekly'},
+      {id:'ka',l:'Counting from',t:'date',v:c.anchor||today()},
+      {id:'ko',l:'Note',t:'area',v:c.note||''}])+
+    '<p class="sm muted">"Counting from" only matters for every other week and once a month: '+
+    'it is the date the pattern lines up with. Weekly ignores it.</p>',
+    (isNew?'':'<button class="b o dz" id="kDel">Delete</button>')+
+    '<button class="b o" data-close>Cancel</button><button class="b" id="kSave">Save</button>');
+  var d=$('#kDel',m); if(d)d.onclick=function(){
+    if(!confirm('Delete "'+c.name+'"? Days it already wrote onto the calendar stay.'))return;
+    S.sched.cols=tmplCols().filter(function(x){return x.id!==id;});
+    save();m.remove();nav('schedule/templates');};
+  $('#kSave',m).onclick=function(){
+    var n=$('#kn',m).value.trim(); if(!n){toast('Give it a name');return;}
+    if(isNew){
+      S.sched.cols=tmplCols();
+      S.sched.cols.push({id:uid(),name:n,note:$('#ko',m).value.trim(),
+        repeat:$('#kr',m).value,anchor:$('#ka',m).value||today(),
+        fav:false,active:false,days:{}});
+    }else{
+      c.name=n; c.note=$('#ko',m).value.trim();
+      c.repeat=$('#kr',m).value; c.anchor=$('#ka',m).value||today();
+    }
+    save();m.remove();route();};
+}
+function tmplApplyModal(id){
+  var c=tmplCol(id); if(!c) return;
+  if(!tmplCount(c)){toast('Nothing in this template yet');return;}
+  var m=modal('Apply "'+c.name+'"',
+    form([{id:'as',l:'How far',t:'select',o:SCOPES,v:'week'}])+
+    '<p class="sm muted">This copies the items onto real days, so you can then change any one of '+
+    'them without touching the template. Days that already have the same item are skipped, so '+
+    'applying twice is safe.</p>'+
+    (c.active?'<div class="note good"><b>Note.</b> This one is already running, so it shows on '+
+      'matching days anyway. Applying is only worth it if you want to edit individual days.</div>':''),
+    '<button class="b o" data-close>Cancel</button><button class="b" id="aGo">Apply</button>');
+  $('#aGo',m).onclick=function(){
+    var n=applyCollection(id,$('#as',m).value);
+    m.remove();route();
+    toast(n?n+' item'+(n===1?'':'s')+' added':'Nothing new to add');};
 }
 
 /* ============================ global events ============================ */
@@ -593,10 +634,26 @@ document.addEventListener('click',function(e){
   if((el=t.closest('[data-go]'))){nav('r/'+el.dataset.go);return;}
   if((el=t.closest('[data-log]'))){var dt=dayLog(today());
     dt.meals.push({id:el.dataset.log,q:1,who:ME(),at:defMealTime(dt.meals.length)});
-    save();toast('Logged to today for '+ME());return;}
+    save();toast('Logged to today for '+MENAME());return;}
   if((el=t.closest('[data-groc]'))){addRecipeToShop(byId(el.dataset.groc));
     toast('Added to '+S.shop.active);return;}
   if((el=t.closest('[data-tolist]'))){listModal(el.dataset.tolist);return;}
+  if((el=t.closest('[data-rlrm]'))){var rr=el.dataset.rlrm.split('|');
+    var arr=S.lists[rr[0]]||[]; var ri=arr.indexOf(rr[1]);
+    if(ri>=0){arr.splice(ri,1);save();route();} return;}
+  if((el=t.closest('[data-rle]'))){var on_=el.dataset.rle;
+    var nn=prompt('Rename the list',on_); if(!nn||nn===on_)return;
+    if(S.lists[nn]){toast('"'+nn+'" already exists');return;}
+    if(!renameKey(S.lists,on_,nn))return; save();route();return;}
+  if((el=t.closest('[data-rld]'))){
+    if(confirm('Delete the list "'+el.dataset.rld+'"? The recipes themselves stay.')){
+      delete S.lists[el.dataset.rld];save();route();} return;}
+  if((el=t.closest('[data-rlgroc]'))){
+    var added=0;
+    (S.lists[el.dataset.rlgroc]||[]).map(byId).filter(Boolean).forEach(function(r){
+      addRecipeToShop(r);added++;});
+    toast(added?added+' recipe'+(added===1?'':'s')+' added to '+S.shop.active:'Nothing to add');
+    return;}
   if((el=t.closest('[data-photo]'))){pickPhoto(el.dataset.photo);return;}
   if((el=t.closest('[data-card]'))){cardPNG(byId(el.dataset.card));return;}
   if((el=t.closest('[data-list]'))){S.shop.active=el.dataset.list;save();route();return;}
@@ -681,9 +738,29 @@ document.addEventListener('click',function(e){
   if((el=t.closest('[data-evd]'))){dayLog(calSel).sched.splice(+el.dataset.evd,1);save();route();return;}
   if((el=t.closest('[data-spd]'))){dayLog(calSel).spend.splice(+el.dataset.spd,1);save();route();return;}
   if((el=t.closest('[data-mld]'))){dayLog(calSel).meals.splice(+el.dataset.mld,1);save();route();return;}
-  if((el=t.closest('[data-tadd]'))){tmplEditor(+el.dataset.tadd);return;}
+  if((el=t.closest('[data-tadd]'))){var ta=el.dataset.tadd.split('|');
+    tmplEditor(ta[0],+ta[1]);return;}
   if((el=t.closest('[data-td]'))){var q=el.dataset.td.split('|');
-    S.sched.tmpl[q[0]].splice(+q[1],1);save();route();return;}
+    var tc=tmplCol(q[0]);
+    if(tc&&tc.days&&tc.days[q[1]]){tc.days[q[1]].splice(+q[2],1);save();route();}
+    return;}
+  /* template collections */
+  if((el=t.closest('[data-tcopen]'))){nav('schedule/templates/'+el.dataset.tcopen);return;}
+  if((el=t.closest('[data-tcedit]'))){tmplColEditor(el.dataset.tcedit);return;}
+  if((el=t.closest('[data-tcapply]'))){tmplApplyModal(el.dataset.tcapply);return;}
+  if((el=t.closest('[data-tctoggle]'))){var tt=tmplCol(el.dataset.tctoggle);
+    if(tt){ if(!tt.active&&(tt.repeat||'weekly')==='once'){
+        toast('Set it to repeat before it can run'); tmplColEditor(tt.id); return; }
+      tt.active=!tt.active; save(); route();
+      toast(tt.active?'"'+tt.name+'" is running':'"'+tt.name+'" stopped'); }
+    return;}
+  if((el=t.closest('[data-tcfav]'))){var tf=tmplCol(el.dataset.tcfav);
+    if(tf){tf.fav=!tf.fav;save();route();} return;}
+  if((el=t.closest('[data-tcdel]'))){var tdc=tmplCol(el.dataset.tcdel);
+    if(tdc&&confirm('Delete "'+tdc.name+'"? Days it already wrote onto the calendar stay.')){
+      S.sched.cols=tmplCols().filter(function(x){return x.id!==el.dataset.tcdel;});
+      save();nav('schedule/templates');}
+    return;}
   if(t.closest('#syncPill')){
     if(syncOn){syncFlush();syncPull();toast('Syncing');} else settingsModal(); return;}
   if(t.closest('#settings')){settingsModal();return;}
@@ -772,17 +849,17 @@ function settingsModal(){
       var sp=(r.spend||[]).reduce(function(a,x){return a+(x.amt||0);},0);
       rows.push([d,TRAIN[r.workout]?TRAIN[r.workout].n:r.workout,Math.round(e.kcal),
         Math.round(e.p),e.cost.toFixed(2),sp.toFixed(2),
-        (r.sched||[]).map(function(x){return x.who+':'+x.what;}).join('; '),r.notes||'']);});
+        (r.sched||[]).map(function(x){return WHO(x.who)+':'+x.what;}).join('; '),r.notes||'']);});
     dl('daily-log-'+today()+'.csv',toCSV(rows),'text/csv');};
   $('#stShift',m).onclick=function(){
     var rows=[['Date','Who','Job','Hours','Gross','Net','Note']];
     S.fin.shifts.forEach(function(s){var j=S.fin.jobs.filter(function(x){return x.id===s.jobId;})[0];
-      rows.push([s.date,j?j.who:'',j?j.name:'',s.hours,s.gross,s.net,s.note||'']);});
+      rows.push([s.date,j?WHO(j.who):'',j?j.name:'',s.hours,s.gross,s.net,s.note||'']);});
     dl('shifts-'+today()+'.csv',toCSV(rows),'text/csv');};
   $('#stFin',m).onclick=function(){
     var rows=[['Type','Section','Name','Who','Low','Realistic','High','Actual']];
-    S.fin.jobs.forEach(function(j){rows.push(['Income','',j.name,j.who,j.low,j.real,j.high,j.actual||'']);});
-    S.fin.costs.forEach(function(c){rows.push(['Cost',c.section,c.name,c.who,c.low,c.real,c.high,c.actual||'']);});
+    S.fin.jobs.forEach(function(j){rows.push(['Income','',j.name,WHO(j.who),j.low,j.real,j.high,j.actual||'']);});
+    S.fin.costs.forEach(function(c){rows.push(['Cost',c.section,c.name,WHO(c.who),c.low,c.real,c.high,c.actual||'']);});
     dl('budget-'+today()+'.csv',toCSV(rows),'text/csv');};
   $('#stPlan',m).onclick=function(){
     var rows=[['Plan','Section','Item','Done','Note']];
@@ -821,7 +898,7 @@ function listModal(id){
   var names=Object.keys(S.lists);
   var body=(names.length?names.map(function(n){var has=S.lists[n].indexOf(id)>=0;
     return '<div class="pickrow" data-l="'+E(n)+'"><input type="checkbox"'+(has?' checked':'')+
-    ' style="width:18px;height:18px;accent-color:var(--forest)"><div><b>'+E(n)+'</b>'+
+    ' style="width:18px;height:18px;accent-color:var(--brass)"><div><b>'+E(n)+'</b>'+
     '<div class="xs muted">'+S.lists[n].length+' recipes</div></div></div>';}).join('')
     :'<p class="sm muted">No recipe lists yet.</p>')+
    '<label class="f" style="margin-top:14px"><span>Or make a new one</span><input id="nl" placeholder="Sunday prep"></label>';

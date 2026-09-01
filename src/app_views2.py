@@ -20,7 +20,7 @@ function vTraining(sub){
    '<label class="f"><span>Notes, lifts, PRs</span><textarea id="tNotes" rows="3" placeholder="Weighted pull-up 3x5 +25 lb">'+E(d.notes||'')+'</textarea></label>'+
    '<label class="f"><span>Bodyweight this morning</span><input id="tW" type="number" step="0.1" value="'+(d.w||'')+'"></label>'+
    '<button class="b" id="tSave">Save</button>'+
-   '<p class="xs muted" style="margin-top:10px">Logged as <b>'+E(ME())+'</b>. This appears on the schedule automatically.</p></div>'+
+   '<p class="xs muted" style="margin-top:10px">Logged as <b>'+E(MENAME())+'</b>. This appears on the schedule automatically.</p></div>'+
    '<div class="card pad"><h3 class="ctitle">What the day needs</h3>'+
    statRow(t)+'<div class="note" style="margin-bottom:0">'+E(TRAIN[d.workout].why)+'</div></div>'+
    '</div></div>'+
@@ -219,7 +219,7 @@ function vFinancial(sub){
      var v=S.fin.jobs.filter(function(j){return j.who===w;})
        .reduce(function(a,j){return a+(j[mode]||0);},0);
      if(!v)return ''; var pct=inc?v/inc*100:0;
-     return '<div class="mrow"><div class="spread"><span>'+E(w==='Both'?'Shared / gig':w)+'</span>'+
+     return '<div class="mrow"><div class="spread"><span>'+E(w==='Both'?'Shared / gig':WHO(w))+'</span>'+
      '<em>'+M(v)+'</em></div><div class="bar"><i class="pp" style="width:'+pct+'%"></i></div></div>';
    }).join('')+'<button class="b o s" id="jobAdd" style="margin-top:10px">Add income</button></div>'+
    '</div></div>'+
@@ -229,7 +229,7 @@ function vFinancial(sub){
    '<thead><tr><th>Who</th><th>Name</th><th>Employer</th><th class="num">Low</th>'+
    '<th class="num">Realistic</th><th class="num">High</th><th class="num">Actual</th><th></th></tr></thead><tbody>'+
    S.fin.jobs.map(function(j){
-     return '<tr><td><span class="chip">'+E(j.who)+'</span></td><td><b>'+E(j.name)+'</b>'+
+     return '<tr><td><span class="chip">'+E(WHO(j.who))+'</span></td><td><b>'+E(j.name)+'</b>'+
      (j.rate?'<div class="xs muted">'+$$$(j.rate)+'/hr</div>':'')+'</td>'+
      '<td class="sm muted">'+E(j.employer||'')+'</td>'+
      '<td class="num">'+M(j.low)+'</td><td class="num"><b>'+M(j.real)+'</b></td>'+
@@ -248,7 +248,7 @@ function vFinancial(sub){
    '<thead><tr><th>Section</th><th>Cost</th><th>Who</th><th class="num">Low</th>'+
    '<th class="num">Realistic</th><th class="num">High</th><th class="num">Actual</th><th></th></tr></thead><tbody>'+
    S.fin.costs.map(function(c){return '<tr><td class="sm muted">'+E(c.section)+'</td>'+
-     '<td><b>'+E(c.name)+'</b></td><td><span class="chip">'+E(c.who)+'</span></td>'+
+     '<td><b>'+E(c.name)+'</b></td><td><span class="chip">'+E(WHO(c.who))+'</span></td>'+
      '<td class="num">'+M(c.low)+'</td><td class="num"><b>'+M(c.real)+'</b></td>'+
      '<td class="num">'+M(c.high)+'</td>'+
      '<td class="num">'+(c.actual?M(c.actual):'<span class="muted">-</span>')+'</td>'+
@@ -278,7 +278,7 @@ function vActual(){
    '<div class="sec"><h2>Last 90 days</h2><div class="grid g2">'+
    ['Jaron','Aaliyah'].map(function(w){
      var h=w==='Jaron'?jH:aH,g=w==='Jaron'?jG:aG,n=w==='Jaron'?jN:aN;
-     return '<div class="card pad"><h3 class="ctitle">'+w+'</h3>'+
+     return '<div class="card pad"><h3 class="ctitle">'+E(WHO(w))+'</h3>'+
      '<div class="stats"><div class="stat acc"><b>'+M(n/months)+'</b><span>Net / mo</span></div>'+
      '<div class="stat"><b>'+h.toFixed(0)+'</b><span>Hours</span></div>'+
      '<div class="stat"><b>'+$$$(eff(g,h))+'</b><span>Gross / hr</span></div>'+
@@ -419,7 +419,10 @@ function vStrategies(){
 var DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 var calY=new Date().getFullYear(), calM=new Date().getMonth(), calSel=today();
 function dayTimeline(ds){
-  var d=dayLog(ds), out=[];
+  /* Read-only on purpose: dayLog() would create an entry for every cell the
+     calendar draws. Standing template items have to be visible on days that
+     have nothing saved at all, so this must not write. */
+  var d=S.days[ds]||{workout:'rest',meals:[],sched:[],spend:[]}, out=[];
   (d.sched||[]).forEach(function(e,i){
     out.push({t:e.from||'',kind:'e',who:e.who,title:e.what,
       sub:[(e.from?e.from+(e.to?' - '+e.to:''):''),e.where||''].filter(Boolean).join('  \u00B7  '),
@@ -434,6 +437,11 @@ function dayTimeline(ds){
         $$$(cps(r)*(mm.q||1)),mi:i});});
   (d.spend||[]).forEach(function(x,i){
     out.push({t:x.at||'',kind:'s',who:x.who,title:x.what,sub:$$$(x.amt),si:i});});
+  /* Anything from a running template, worked out now rather than copied in. */
+  tmplItemsFor(ds).forEach(function(x){
+    out.push({t:x.from||'',kind:'e',who:x.who,title:x.what,
+      sub:[(x.from?x.from+(x.to?' - '+x.to:''):''),x.where||''].filter(Boolean).join('  ·  '),
+      tmpl:x.col});});
   out.sort(function(a,b){
     if(!a.t&&!b.t)return 0; if(!a.t)return 1; if(!b.t)return -1;
     return a.t<b.t?-1:a.t>b.t?1:0;});
@@ -447,7 +455,8 @@ function tl(ds){
   return '<ul class="tl">'+items.map(function(x){
     return '<li><div class="tm">'+(x.t?E(x.t):'&mdash;')+'</div>'+
     '<span class="pip '+x.kind+'"></span><div class="bd">'+
-    '<div class="ti">'+E(x.title)+' <span class="chip">'+E(x.who||'Both')+'</span></div>'+
+    '<div class="ti">'+E(x.title)+' <span class="chip">'+E(WHO(x.who)||'Both of us')+'</span>'+
+    (x.tmpl?' <span class="chip t" title="From a running template">'+E(x.tmpl)+'</span>':'')+'</div>'+
     (x.sub?'<div class="ts">'+E(x.sub)+'</div>':'')+'</div>'+
     (x.rm!=null?'<button class="x" data-evd="'+x.rm+'">&times;</button>':'')+
     (x.mi!=null?'<button class="x" data-mld="'+x.mi+'">&times;</button>':'')+
@@ -455,13 +464,16 @@ function tl(ds){
     '</li>';}).join('')+'</ul>';
 }
 function vSchedule(sub){
-  if(sub==='week') return vWeekTemplate();
+  if(sub==='week'||sub==='templates'){
+    var parts=(location.hash||'').slice(2).split('/');
+    return parts[2]?vTemplateEdit(parts[2]):vWeekTemplate();
+  }
   var first=new Date(calY,calM,1), start=first.getDay(), days=new Date(calY,calM+1,0).getDate();
   var cells='';
   for(var i=0;i<start;i++)cells+='<div class="day out"></div>';
   for(var dn=1;dn<=days;dn++){
-    var ds=calY+'-'+p2(calM+1)+'-'+p2(dn), rec=S.days[ds];
-    var items=rec?dayTimeline(ds):[];
+    var ds=calY+'-'+p2(calM+1)+'-'+p2(dn);
+    var items=dayTimeline(ds);
     var show=items.slice(0,3).map(function(x){
       return '<span class="dev '+x.kind+'" title="'+E(x.title)+'">'+
         (x.t?'<b>'+E(x.t.slice(0,5))+'</b> ':'')+E(x.title)+'</span>';}).join('');
@@ -475,8 +487,7 @@ function vSchedule(sub){
   return '<div class="page"><div class="phead"><h1>Schedule</h1>'+
    '<p>Everything either of us is doing that day, in time order. Training and meals appear here on '+
    'their own from the other tabs.</p></div>'+
-   '<div class="row toolbar"><button class="b o" data-nav="schedule/week">Weekly template</button>'+
-   '<button class="b o" id="applyTmpl">Apply template to this week</button>'+
+   '<div class="row toolbar"><button class="b o" data-nav="schedule/templates">Templates</button>'+
    '<button class="b o" id="calCsv">Export the log</button></div>'+
    '<div class="card pad"><div class="spread" style="margin-bottom:12px">'+
    '<button class="b o s" id="cPrev">&larr;</button>'+
@@ -525,22 +536,75 @@ function freeSlots(d){
   return '<div class="note" style="margin-top:12px"><b>Both free.</b> '+
     blocks.filter(function(b){return b[1]-b[0]>=60;}).map(function(b){return fmt(b[0])+' to '+fmt(b[1]);}).join(', ')+'</div>';
 }
+function repeatLabel(c){
+  var r=(REPEATS.filter(function(x){return x[0]===(c.repeat||'weekly');})[0]||REPEATS[0]);
+  return r[1];
+}
 function vWeekTemplate(){
-  var t=S.sched.tmpl||{};
-  return '<div class="page"><div class="phead"><h1>Weekly template</h1>'+
-   '<p>The regular week: work, class, church, gym. Put it in once with times and places, then push '+
-   'it onto any week.</p></div>'+
-   '<div class="row toolbar"><button class="b o" data-nav="schedule">&larr; Calendar</button>'+
-   '<button class="b" id="applyTmpl2">Apply to this week</button></div>'+
+  var cols=tmplCols().slice().sort(function(a,b){
+    if(!!b.fav!==!!a.fav) return b.fav?1:-1;
+    return (a.name||'').localeCompare(b.name||'');});
+  var live=cols.filter(function(c){return c.active;}).length;
+  return '<div class="page"><div class="phead"><h1>Templates</h1>'+
+   '<p>The parts of a week that repeat: work, class, church, gym. Build one once, then either '+
+   'leave it running or push it onto a stretch of the calendar.</p></div>'+
+   '<div class="row toolbar"><button class="b" id="tcNew">New template</button>'+
+   '<button class="b o" data-nav="schedule">&larr; Calendar</button></div>'+
+   (cols.length?'<div class="stats gap-b">'+
+     '<div class="stat acc"><b>'+live+'</b><span>Running now</span></div>'+
+     '<div class="stat"><b>'+cols.length+'</b><span>Templates</span></div>'+
+     '<div class="stat"><b>'+cols.reduce(function(a,c){return a+tmplCount(c);},0)+'</b>'+
+     '<span>Items</span></div></div>':'')+
+   (cols.length?'<div class="grid g2">'+cols.map(function(c){
+     var days=[];for(var i=0;i<7;i++) if(((c.days||{})[i]||[]).length) days.push(DOW[i]);
+     return '<div class="card pad tcard'+(c.active?' live':'')+'">'+
+     '<div class="spread"><h3 class="pln">'+
+     (c.fav?'<span class="favstar on">\u2605</span> ':'')+E(c.name)+'</h3>'+
+     '<span class="chip'+(c.active?' t':'')+'">'+(c.active?'Running':'Off')+'</span></div>'+
+     (c.note?'<p class="sm muted" style="margin:8px 0 0">'+E(c.note)+'</p>':'')+
+     '<div class="chips" style="margin-top:12px"><span class="chip">'+E(repeatLabel(c))+'</span>'+
+     '<span class="chip">'+tmplCount(c)+' item'+(tmplCount(c)===1?'':'s')+'</span>'+
+     (days.length?'<span class="chip">'+days.join(', ')+'</span>':'')+'</div>'+
+     '<div class="row" style="margin-top:14px">'+
+     '<button class="b o s" data-tcopen="'+c.id+'">Edit</button>'+
+     '<button class="b o s" data-tcapply="'+c.id+'">Apply to&hellip;</button>'+
+     '<button class="b o s" data-tctoggle="'+c.id+'">'+(c.active?'Stop':'Keep running')+'</button>'+
+     '<button class="b o s" data-tcfav="'+c.id+'">'+(c.fav?'\u2605':'\u2606')+'</button>'+
+     '</div></div>';}).join('')+'</div>'
+    :'<div class="empty"><p>No templates yet.</p>'+
+     '<p class="sm">Make one for the ordinary week, another for the weeks she has class, '+
+     'whatever repeats.</p></div>')+
+   '</div>';
+}
+function vTemplateEdit(id){
+  var c=tmplCol(id);
+  if(!c) return '<div class="page"><div class="empty"><p>That template is gone.</p>'+
+    '<button class="b o" data-nav="schedule/templates">Back to templates</button></div></div>';
+  return '<div class="page"><div class="phead"><h1>'+E(c.name)+'</h1>'+
+   (c.note?'<p>'+E(c.note)+'</p>':'')+'</div>'+
+   '<div class="row toolbar">'+
+   '<button class="b" data-tcapply="'+c.id+'">Apply to&hellip;</button>'+
+   '<button class="b o" data-tctoggle="'+c.id+'">'+(c.active?'Stop running':'Keep running')+'</button>'+
+   '<button class="b o" data-tcedit="'+c.id+'">Settings</button>'+
+   '<button class="b o dz" data-tcdel="'+c.id+'">Delete</button>'+
+   '<button class="b o" data-nav="schedule/templates">&larr; Templates</button></div>'+
+   '<div class="note'+(c.active?' good':'')+'">'+
+   (c.active
+     ? '<b>Running.</b> '+E(repeatLabel(c))+'. These show on the calendar on their own, and '+
+       'stop showing the moment you turn this off. Nothing is copied into a day.'
+     : '<b>Not running.</b> '+E(repeatLabel(c))+'. Use Apply to copy it onto real days, or '+
+       'keep it running to have it appear on its own.')+'</div>'+
    '<div class="grid g3">'+DOW.map(function(dn,i){
-     var items=(t[i]||[]).slice().sort(function(a,b){return (a.from||'')<(b.from||'')?-1:1;});
-     return '<div class="card pad"><div class="spread"><h3 style="font-size:16px">'+dn+'</h3>'+
-     '<button class="b o s" data-tadd="'+i+'">Add</button></div>'+
-     (items.length?'<ul class="tl" style="margin-top:12px">'+items.map(function(x,j){
+     var items=((c.days||{})[i]||[]).slice().sort(function(a,b){
+       return (a.from||'')<(b.from||'')?-1:1;});
+     return '<div class="card pad"><div class="spread"><h3 class="ctitle" style="margin:0">'+dn+'</h3>'+
+     '<button class="b o s" data-tadd="'+c.id+'|'+i+'">Add</button></div>'+
+     (items.length?'<ul class="tl" style="margin-top:14px">'+items.map(function(x,j){
        return '<li><div class="tm">'+E(x.from||'')+'</div><span class="pip e"></span>'+
-       '<div class="bd"><div class="ti">'+E(x.what)+' <span class="chip">'+E(x.who)+'</span></div>'+
-       '<div class="ts">'+[(x.from?x.from+(x.to?' - '+x.to:''):''),x.where||''].filter(Boolean).join('  \u00B7  ')+
-       '</div></div><button class="x" data-td="'+i+'|'+j+'">&times;</button></li>';}).join('')+'</ul>'
+       '<div class="bd"><div class="ti">'+E(x.what)+' <span class="chip">'+E(WHO(x.who))+'</span></div>'+
+       '<div class="ts">'+E([(x.from?x.from+(x.to?' - '+x.to:''):''),x.where||'']
+         .filter(Boolean).join('  \u00B7  '))+'</div></div>'+
+       '<button class="x" data-td="'+c.id+'|'+i+'|'+j+'">&times;</button></li>';}).join('')+'</ul>'
        :'<p class="empty sm" style="padding:14px 0">Nothing regular.</p>')+'</div>';}).join('')+
    '</div></div>';
 }

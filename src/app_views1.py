@@ -100,6 +100,9 @@ function vMeals(){
    '<label class="f"><span>Sort</span><select id="fsort">'+opt([['rec','Protein'],['cheap','Cheapest'],
      ['t','Fastest'],['k','Most calories'],['az','A to Z']],flt.sort)+'</select></label></div>'+
    '<div class="row"><button class="b o s" id="addOwn">Add my own recipe</button>'+
+   '<button class="b o s" data-nav="lists">Recipe lists'+
+   (Object.keys(S.lists||{}).length?' <span class="chip p">'+Object.keys(S.lists).length+'</span>':'')+
+   '</button>'+
    '<span class="right sm muted" id="fcount"></span></div></div>'+
    '<div class="grid g3" id="fgrid"></div></div>'+
    explain()+'</div>';
@@ -181,6 +184,36 @@ function applyFilters(){
     if(s==='k')return b.k-a.k; if(s==='az')return a.n.localeCompare(b.n); return b.p-a.p;});
   g.innerHTML=L.length?L.map(rcard).join(''):'<p class="empty">Nothing matches.</p>';
   $('#fcount').textContent=L.length+' shown';
+}
+
+/* ============================ RECIPE LISTS ============================
+   Recipes could always be added to a named list; there was just never a screen
+   that showed one back. This is it. */
+function vRecipeLists(){
+  var L=S.lists||{}, names=Object.keys(L).sort();
+  return '<div class="page"><div class="phead"><h1>Recipe lists</h1>'+
+   '<p>Collections of recipes: a Sunday prep list, the things she actually eats, '+
+   'whatever is worth keeping together.</p></div>'+
+   '<div class="row toolbar"><button class="b" id="rlNew">New list</button>'+
+   '<button class="b o" data-nav="meals">&larr; Meals</button></div>'+
+   (names.length?names.map(function(n){
+     var ids=(L[n]||[]), rs=ids.map(byId).filter(Boolean);
+     var cost=rs.reduce(function(a,r){return a+cps(r);},0);
+     return '<div class="sec"><div class="spread"><h2>'+E(n)+'</h2>'+
+     '<div class="row"><span class="chip p">'+rs.length+' recipe'+(rs.length===1?'':'s')+'</span>'+
+     (rs.length?'<span class="chip p">'+$$$(cost)+' a serving each</span>':'')+
+     '<button class="b o s" data-rle="'+E(n)+'">Rename</button>'+
+     '<button class="b o s" data-rlgroc="'+E(n)+'">Add all to shopping</button>'+
+     '<button class="b o s dz" data-rld="'+E(n)+'">Delete</button></div></div>'+
+     (rs.length?'<div class="grid g3">'+rs.map(function(r){
+       return '<div class="rlwrap">'+rcard(r)+
+       '<button class="x rlrm" data-rlrm="'+E(n)+'|'+E(r.id)+'" title="Remove from this list">&times;</button>'+
+       '</div>';}).join('')+'</div>'
+      :'<div class="empty sm">Nothing on this list yet. Open a recipe and use "Add to a list".</div>')+
+     '</div>';}).join('')
+    :'<div class="empty"><p>No recipe lists yet.</p>'+
+     '<p class="sm">Open any recipe and use "Add to a list" to start one.</p></div>')+
+   '</div>';
 }
 
 /* ============================ RECIPE DETAIL ============================ */
