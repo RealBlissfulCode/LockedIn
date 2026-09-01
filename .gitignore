@@ -6,3 +6,9 @@ __pycache__/
 *.pyc
 .netlify/
 .env
+
+# Written on the server at runtime. The endpoint prefers a directory above the
+# web root; this is the fallback. Either way it must never be committed, or a
+# git deploy would fight the live data.
+api/data/
+handbook-data/
