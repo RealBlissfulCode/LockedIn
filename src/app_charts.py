@@ -29,27 +29,48 @@ function chTone(i){return 'ct'+(i%6+1);}
    spec.max     the value one full-height bar represents
    spec.cols[]  {label, sub, subCls, bars:[{v, base, cls, tip}]}
    A bar with a base sits that far off the floor, which is all a waterfall is.
-   Bars inside one column share the width evenly unless one asks to be wide. */
+   Bars inside one column share the width evenly.
+
+   Two columns of bars are wide and four are narrow, otherwise a three column
+   chart on a desk monitor draws slabs and an eight column one draws threads.
+   The inset is worked out from the count rather than fixed.
+
+   spec.connect draws the line a waterfall needs. Without it the eye reads six
+   floating rectangles; with it, it reads one balance being cut down. The line
+   sits at the top of each bar and runs back into the gutter, so it meets the
+   bar before it exactly where that one ended. */
 function chartCols(spec){
   var cols=spec.cols||[]; if(!cols.length) return chEmpty(spec.empty||'Nothing to draw yet.');
   var max=spec.max||0, h=spec.h||150, k=0;
+  var n0=cols.length;
+  var pad=n0<=2?26:n0<=3?20:n0<=4?15:n0<=6?9:n0<=9?5:3;
   var body=cols.map(function(c,ci){
     var bars=c.bars||[], n=bars.length;
+    var gutter=n>1?2:0;
     var inner=bars.map(function(b,bi){
-      var w=100/n, l=w*bi+(n>1?2:8), r=100-(w*(bi+1))+(n>1?2:8);
+      var w=(100-pad*2)/n;
+      var l=pad+w*bi+(bi?gutter:0), r=100-(pad+w*(bi+1))+(bi<n-1?gutter:0);
       var hp=chPct(Math.abs(b.v),max), bp=chPct(b.base||0,max);
       k++;
       return '<i class="cb '+(b.cls||'ct1')+'" style="--l:'+chNum(l)+'%;--r:'+chNum(r)+'%;'+
         '--h:'+chNum(Math.max(hp,hp>0?0.8:0))+'%;--b:'+chNum(bp)+'%;--d:'+(k*0.045).toFixed(3)+'s"'+
         (b.tip?' title="'+E(b.tip)+'"':'')+'></i>';
     }).join('');
+    /* The connector belongs to the column it leads into, so the first one has
+       nothing to join and is skipped. */
+    var conn='';
+    if(spec.connect&&ci>0&&bars.length){
+      var top=chPct(Math.abs(bars[0].v)+(bars[0].base||0),max);
+      conn='<u class="cconn" style="--y:'+chNum(top)+'%;--r:'+chNum(100-pad)+'%;--d:'+
+        (ci*0.045+0.1).toFixed(3)+'s"></u>';
+    }
     return '<div class="ccol">'+
-      '<div class="cstack" style="--ch:'+h+'px">'+inner+'</div>'+
+      '<div class="cstack" style="--ch:'+h+'px">'+conn+inner+'</div>'+
       '<div class="clab">'+E(c.label)+'</div>'+
       (c.sub?'<div class="csub '+(c.subCls||'')+'">'+E(c.sub)+'</div>':'')+
       '</div>';
   }).join('');
-  return '<div class="cchart">'+body+'</div>';
+  return '<div class="cchart'+(spec.connect?' wf':'')+'">'+body+'</div>';
 }
 
 /* ---------------- donut ----------------

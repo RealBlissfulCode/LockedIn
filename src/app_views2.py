@@ -250,21 +250,33 @@ function vFinancial(sub){
   }
 
   /* ---- waterfall: income, then each section, then what is left ---- */
+  /* Three colours, three meanings: what arrives, what is taken off, what
+     survives. Giving each section its own colour here made six deductions look
+     like six unrelated things instead of one balance being cut down; the donut
+     below is where the sections get their identity. */
   var wfMax=Math.max(inc,cost,1), run=inc;
-  var wfCols=[{label:'Income',sub:M(inc),bars:[{v:inc,base:0,cls:'ct2',tip:'Everything coming in'}]}];
+  var wfCols=[{label:'Income',sub:M(inc),subCls:'good',
+    bars:[{v:inc,base:0,cls:'ctg',tip:'Everything coming in: '+M(inc)}]}];
   secNames.forEach(function(k,i){
     var v=byS[k]; if(v<=0) return;
     var base=Math.max(0,run-v);
-    wfCols.push({label:k,sub:'-'+M(v),bars:[{v:v,base:base,cls:chTone(i),tip:k+': '+M(v)+' / mo'}]});
+    wfCols.push({label:k,sub:'−'+M(v),subCls:'bad',
+      bars:[{v:v,base:base,cls:'ctb',
+        tip:k+': '+M(v)+' off, leaving '+M(base)}]});
     run-=v;
   });
   wfCols.push({label:gap>=0?'Left over':'Short by',sub:M(Math.abs(gap)),subCls:gap>=0?'good':'bad',
     bars:[{v:Math.abs(gap),base:0,cls:gap>=0?'ctg':'ctb',
       tip:(gap>=0?'Left over: ':'Short by: ')+M(Math.abs(gap))}]});
   var waterfall='<div class="sec"><h2>From income to what is left</h2>'+
-    '<p class="sub">Every live cost section taken off the top, in order of size, on the '+
-    modeLabel(mode).toLowerCase()+' column while '+(path==='buy'?'buying':'renting')+'.</p>'+
-    '<div class="card pad">'+chartCols({max:wfMax,h:170,cols:wfCols})+'</div></div>';
+    '<p class="sub">The first bar is everything coming in. Each one after it is a live cost '+
+    'section taken off the running balance, biggest first, on the '+modeLabel(mode).toLowerCase()+
+    ' column while '+(path==='buy'?'buying':'renting')+'. The last bar is what survives.</p>'+
+    '<div class="card pad">'+chartCols({max:wfMax,h:180,cols:wfCols,connect:true})+
+    '<div class="ckey"><span><i class="ctg"></i>Money in, and what is left of it</span>'+
+    '<span><i class="ctb"></i>Taken off the balance</span>'+
+    '<span class="muted">Each bar starts where the one before it ended</span></div>'+
+    '</div></div>';
 
   /* ---- donut of live costs, with a switch per section in the legend ---- */
   var donutSlices=secNames.map(function(k,i){return {v:byS[k],label:k+' '+M(byS[k]),cls:chTone(i)};});

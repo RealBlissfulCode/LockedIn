@@ -691,6 +691,14 @@ color:var(--ink-4);margin-left:7px;vertical-align:1px}
 border-radius:4px 4px 0 0;transform-origin:bottom;
 animation:cgrow .58s var(--ez) both;animation-delay:var(--d,0s)}
 @keyframes cgrow{from{transform:scaleY(0);opacity:.3}to{transform:scaleY(1);opacity:1}}
+/* The waterfall's connector. It reaches back past the column's own edge into
+   the grid gap, so the run from one bar's top to the next is unbroken. Drawn
+   before the bars in source order, so a bar always covers the half of the line
+   that runs underneath it. */
+.cconn{position:absolute;left:-13px;right:var(--r,8%);bottom:var(--y,0);height:0;
+border-top:1px dashed var(--line-2);
+animation:cfade .45s var(--ez) both;animation-delay:var(--d,0s)}
+.cchart.wf .cstack{overflow:visible}
 .clab{margin-top:9px;font:600 10.5px/1.3 var(--f-body);color:var(--ink-3);
 overflow-wrap:break-word;hyphens:auto}
 .csub{margin-top:4px;font:700 12px/1 var(--f-mono);color:var(--ink)}
