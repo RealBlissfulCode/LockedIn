@@ -1,61 +1,79 @@
 # -*- coding: utf-8 -*-
 APP_CHARTS = r"""
 /* ============================================================
-   CHARTS  -  hand rolled, no library, no canvas.
+   CHARTS. Hand rolled. No library, no canvas.
 
-   Two techniques, picked per chart rather than uniformly:
+   Most of them are plain HTML. A div with a percentage height is already a
+   bar, it picks up the theme variables for free, and its labels are real text
+   at a real size instead of glyphs that grow with the viewBox. Only the donut
+   and the projection line are SVG, because HTML cannot draw an arc or a
+   polyline. Neither of those two carries any text.
 
-   * Columns, stacks and waterfalls are plain HTML. A div with a percentage
-     height is already a bar; it inherits the theme variables, rounds its
-     corners properly, and its labels are real text at a real font size
-     instead of glyphs that grow with the viewBox.
-   * The donut and the projection line are SVG, because HTML cannot draw an
-     arc or a polyline. Neither carries text, so nothing scales badly.
-
-   Every function is pure: numbers in, markup out, so a view can call one in
-   the middle of a template string. Motion is entirely in CSS, which means the
-   one prefers-reduced-motion rule at the bottom of the stylesheet switches all
-   of it off, and the static state of every chart is already its final state.
+   Every function takes numbers and returns markup, so a view can call one in
+   the middle of a template string. All the motion is in CSS. That way the
+   prefers-reduced-motion rule at the bottom of the stylesheet kills the lot in
+   one place, and every chart already sits at its finished state before the
+   keyframes touch it.
    ============================================================ */
 
 function chNum(n){n=Number(n);return isFinite(n)?Math.round(n*100)/100:0;}
 function chPct(v,max){return max>0?Math.max(0,Math.min(100,v/max*100)):0;}
 function chEmpty(msg){return '<div class="cempty">'+E(msg)+'</div>';}
-/* Six accent classes, cycled. Sections outnumber them eventually and that is
-   fine: adjacent slices are what have to differ, not distant ones. */
+/* Six accent classes on a loop. Sections will outrun them eventually and that
+   is fine. What matters is that touching slices differ, not distant ones. */
 function chTone(i){return 'ct'+(i%6+1);}
 
 /* ---------------- columns ----------------
-   spec.max     the value one full-height bar represents
+   spec.max     what one full height bar is worth
    spec.cols[]  {label, sub, subCls, bars:[{v, base, cls, tip}]}
-   A bar with a base sits that far off the floor, which is all a waterfall is.
-   Bars inside one column share the width evenly unless one asks to be wide. */
+   Give a bar a base and it floats that far off the floor, which is the whole
+   trick behind a waterfall. Bars in one column split the width evenly.
+
+   Bar width comes from the column count. Fix the inset and a three column
+   chart draws slabs on a monitor while an eight column one draws threads.
+
+   spec.connect adds the line a waterfall needs. Without it you see six
+   floating rectangles. With it you see one balance getting cut down. The line
+   sits at the top of each bar and runs back into the gutter so it lands where
+   the bar before it finished. */
 function chartCols(spec){
   var cols=spec.cols||[]; if(!cols.length) return chEmpty(spec.empty||'Nothing to draw yet.');
   var max=spec.max||0, h=spec.h||150, k=0;
+  var n0=cols.length;
+  var pad=n0<=2?26:n0<=3?20:n0<=4?15:n0<=6?9:n0<=9?5:3;
   var body=cols.map(function(c,ci){
     var bars=c.bars||[], n=bars.length;
+    var gutter=n>1?2:0;
     var inner=bars.map(function(b,bi){
-      var w=100/n, l=w*bi+(n>1?2:8), r=100-(w*(bi+1))+(n>1?2:8);
+      var w=(100-pad*2)/n;
+      var l=pad+w*bi+(bi?gutter:0), r=100-(pad+w*(bi+1))+(bi<n-1?gutter:0);
       var hp=chPct(Math.abs(b.v),max), bp=chPct(b.base||0,max);
       k++;
       return '<i class="cb '+(b.cls||'ct1')+'" style="--l:'+chNum(l)+'%;--r:'+chNum(r)+'%;'+
         '--h:'+chNum(Math.max(hp,hp>0?0.8:0))+'%;--b:'+chNum(bp)+'%;--d:'+(k*0.045).toFixed(3)+'s"'+
         (b.tip?' title="'+E(b.tip)+'"':'')+'></i>';
     }).join('');
+    /* The connector belongs to the column it leads into, so the first one has
+       nothing to join and is skipped. */
+    var conn='';
+    if(spec.connect&&ci>0&&bars.length){
+      var top=chPct(Math.abs(bars[0].v)+(bars[0].base||0),max);
+      conn='<u class="cconn" style="--y:'+chNum(top)+'%;--r:'+chNum(100-pad)+'%;--d:'+
+        (ci*0.045+0.1).toFixed(3)+'s"></u>';
+    }
     return '<div class="ccol">'+
-      '<div class="cstack" style="--ch:'+h+'px">'+inner+'</div>'+
+      '<div class="cstack" style="--ch:'+h+'px">'+conn+inner+'</div>'+
       '<div class="clab">'+E(c.label)+'</div>'+
       (c.sub?'<div class="csub '+(c.subCls||'')+'">'+E(c.sub)+'</div>':'')+
       '</div>';
   }).join('');
-  return '<div class="cchart">'+body+'</div>';
+  return '<div class="cchart'+(spec.connect?' wf':'')+'">'+body+'</div>';
 }
 
 /* ---------------- donut ----------------
-   Each slice is one circle with a dash the length of its share and an offset
-   equal to everything before it. pathLength="100" turns the circumference into
-   percent so none of that needs the radius. */
+   One circle per slice. The dash is as long as that slice's share and the
+   offset is everything ahead of it. pathLength="100" turns the circumference
+   into percent, so the radius never enters the maths. */
 function chartDonut(slices,top,bottom){
   var live=(slices||[]).filter(function(s){return s.v>0;});
   var tot=live.reduce(function(a,s){return a+s.v;},0);
@@ -74,8 +92,8 @@ function chartDonut(slices,top,bottom){
 }
 
 /* ---------------- projection line ----------------
-   pts are plain numbers. A zero line is drawn whenever the series crosses it,
-   because the whole point of the chart is where that crossing happens. */
+   pts are plain numbers. If the series crosses zero it gets a zero line, since
+   where it crosses is the thing you actually want to see. */
 function chartLine(pts,opts){
   opts=opts||{};
   var v=(pts||[]).map(function(x){return Number(x)||0;});
@@ -106,8 +124,8 @@ function chartLine(pts,opts){
 }
 
 /* ---------------- legend rows ----------------
-   The legend is where the toggles live on the money pages, so it takes raw
-   markup for the control rather than owning one. */
+   On the money pages the switches live in the legend, so a row takes raw
+   markup for its control instead of building one itself. */
 function chartLegend(items){
   return '<div class="cleg">'+(items||[]).map(function(it){
     return '<div class="clrow'+(it.off?' off':'')+'">'+
@@ -119,9 +137,9 @@ function chartLegend(items){
 }
 
 /* ---------------- count up ----------------
-   Big money numbers roll from zero on the way in. The element already holds
-   its final text, so the animation only ever borrows it and hands it back;
-   if motion is off, or a frame is dropped, what is on screen is the truth. */
+   Big money figures roll up from zero when a page draws. The element is
+   already holding its final text, so this borrows it and hands it back. Drop a
+   frame, or turn motion off, and what is on screen is still the real number. */
 function chReduced(){
   try{return !!(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches);}
   catch(e){return false;}

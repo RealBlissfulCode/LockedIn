@@ -12,3 +12,9 @@ __pycache__/
 # git deploy would fight the live data.
 api/data/
 handbook-data/
+
+# The database password and the Google client id live here. Copy
+# api/config.sample.php to api/config.php on the server and fill it in.
+api/config.php
+api/.migrate-key
+lockedin-cache/

@@ -41,16 +41,24 @@ function errPanel(where,e){
    '<div class="row" style="margin-top:12px"><button class="b o" data-nav="meals">Go to Meals</button>'+
    '<button class="b o" id="settings">Open settings</button></div></div></div>';
 }
-/* A redraw asked for by a switch is not a navigation. It keeps the scroll
-   position and skips the page's slide-in, so the only thing that moves is the
-   part that changed: the numbers roll and the bars regrow. */
-var _quiet=false;
-function reroute(){_quiet=true;route();}
+/* route() does two jobs: it takes you somewhere, and it redraws where you
+   already are. Nearly every edit in the app finishes with a route() call, so
+   treating both the same is why flipping a switch, picking an estimate column
+   or saving a modal threw you back to the top of a long page.
+
+   The hash sorts them out. Same hash as the last draw is a redraw, so hold the
+   scroll and skip the page slide. The only things that move are the numbers
+   rolling and the bars regrowing. A different hash is real navigation and
+   still lands at the top. */
+var _lastHash=null;
+function reroute(){route();}
 function route(){
   var h=(location.hash||'#/meals').slice(2).split('/'), v=h[0]||'meals', sub=h[1]||'';
   var m=$('#view'); if(!m) return;
-  var quiet=_quiet, keepY=quiet?(window.pageYOffset||0):0;
-  _quiet=false;
+  var hash=location.hash||'#/meals';
+  var redraw=(hash===_lastHash);
+  var keepY=redraw?(window.pageYOffset||0):0;
+  _lastHash=hash;
   var html;
   try{
     html = v==='r'?vRecipe(sub) : v==='training'?vTraining(sub) : v==='shopping'?vShopping(sub)
@@ -60,8 +68,8 @@ function route(){
   }catch(e){ html=errPanel(v.charAt(0).toUpperCase()+v.slice(1),e);
     if(window.console&&console.error)console.error(e); }
   m.innerHTML=html;
-  if(quiet){var _pg=m.querySelector('.page'); if(_pg)_pg.classList.add('noanim');}
-  try{window.scrollTo(0,quiet?keepY:0);}catch(e){}
+  if(redraw){var _pg=m.querySelector('.page'); if(_pg)_pg.classList.add('noanim');}
+  try{window.scrollTo(0,redraw?keepY:0);}catch(e){}
   try{
     $$('.tab,.btmnav button').forEach(function(b){
       b.classList.toggle('on', b.dataset.v===(v==='r'?'meals':v));});
@@ -281,11 +289,11 @@ function bindFin(sub){
   countUp($('#view'));
 }
 /* ---------------- switching lines in and out ----------------
-   One writer for every switch on the page. It never deletes and never edits a
-   figure: it sets `off` and redraws. Because `off` is part of the snapshot a
-   scenario stores, flipping one marks the open scenario dirty exactly like
-   changing a number does, which is the behaviour you want — the switches are
-   part of the plan, not a view setting. */
+   One writer behind every switch on the page. It never deletes anything and
+   never touches a figure. It sets `off` and redraws. Since `off` is part of
+   what a scenario snapshots, flipping one marks the open scenario dirty the
+   same way editing a number does. That is right: the switches are part of the
+   plan, not a setting on the view. */
 function finToggle(kind,pred,to){
   var arr=kind==='jobs'?S.fin.jobs:S.fin.costs, n=0;
   arr.forEach(function(x){
@@ -592,7 +600,7 @@ function mealPicker(ds){
 }
 function tmplEditor(colId,dayIdx){
   var c=tmplCol(colId); if(!c) return;
-  var m=modal('Every '+DOW[dayIdx]+' — '+c.name,
+  var m=modal('Every '+DOW[dayIdx]+', '+c.name,
     form([{id:'tw',l:'Who',t:'select',o:whoOpts(),v:ME()},
       {id:'tx',l:'What',v:'',ph:'Church, work, class, gym'},
       {id:'tl',l:'Where',v:'',ph:'The shop, CSU, home'},

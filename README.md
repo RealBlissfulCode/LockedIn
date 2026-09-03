@@ -21,10 +21,10 @@ file, no framework, no backend, no database, no accounts.
 The app is behind a four digit code. It is **2121**, set in `PASSCODE` at the top
 of `src/build.py`. Change it there and rebuild and it changes everywhere.
 
-**Be clear about what this protects.** Everything personal — what we earn, what we
-owe, where we might live, the strategy lists, the plans, and the application code
-itself, which carries our names and the placeholder text in every editor — is
-encrypted into the page at build time. Until the right code is entered, View
+**Be clear about what this protects.** Everything personal is encrypted into the
+page at build time. What we earn, what we owe, where we might live, the strategy
+lists, the plans, and the application code itself, which carries our names and the
+placeholder text in every editor. Until the right code is entered, View
 Source shows a lock screen, the recipe database and a block of base64. There is
 no readable copy of any of it anywhere in the file.
 
@@ -166,37 +166,37 @@ inside the app is easier and updates every recipe that uses it.
 ## Switching a money line off
 
 Every income line and every cost line carries an `off` flag, and the Financial
-page puts a switch on each one. Off is not deleted. The row stays where it is,
-keeps all four of its estimates, and stops counting — towards the totals, the
-charts, the section splits and the twelve month projection alike. Switch it back
-and every number returns to exactly what it was.
+page puts a switch on each one. Off does not mean deleted. The row stays where it
+is, keeps all four of its estimates, and stops counting anywhere: the totals, the
+charts, the section splits and the twelve month projection. Switch it back and
+every number goes back to exactly what it was.
 
 The switches come in three sizes. One per line in the two tables at the bottom
 of the page. One per cost section and one per earner in the legends beside the
 donuts, which move a whole group at once. And All on / All off above each table.
 
-Because `off` lives on the line, it is part of what a scenario snapshots. Saving
+Since `off` lives on the line, it is part of what a scenario snapshots. Saving
 "Renting, both grinding" stores which lines were counted at the time, opening it
 brings them back, and flipping a switch while a scenario is open marks it unsaved
-in exactly the way editing a figure does. The scenario table's **Off** column
-counts what each snapshot has parked.
+the same way editing a figure does. The scenario table's **Off** column counts
+what each snapshot has parked.
 
-A line saved before any of this existed has no flag at all, which reads as on, so
+A line saved before any of this existed carries no flag, which counts as on, so
 every scenario made earlier still totals to what it always did.
 
 ## The charts
 
-`src/app_charts.py` holds the lot, and it is about a hundred and fifty lines with
-no dependency behind it. Columns, stacks and the waterfall are plain HTML — a div
-with a percentage height is already a bar, it inherits the theme variables and its
-labels are real text at a real size. Only the donut and the projection line are
-SVG, because HTML cannot draw an arc, and neither of them carries text.
+`src/app_charts.py` holds the lot, about a hundred and fifty lines with nothing
+behind it. Columns, stacks and the waterfall are plain HTML. A div with a
+percentage height is already a bar, it picks up the theme variables for free, and
+its labels are real text at a real size. Only the donut and the projection line
+are SVG, because HTML cannot draw an arc, and neither of those carries text.
 
-Motion is entirely in CSS, so the one `prefers-reduced-motion` rule at the bottom
-of the stylesheet switches all of it off at once. Every chart's static state is
-already its finished state; the keyframes only animate towards it. The one piece
-of JavaScript motion, the money figures counting up from zero, checks the same
-media query itself and leaves the final text alone when it is set.
+All the motion is in CSS, so the `prefers-reduced-motion` rule at the bottom of
+the stylesheet kills the lot in one place. Every chart already sits at its
+finished state and the keyframes only animate towards it. The one bit of motion
+in JavaScript is the money figures counting up from zero, and that checks the
+same media query itself and leaves the final text alone when it is set.
 
 ## The seeded lists are not templates
 
@@ -208,6 +208,87 @@ overwrite an edit. Two flags in `app_core.py`, `seeded` and `seeded6`, are the
 whole mechanism.
 
 If you want a clean re-seed, Settings has **Erase all data**.
+
+## Accounts, households and the API
+
+The old model was one household with a shared passcode and one JSON file on the
+server. That is being replaced by real accounts. `api/` is the whole of it and
+it needs PHP 8 and MySQL, both of which Hostinger has.
+
+| File | What it does |
+| --- | --- |
+| `api/schema.sql` | Six tables. Run it with `php api/migrate.php`. |
+| `api/config.sample.php` | Copy to `config.php` and fill in. Never committed. |
+| `api/lib/google.php` | Checks the signature on a Google ID token. No library. |
+| `api/lib/auth.php` | Sessions. The cookie holds the token, the table holds its hash. |
+| `api/lib/store.php` | Households, seats, invite codes, the state documents. |
+| `api/auth.php` | Sign in, sign out, who am I. |
+| `api/household.php` | Members, invites, joining, leaving, handing over. |
+| `api/doc.php` | Read and write documents, with versions. |
+
+### Why there is no client secret anywhere
+
+The browser asks Google for an ID token and posts it here. The server checks the
+signature against Google's published keys and reads the claims off it. That is
+the whole handshake. Nothing in this app has a secret that could leak, and the
+client id in `config.php` is meant to be public.
+
+`api/lib/google.php` does the checking by hand: pull the key id off the token
+header, find the matching key in Google's JWKS, turn that key into a PEM, and
+hand it to openssl. Then check the issuer, the audience, the expiry and that
+Google says the email address is verified. Any one of those failing is a flat
+refusal with no explanation, because the only person who wants to know which
+check failed is someone probing it.
+
+### Documents
+
+`shared` is the household's copy and everybody in it reads and writes it.
+`private:<accountId>` belongs to one person and the server will not hand it to
+anyone else. That second one is what makes hiding a surprise on the schedule
+actually hidden, rather than just not drawn.
+
+Writes carry the version you last read. If the row moved on in the meantime the
+write is refused with a 409 and the current copy comes back, so two phones
+editing at once merge instead of one silently winning.
+
+### Seats
+
+Seats come from the plan: two on free, six on paid. A seat can sit there with
+nobody in it, which is how you put someone on the meal plan and the schedule
+before they have ever signed in. When they join with an invite code they claim
+that waiting seat rather than getting a new one, so everything already written
+against their name carries over.
+
+Leaving is a real cleanup. The seat goes, that person's private documents go
+with it, and the shared document stays because it belonged to the household.
+An owner cannot walk out on other people, so they hand it over first or take
+the household down with them.
+
+### Setting it up
+
+1. Hostinger, Databases, MySQL Databases. Make a database and a user, tick all
+   privileges. Note the four values.
+2. Copy `api/config.sample.php` to `api/config.php` and fill them in, plus the
+   Google client id.
+3. `php api/migrate.php` over SSH. No SSH: put a random string in
+   `api/.migrate-key`, hit `/api/migrate.php?key=thatstring`, delete the file.
+4. Check `/api/config.php` returns 403 or 404 in a browser. `api/.htaccess`
+   should see to it, but check.
+
+### Running the tests
+
+Nothing here talks to Google. `tools/fakegoogle.php` makes its own keypair,
+drops the public half where the app caches Google's signing keys, and signs
+tokens with it, so the real signature checking runs against them.
+
+    php api/migrate.php
+    php -S 127.0.0.1:8080 -t .
+    tools/apitest.sh
+
+Forty six checks covering token verification, tampered and expired and wrongly
+addressed tokens, the CSRF header, document versions and conflicts, one
+person's private scope against another's, seat limits, invites, joining and
+leaving.
 
 ## Deploying to a subdomain with Hostinger
 
@@ -242,7 +323,7 @@ src/                     the Python that regenerates index.html, never served
 
 `.htaccess` blocks `.py`, `.json` and `.md`, and `src/.htaccess` denies that
 directory outright, so the Python is in the repo but not reachable from the web.
-Both are hidden files that git tracks normally — confirm they made it with
+Both are hidden files that git tracks normally, so confirm they made it with
 `git ls-files` before deploying, because without the top one you lose gzip, the
 https redirect and the noindex header.
 

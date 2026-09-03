@@ -1,0 +1,13 @@
+# config.php has the database password in it and lib/ is not meant to be called
+# directly. Neither should ever come back over http.
+<FilesMatch "^(config\.php|\.migrate-key)$">
+  Require all denied
+</FilesMatch>
+<IfModule !mod_authz_core.c>
+  <FilesMatch "^(config\.php|\.migrate-key)$">
+    Order allow,deny
+    Deny from all
+  </FilesMatch>
+</IfModule>
+RedirectMatch 404 ^/api/lib/
+RedirectMatch 404 ^/api/schema\.sql$

@@ -524,7 +524,7 @@ transition:.18s var(--ez)}
 /* ------------------------------------------------------------ misc polish */
 :focus-visible{outline:2px solid var(--brass);outline-offset:2px;border-radius:3px}
 .tw table{min-width:560px}
-/* The money tables carry a switch column on top of eight of their own. */
+/* The money tables carry a switch column on top of their own eight. */
 .tw.wide table{min-width:700px}
 .chip{overflow-wrap:break-word}
 
@@ -658,10 +658,10 @@ background:linear-gradient(to right,transparent,var(--panel))}
 }
 
 /* ---------------- switches ----------------
-   Income and cost lines can be switched out of the totals without being
-   deleted, so the row has to read as "still here, not counted" rather than as
-   an empty slot. The switch is a real button: keyboard reachable, and it says
-   what it does to a screen reader through aria-pressed. */
+   A line can drop out of the totals without being deleted, so its row has to
+   read as "still here, not counted" instead of as an empty slot. The switch is
+   a real button so it is keyboard reachable, and aria-pressed says what state
+   it is in. */
 .sw{position:relative;flex:none;width:36px;height:20px;padding:0;border:1px solid var(--line-2);
 background:var(--panel-2);border-radius:999px;cursor:pointer;transition:.24s var(--ez)}
 .sw i{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;
@@ -673,8 +673,8 @@ background:var(--ink-4);transition:.24s var(--ez)}
 .sw.xs{width:30px;height:17px}
 .sw.xs i{width:11px;height:11px}
 .sw.xs.on i{transform:translateX(13px)}
-/* A switched-off row keeps its numbers legible. Fading it to nothing would
-   hide the figure you are deciding about. */
+/* A switched off row keeps its numbers readable. Fade it to nothing and you
+   have hidden the figure you were trying to decide about. */
 tr.offrow{transition:opacity .24s var(--ez)}
 tr.offrow>td{opacity:.44}
 tr.offrow>td:first-child{opacity:1}
@@ -691,6 +691,14 @@ color:var(--ink-4);margin-left:7px;vertical-align:1px}
 border-radius:4px 4px 0 0;transform-origin:bottom;
 animation:cgrow .58s var(--ez) both;animation-delay:var(--d,0s)}
 @keyframes cgrow{from{transform:scaleY(0);opacity:.3}to{transform:scaleY(1);opacity:1}}
+/* The waterfall connector. It reaches back past the column's own edge into
+   the grid gap so the run from one bar top to the next is unbroken. It is
+   written before the bars, so a bar always covers the stretch of line that
+   would otherwise show underneath it. */
+.cconn{position:absolute;left:-13px;right:var(--r,8%);bottom:var(--y,0);height:0;
+border-top:1px dashed var(--line-2);
+animation:cfade .45s var(--ez) both;animation-delay:var(--d,0s)}
+.cchart.wf .cstack{overflow:visible}
 .clab{margin-top:9px;font:600 10.5px/1.3 var(--f-body);color:var(--ink-3);
 overflow-wrap:break-word;hyphens:auto}
 .csub{margin-top:4px;font:700 12px/1 var(--f-mono);color:var(--ink)}
@@ -746,8 +754,8 @@ font-size:13px;transition:opacity .24s var(--ez)}
 font:600 11px/1 var(--f-body);color:var(--ink-3)}
 .ckey span{display:inline-flex;align-items:center;gap:6px}
 .ckey i{width:9px;height:9px;border-radius:2.5px;display:block}
-/* A view redrawn because a switch was flipped should not slide in again; the
-   charts still replay, which is the part that carries the change. */
+/* Redrawing because a switch moved should not slide the page in again. The
+   charts still replay, and that is the part carrying the change. */
 .page.noanim{animation:none}
 @media (max-width:560px){
 .cchart{gap:5px}
