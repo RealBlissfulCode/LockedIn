@@ -8,6 +8,8 @@ file, no framework, no backend, no database, no accounts.
 - 211 exercises, 32 sessions, and a session suggested from what has not been trained lately
 - Financial planning with scenario snapshots, real earnings tracking, strategy
   lists and big-purchase comparisons
+- Every income and cost line has a switch, so a plan can be re-cut without
+  deleting anything, and charts that redraw as you flip them
 - Planning: collections, subsections and checklists for anything that is not money or food
 - Schedule templates: as many as you like, each repeating weekly, every other
   week or once a month, either left running or applied over a stretch of dates
@@ -149,6 +151,7 @@ if a recipe fails validation. Worth running before a deploy.
 | `src/app_sync.py` | Pull, push, and the per-branch merge. |
 | `src/sync_php.py` | The server endpoint, written out to `api/sync.php`. |
 | `src/app_core.py` | State, storage, scenarios, the one-time seed. |
+| `src/app_charts.py` | The chart kit: columns, waterfall, donut, line, count-up. |
 | `src/app_views1.py` | Meals, recipe detail, shopping, ingredients. |
 | `src/app_views2.py` | Training, financial, strategies, purchases, planning, schedule, templates. |
 | `src/app_wire.py` | Router, event wiring, every editor modal. |
@@ -159,6 +162,41 @@ if a recipe fails validation. Worth running before a deploy.
 
 Prices are in `src/prices.py` as dollars per 100 g, two columns. Editing a price
 inside the app is easier and updates every recipe that uses it.
+
+## Switching a money line off
+
+Every income line and every cost line carries an `off` flag, and the Financial
+page puts a switch on each one. Off is not deleted. The row stays where it is,
+keeps all four of its estimates, and stops counting — towards the totals, the
+charts, the section splits and the twelve month projection alike. Switch it back
+and every number returns to exactly what it was.
+
+The switches come in three sizes. One per line in the two tables at the bottom
+of the page. One per cost section and one per earner in the legends beside the
+donuts, which move a whole group at once. And All on / All off above each table.
+
+Because `off` lives on the line, it is part of what a scenario snapshots. Saving
+"Renting, both grinding" stores which lines were counted at the time, opening it
+brings them back, and flipping a switch while a scenario is open marks it unsaved
+in exactly the way editing a figure does. The scenario table's **Off** column
+counts what each snapshot has parked.
+
+A line saved before any of this existed has no flag at all, which reads as on, so
+every scenario made earlier still totals to what it always did.
+
+## The charts
+
+`src/app_charts.py` holds the lot, and it is about a hundred and fifty lines with
+no dependency behind it. Columns, stacks and the waterfall are plain HTML — a div
+with a percentage height is already a bar, it inherits the theme variables and its
+labels are real text at a real size. Only the donut and the projection line are
+SVG, because HTML cannot draw an arc, and neither of them carries text.
+
+Motion is entirely in CSS, so the one `prefers-reduced-motion` rule at the bottom
+of the stylesheet switches all of it off at once. Every chart's static state is
+already its finished state; the keyframes only animate towards it. The one piece
+of JavaScript motion, the money figures counting up from zero, checks the same
+media query itself and leaves the final text alone when it is set.
 
 ## The seeded lists are not templates
 
