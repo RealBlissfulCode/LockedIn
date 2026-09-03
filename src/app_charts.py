@@ -1,44 +1,41 @@
 # -*- coding: utf-8 -*-
 APP_CHARTS = r"""
 /* ============================================================
-   CHARTS  -  hand rolled, no library, no canvas.
+   CHARTS. Hand rolled. No library, no canvas.
 
-   Two techniques, picked per chart rather than uniformly:
+   Most of them are plain HTML. A div with a percentage height is already a
+   bar, it picks up the theme variables for free, and its labels are real text
+   at a real size instead of glyphs that grow with the viewBox. Only the donut
+   and the projection line are SVG, because HTML cannot draw an arc or a
+   polyline. Neither of those two carries any text.
 
-   * Columns, stacks and waterfalls are plain HTML. A div with a percentage
-     height is already a bar; it inherits the theme variables, rounds its
-     corners properly, and its labels are real text at a real font size
-     instead of glyphs that grow with the viewBox.
-   * The donut and the projection line are SVG, because HTML cannot draw an
-     arc or a polyline. Neither carries text, so nothing scales badly.
-
-   Every function is pure: numbers in, markup out, so a view can call one in
-   the middle of a template string. Motion is entirely in CSS, which means the
-   one prefers-reduced-motion rule at the bottom of the stylesheet switches all
-   of it off, and the static state of every chart is already its final state.
+   Every function takes numbers and returns markup, so a view can call one in
+   the middle of a template string. All the motion is in CSS. That way the
+   prefers-reduced-motion rule at the bottom of the stylesheet kills the lot in
+   one place, and every chart already sits at its finished state before the
+   keyframes touch it.
    ============================================================ */
 
 function chNum(n){n=Number(n);return isFinite(n)?Math.round(n*100)/100:0;}
 function chPct(v,max){return max>0?Math.max(0,Math.min(100,v/max*100)):0;}
 function chEmpty(msg){return '<div class="cempty">'+E(msg)+'</div>';}
-/* Six accent classes, cycled. Sections outnumber them eventually and that is
-   fine: adjacent slices are what have to differ, not distant ones. */
+/* Six accent classes on a loop. Sections will outrun them eventually and that
+   is fine. What matters is that touching slices differ, not distant ones. */
 function chTone(i){return 'ct'+(i%6+1);}
 
 /* ---------------- columns ----------------
-   spec.max     the value one full-height bar represents
+   spec.max     what one full height bar is worth
    spec.cols[]  {label, sub, subCls, bars:[{v, base, cls, tip}]}
-   A bar with a base sits that far off the floor, which is all a waterfall is.
-   Bars inside one column share the width evenly.
+   Give a bar a base and it floats that far off the floor, which is the whole
+   trick behind a waterfall. Bars in one column split the width evenly.
 
-   Two columns of bars are wide and four are narrow, otherwise a three column
-   chart on a desk monitor draws slabs and an eight column one draws threads.
-   The inset is worked out from the count rather than fixed.
+   Bar width comes from the column count. Fix the inset and a three column
+   chart draws slabs on a monitor while an eight column one draws threads.
 
-   spec.connect draws the line a waterfall needs. Without it the eye reads six
-   floating rectangles; with it, it reads one balance being cut down. The line
-   sits at the top of each bar and runs back into the gutter, so it meets the
-   bar before it exactly where that one ended. */
+   spec.connect adds the line a waterfall needs. Without it you see six
+   floating rectangles. With it you see one balance getting cut down. The line
+   sits at the top of each bar and runs back into the gutter so it lands where
+   the bar before it finished. */
 function chartCols(spec){
   var cols=spec.cols||[]; if(!cols.length) return chEmpty(spec.empty||'Nothing to draw yet.');
   var max=spec.max||0, h=spec.h||150, k=0;
@@ -74,9 +71,9 @@ function chartCols(spec){
 }
 
 /* ---------------- donut ----------------
-   Each slice is one circle with a dash the length of its share and an offset
-   equal to everything before it. pathLength="100" turns the circumference into
-   percent so none of that needs the radius. */
+   One circle per slice. The dash is as long as that slice's share and the
+   offset is everything ahead of it. pathLength="100" turns the circumference
+   into percent, so the radius never enters the maths. */
 function chartDonut(slices,top,bottom){
   var live=(slices||[]).filter(function(s){return s.v>0;});
   var tot=live.reduce(function(a,s){return a+s.v;},0);
@@ -95,8 +92,8 @@ function chartDonut(slices,top,bottom){
 }
 
 /* ---------------- projection line ----------------
-   pts are plain numbers. A zero line is drawn whenever the series crosses it,
-   because the whole point of the chart is where that crossing happens. */
+   pts are plain numbers. If the series crosses zero it gets a zero line, since
+   where it crosses is the thing you actually want to see. */
 function chartLine(pts,opts){
   opts=opts||{};
   var v=(pts||[]).map(function(x){return Number(x)||0;});
@@ -127,8 +124,8 @@ function chartLine(pts,opts){
 }
 
 /* ---------------- legend rows ----------------
-   The legend is where the toggles live on the money pages, so it takes raw
-   markup for the control rather than owning one. */
+   On the money pages the switches live in the legend, so a row takes raw
+   markup for its control instead of building one itself. */
 function chartLegend(items){
   return '<div class="cleg">'+(items||[]).map(function(it){
     return '<div class="clrow'+(it.off?' off':'')+'">'+
@@ -140,9 +137,9 @@ function chartLegend(items){
 }
 
 /* ---------------- count up ----------------
-   Big money numbers roll from zero on the way in. The element already holds
-   its final text, so the animation only ever borrows it and hands it back;
-   if motion is off, or a frame is dropped, what is on screen is the truth. */
+   Big money figures roll up from zero when a page draws. The element is
+   already holding its final text, so this borrows it and hands it back. Drop a
+   frame, or turn motion off, and what is on screen is still the real number. */
 function chReduced(){
   try{return !!(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches);}
   catch(e){return false;}

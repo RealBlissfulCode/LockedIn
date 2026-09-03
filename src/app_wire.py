@@ -41,15 +41,15 @@ function errPanel(where,e){
    '<div class="row" style="margin-top:12px"><button class="b o" data-nav="meals">Go to Meals</button>'+
    '<button class="b o" id="settings">Open settings</button></div></div></div>';
 }
-/* route() is called for two different things: going somewhere, and redrawing
-   where you already are. Almost every edit in the app ends in route(), so
+/* route() does two jobs: it takes you somewhere, and it redraws where you
+   already are. Nearly every edit in the app finishes with a route() call, so
    treating both the same is why flipping a switch, picking an estimate column
    or saving a modal threw you back to the top of a long page.
 
-   The hash tells them apart. Same hash as the last draw means a redraw: hold
-   the scroll position and skip the page's slide-in, so the only things that
-   move are the numbers rolling and the bars regrowing. A different hash is a
-   real navigation and still lands at the top. */
+   The hash sorts them out. Same hash as the last draw is a redraw, so hold the
+   scroll and skip the page slide. The only things that move are the numbers
+   rolling and the bars regrowing. A different hash is real navigation and
+   still lands at the top. */
 var _lastHash=null;
 function reroute(){route();}
 function route(){
@@ -289,11 +289,11 @@ function bindFin(sub){
   countUp($('#view'));
 }
 /* ---------------- switching lines in and out ----------------
-   One writer for every switch on the page. It never deletes and never edits a
-   figure: it sets `off` and redraws. Because `off` is part of the snapshot a
-   scenario stores, flipping one marks the open scenario dirty exactly like
-   changing a number does, which is the behaviour you want — the switches are
-   part of the plan, not a view setting. */
+   One writer behind every switch on the page. It never deletes anything and
+   never touches a figure. It sets `off` and redraws. Since `off` is part of
+   what a scenario snapshots, flipping one marks the open scenario dirty the
+   same way editing a number does. That is right: the switches are part of the
+   plan, not a setting on the view. */
 function finToggle(kind,pred,to){
   var arr=kind==='jobs'?S.fin.jobs:S.fin.costs, n=0;
   arr.forEach(function(x){
@@ -600,7 +600,7 @@ function mealPicker(ds){
 }
 function tmplEditor(colId,dayIdx){
   var c=tmplCol(colId); if(!c) return;
-  var m=modal('Every '+DOW[dayIdx]+' — '+c.name,
+  var m=modal('Every '+DOW[dayIdx]+', '+c.name,
     form([{id:'tw',l:'Who',t:'select',o:whoOpts(),v:ME()},
       {id:'tx',l:'What',v:'',ph:'Church, work, class, gym'},
       {id:'tl',l:'Where',v:'',ph:'The shop, CSU, home'},

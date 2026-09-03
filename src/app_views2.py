@@ -115,24 +115,22 @@ function sessModal(i){
 }
 
 /* ============================ FINANCIAL ============================
-   Every income line and every cost line carries an `off` flag. Off is not
-   deleted: the row stays, keeps its numbers, and stops counting. That is the
-   whole point — the question "what if we dropped the gym and Aaliyah's tuition
-   came out" is answered by two switches and a redraw, and switching them back
-   costs nothing. A line with no flag at all is on, so every scenario saved
-   before this existed still reads correctly.
+   Every income line and every cost line carries an `off` flag. Off does not
+   mean deleted. The row stays put, keeps its numbers, and stops counting. So
+   "what if we dropped the gym and her tuition came out" is two switches and a
+   redraw, and putting it back costs nothing. A line with no flag on it counts
+   as on, which is what keeps older scenarios reading the way they always did.
 
-   Anything that totals money goes through finIncome/finCost so there is one
-   place where off is honoured and the charts can never disagree with the
-   tables. */
+   Everything that totals money goes through finIncome and finCost. One place
+   honours the flag, so the charts cannot drift away from the tables. */
 function finLive(x){return !x.off;}
 function costInPath(c,path){
   if(c.section==='Housing (rent)') return path!=='buy';
   if(c.section==='Housing (buy)') return path==='buy';
   return true;
 }
-/* all=true counts the switched-off lines too, which is how the page can say
-   what you have parked without un-parking it. */
+/* Pass all=true and the switched off lines count as well. That is how the
+   page tells you what you have parked without putting it back. */
 function finIncome(who,mode,all){
   return S.fin.jobs.filter(function(j){
     if(!all&&!finLive(j)) return false;
@@ -157,8 +155,8 @@ function shiftsFor(who,from){
     if(who&&j&&j.who!==who&&j.who!=='Both')return false;
     if(from&&s.date<from)return false; return true;});
 }
-/* What actually lands per dollar earned, measured rather than assumed. Falls
-   back to 80% only when there is nothing logged to measure. */
+/* What actually lands per dollar earned, measured off real shifts instead of
+   guessed at. Only falls back to 80% when there is nothing logged yet. */
 function takeHomeRate(){
   var g=0,n=0;
   S.fin.shifts.forEach(function(s){g+=(s.gross||0);n+=(s.net||0);});
@@ -174,12 +172,12 @@ function modeLabel(m){
   for(var i=0;i<FINMODES.length;i++) if(FINMODES[i][0]===m) return FINMODES[i][1];
   return m;
 }
-/* The switch itself. One markup shape for line rows, section rows and person
-   rows, so all three behave the same and there is one CSS rule for it. */
+/* The switch. Same markup for a line, a section and a person, so all three
+   behave alike and one CSS rule covers them. */
 function finSw(attr,val,on,label,small){
   return '<button type="button" class="sw'+(small?' xs':'')+(on?' on':'')+'" '+
     'data-'+attr+'="'+E(val)+'" aria-pressed="'+(on?'true':'false')+'" '+
-    'title="'+E((on?'Counted — click to switch off: ':'Switched off — click to count: ')+label)+'">'+
+    'title="'+E((on?'Counted. Click to switch off: ':'Switched off. Click to count: ')+label)+'">'+
     '<i></i></button>';
 }
 function vFinancial(sub){
@@ -250,10 +248,10 @@ function vFinancial(sub){
   }
 
   /* ---- waterfall: income, then each section, then what is left ---- */
-  /* Three colours, three meanings: what arrives, what is taken off, what
-     survives. Giving each section its own colour here made six deductions look
-     like six unrelated things instead of one balance being cut down; the donut
-     below is where the sections get their identity. */
+  /* Three colours doing three jobs: what arrives, what comes off, what
+     survives. Giving every section its own colour made six deductions look
+     like six unrelated things rather than one balance getting cut down. The
+     donut underneath is where sections get their own identity. */
   var wfMax=Math.max(inc,cost,1), run=inc;
   var wfCols=[{label:'Income',sub:M(inc),subCls:'good',
     bars:[{v:inc,base:0,cls:'ctg',tip:'Everything coming in: '+M(inc)}]}];
@@ -284,7 +282,7 @@ function vFinancial(sub){
     var anyOn=S.fin.costs.some(function(c){return costInPath(c,path)&&c.section===k&&finLive(c);});
     return {label:k,cls:chTone(i),off:!anyOn,
       value:M(anyOn?byS[k]:bySAll[k]),
-      pct:(cost&&anyOn)?Math.round(byS[k]/cost*100)+'%':'—',
+      pct:(cost&&anyOn)?Math.round(byS[k]/cost*100)+'%':'-',
       ctrl:finSw('secttog',k,anyOn,k,true)};
   }));
   var incomePeople=['Jaron','Aaliyah','Both'].filter(function(w){
@@ -296,7 +294,7 @@ function vFinancial(sub){
       .reduce(function(a,j){return a+(j[mode]||0);},0);
     var anyOn=S.fin.jobs.some(function(j){return j.who===w&&finLive(j);});
     return {label:w==='Both'?'Shared / gig':WHO(w),cls:chTone(i+1),off:!anyOn,
-      value:M(anyOn?v:all),pct:(inc&&anyOn)?Math.round(v/inc*100)+'%':'—',
+      value:M(anyOn?v:all),pct:(inc&&anyOn)?Math.round(v/inc*100)+'%':'-',
       ctrl:finSw('whotog',w,anyOn,w==='Both'?'shared income':WHO(w),true)};
   }));
   var costPeople=['Jaron','Aaliyah','Both'].filter(function(w){
@@ -327,10 +325,9 @@ function vFinancial(sub){
    '</div></div>';
 
   /* ---- the same month read four ways ---- */
-  /* The actual column only earns a place when both sides of it are filled in.
-     Most cost lines carry a researched figure and almost no income line does,
-     so counting it early would draw a month with real rent and no wages and
-     call it a forecast. */
+  /* The actual column only earns a place once both sides of it are filled in.
+     Most cost lines carry a researched figure and hardly any income line does,
+     so letting it in early draws a month with real rent and no wages on it. */
   var actReady=finIncome('both','actual')>0&&finCost('actual',path)>0;
   var bandModes=FINMODES.filter(function(m){return m[0]!=='actual'||actReady;});
   var bandVals=bandModes.map(function(m){
@@ -341,7 +338,7 @@ function vFinancial(sub){
   var worst=bandVals.slice().sort(function(a,b){return a.gap-b.gap;})[0];
   var band='<div class="sec"><h2>The same month, read '+
    (['','one way','two ways','three ways','four ways'][bandVals.length]||'every way')+'</h2>'+
-   '<p class="sub">Identical lines, identical switches — only the estimate column changes. '+
+   '<p class="sub">Identical lines, identical switches. Only the estimate column changes. '+
    'The spread between the ends is what the plan actually rests on.</p>'+
    '<div class="card pad">'+
    chartCols({max:bandMax,h:160,cols:bandVals.map(function(b){
@@ -411,7 +408,7 @@ function vFinancial(sub){
         '<td class="num">'+M(r.t.inc)+'</td><td class="num">'+M(r.t.cost)+'</td>'+
         '<td class="num" style="color:'+(r.t.gap>=0?'var(--sage)':'var(--clay)')+'"><b>'+M(r.t.gap)+'</b></td>'+
         '<td class="num">'+M(r.t.gap*12)+'</td>'+
-        '<td class="num sm muted">'+(r.off||'—')+'</td>'+
+        '<td class="num sm muted">'+(r.off||'-')+'</td>'+
         '<td><button class="b o s" data-scload="'+E(r.n)+'">Open</button> '+
         '<button class="x" data-scdel="'+E(r.n)+'">&times;</button></td></tr>';}).join('')+
       '</tbody></table></div></div>';
@@ -514,17 +511,17 @@ function vFinancial(sub){
    '<button class="b o" id="scenSaveAs">Save as new</button>'+
    '</div>'+
    (dirty?'<div class="note warn" style="margin-bottom:0"><b>Not saved.</b> '+
-     'Changes to income or cost lines — switches included — are live on screen but "'+E(act)+
+     'Changes to income or cost lines, switches included, are live on screen but "'+E(act)+
      '" still holds the old figures. Save to keep them, or Revert to throw them away.</div>':'')+
    '</div>'+
 
    stats+verdict+parked+'</div>'+
    waterfall+split+band+projection+cmp+incTable+costTable+'</div>';
 }
-/* Six calendar months of logged shifts, oldest first, so the chart reads left
-   to right the way a year does. A month with nothing logged stays in the list
-   as a zero rather than being dropped, otherwise the gaps close up and a slow
-   month looks like it never happened. */
+/* Six calendar months of shifts, oldest first, so the chart runs left to right
+   the way a year does. A month with nothing in it stays as a zero instead of
+   getting dropped. Drop it and the gaps close up, and a slow month ends up
+   looking like it never happened. */
 function shiftMonths(n){
   var out=[],d=new Date(),i;
   d.setDate(1);
@@ -574,13 +571,13 @@ function vActual(){
      '<div class="stat"><b>'+$$$(eff(n,h))+'</b><span>Net / hr</span></div></div>'+
      '<p class="sm muted" style="margin-top:10px">'+(g>0?'Take-home is '+Math.round(n/g*100)+'% of gross.':'No shifts logged yet.')+'</p>'+
      '</div>';}).join('')+'</div>'+
-   /* With nothing logged there is no comparison to make, and drawing one
-      anyway would put a -100% against the plan on the strength of no data. */
+   /* Nothing logged means there is no comparison to make. Draw one anyway and
+      it puts a -100% against the plan on the strength of no data at all. */
    (logged.length
      ?'<div class="note'+(vsPlan<90?' warn':(vsPlan>=100?' good':''))+'" style="margin-top:14px">'+
       '<b>Real against plan.</b> '+
       'Combined that is <b>'+M(real)+'</b> net a month from logged shifts, against a plan of <b>'+
-      M(plan)+'</b>'+(plan?' — '+Math.round(vsPlan)+'% of it':'')+'. '+
+      M(plan)+'</b>'+(plan?', '+Math.round(vsPlan)+'% of it':'')+'. '+
       'Set against the '+M(costNow)+' of live costs, the months that actually happened leave <b>'+
       M(realGap)+'</b>. '+
       '<button class="b o s" id="scenFromActual" style="margin-left:8px">Save that as a scenario</button></div>'
@@ -594,7 +591,7 @@ function vActual(){
    '<div class="card pad">'+
    (logged.length
      ?chartCols({max:monMax,h:160,cols:mons.map(function(m){
-        return {label:m.label,sub:m.net?M(m.net):'—',
+        return {label:m.label,sub:m.net?M(m.net):'-',
           bars:[{v:m.net,cls:m.net>=plan?'ct2':'ct1',
             tip:m.label+': '+M(m.net)+' net over '+Math.round(m.hours)+' hours'},
            {v:plan,cls:'ctm',tip:'Plan '+M(plan)}]};})})+
