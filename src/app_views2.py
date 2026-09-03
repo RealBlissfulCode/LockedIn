@@ -114,16 +114,42 @@ function sessModal(i){
     .forEach(function(b){b.onclick=function(){b.closest('.mask').remove();};});
 }
 
-/* ============================ FINANCIAL ============================ */
-function finIncome(who,mode){
-  return S.fin.jobs.filter(function(j){return who==='both'||j.who===who||j.who==='Both';})
+/* ============================ FINANCIAL ============================
+   Every income line and every cost line carries an `off` flag. Off is not
+   deleted: the row stays, keeps its numbers, and stops counting. That is the
+   whole point — the question "what if we dropped the gym and Aaliyah's tuition
+   came out" is answered by two switches and a redraw, and switching them back
+   costs nothing. A line with no flag at all is on, so every scenario saved
+   before this existed still reads correctly.
+
+   Anything that totals money goes through finIncome/finCost so there is one
+   place where off is honoured and the charts can never disagree with the
+   tables. */
+function finLive(x){return !x.off;}
+function costInPath(c,path){
+  if(c.section==='Housing (rent)') return path!=='buy';
+  if(c.section==='Housing (buy)') return path==='buy';
+  return true;
+}
+/* all=true counts the switched-off lines too, which is how the page can say
+   what you have parked without un-parking it. */
+function finIncome(who,mode,all){
+  return S.fin.jobs.filter(function(j){
+    if(!all&&!finLive(j)) return false;
+    return who==='both'||j.who===who||j.who==='Both';})
     .reduce(function(a,j){return a+(j[mode]||0);},0);
 }
-function finCost(mode,path){
+function finCost(mode,path,all){
   return S.fin.costs.filter(function(c){
-    if(c.section==='Housing (rent)') return path!=='buy';
-    if(c.section==='Housing (buy)') return path==='buy';
-    return true;}).reduce(function(a,c){return a+(c[mode]||0);},0);
+    if(!all&&!finLive(c)) return false;
+    return costInPath(c,path);}).reduce(function(a,c){return a+(c[mode]||0);},0);
+}
+/* Totals for a saved snapshot, which has its own jobs, costs, mode and path. */
+function scenTotals(sc){
+  var si=(sc.jobs||[]).filter(finLive).reduce(function(a,j){return a+(j[sc.mode]||0);},0);
+  var sc_=(sc.costs||[]).filter(function(c){return finLive(c)&&costInPath(c,sc.path);})
+    .reduce(function(a,c){return a+(c[sc.mode]||0);},0);
+  return {inc:si,cost:sc_,gap:si-sc_};
 }
 function shiftsFor(who,from){
   return S.fin.shifts.filter(function(s){
@@ -131,46 +157,328 @@ function shiftsFor(who,from){
     if(who&&j&&j.who!==who&&j.who!=='Both')return false;
     if(from&&s.date<from)return false; return true;});
 }
+/* What actually lands per dollar earned, measured rather than assumed. Falls
+   back to 80% only when there is nothing logged to measure. */
+function takeHomeRate(){
+  var g=0,n=0;
+  S.fin.shifts.forEach(function(s){g+=(s.gross||0);n+=(s.net||0);});
+  return (g>0&&n>0)?n/g:0.8;
+}
+function bestLiveRate(){
+  var r=0;
+  S.fin.jobs.forEach(function(j){if(finLive(j)&&j.rate>r)r=j.rate;});
+  return r;
+}
+var FINMODES=[['low','Lean'],['real','Realistic'],['high','Good month'],['actual','Actual']];
+function modeLabel(m){
+  for(var i=0;i<FINMODES.length;i++) if(FINMODES[i][0]===m) return FINMODES[i][1];
+  return m;
+}
+/* The switch itself. One markup shape for line rows, section rows and person
+   rows, so all three behave the same and there is one CSS rule for it. */
+function finSw(attr,val,on,label,small){
+  return '<button type="button" class="sw'+(small?' xs':'')+(on?' on':'')+'" '+
+    'data-'+attr+'="'+E(val)+'" aria-pressed="'+(on?'true':'false')+'" '+
+    'title="'+E((on?'Counted — click to switch off: ':'Switched off — click to count: ')+label)+'">'+
+    '<i></i></button>';
+}
 function vFinancial(sub){
   if(sub==='purchases') return vPurchases();
   if(sub==='strategies') return vStrategies();
   if(sub==='actual') return vActual();
   var mode=S.fin.costMode||'real', path=S.fin.path||'rent';
   var inc=finIncome('both',mode), cost=finCost(mode,path), gap=inc-cost;
-  var byS={}; S.fin.costs.forEach(function(c){
-    if(c.section==='Housing (rent)'&&path==='buy')return;
-    if(c.section==='Housing (buy)'&&path!=='buy')return;
-    byS[c.section]=(byS[c.section]||0)+(c[mode]||0);});
+
+  /* ---- what is parked ---- */
+  var offJobs=S.fin.jobs.filter(function(j){return !finLive(j);});
+  var offCosts=S.fin.costs.filter(function(c){return !finLive(c)&&costInPath(c,path);});
+  var offInc=finIncome('both',mode,true)-inc;
+  var offCost=finCost(mode,path,true)-cost;
+
+  /* ---- costs by section, live and parked separately ---- */
+  var byS={}, bySAll={};
+  S.fin.costs.forEach(function(c){
+    if(!costInPath(c,path)) return;
+    bySAll[c.section]=(bySAll[c.section]||0)+(c[mode]||0);
+    if(finLive(c)) byS[c.section]=(byS[c.section]||0)+(c[mode]||0);
+    else if(!(c.section in byS)) byS[c.section]=0;
+  });
+  var secNames=Object.keys(byS).sort(function(a,b){return (bySAll[b]||0)-(bySAll[a]||0);});
+
+  /* ---- derived numbers ---- */
+  var saveRate=inc>0?gap/inc*100:0;
+  var toSavings=byS['Savings']||0;               /* money into savings is not spent */
+  var toDebt=byS['Debt']||0;
+  var building=gap+toSavings;                    /* what the month actually adds */
+  var burn=cost-toSavings;                       /* what leaving the house costs */
+  var rate=bestLiveRate(), th=takeHomeRate();
+  var hoursToClose=(gap<0&&rate>0)?(-gap)/(rate*th):0;
+  var perDollar=inc>0?secNames.map(function(k){return [k,byS[k]/inc*100];}):[];
+
+  /* ---- headline ---- */
+  var stats='<div class="stats">'+
+   '<div class="stat"><b data-cv="'+inc+'">'+M(inc)+'</b><span>Income / mo</span></div>'+
+   '<div class="stat"><b data-cv="'+cost+'">'+M(cost)+'</b><span>Costs / mo</span></div>'+
+   '<div class="stat '+(gap>=0?'good':'bad')+'"><b data-cv="'+gap+'">'+M(gap)+'</b><span>'+
+   (gap>=0?'Surplus':'Shortfall')+'</span></div>'+
+   '<div class="stat"><b data-cv="'+(gap*12)+'">'+M(gap*12)+'</b><span>Per year</span></div>'+
+   '<div class="stat"><b data-cv="'+saveRate+'" data-cf="pct">'+Math.round(saveRate)+'%</b>'+
+   '<span>Kept of income</span></div></div>';
+
+  var verdict='';
+  if(gap<0){
+    verdict='<div class="note warn"><b>The gap is real.</b> At these numbers we are '+M(-gap)+
+      ' short every month'+
+      (hoursToClose>0?', which is <b>'+(Math.round(hoursToClose*10)/10)+' more hours a month</b> at '+
+        $$$(rate)+'/hr once '+Math.round((1-th)*100)+'% comes off for tax':'')+
+      '. Income has to rise by that, or costs have to fall.</div>';
+  } else if(inc>0){
+    verdict='<div class="note good"><b>'+M(gap)+' clear a month.</b> That is '+
+      Math.round(saveRate)+'% of everything coming in, '+M(gap*12)+' over a year'+
+      (toSavings>0?', on top of the '+M(toSavings)+' a month already going into savings as a cost line':'')+
+      '.</div>';
+  }
+
+  var parked='';
+  if(offJobs.length||offCosts.length){
+    parked='<div class="note"><b>Switched off.</b> '+
+      (offJobs.length?offJobs.length+' income line'+(offJobs.length>1?'s':'')+' worth '+M(offInc)+' / mo':'')+
+      (offJobs.length&&offCosts.length?' and ':'')+
+      (offCosts.length?offCosts.length+' cost line'+(offCosts.length>1?'s':'')+' worth '+M(offCost)+' / mo':'')+
+      ' are sitting out of these totals. Switching every one back on would put the month at <b>'+
+      M(gap+offInc-offCost)+'</b>.</div>';
+  }
+
+  /* ---- waterfall: income, then each section, then what is left ---- */
+  var wfMax=Math.max(inc,cost,1), run=inc;
+  var wfCols=[{label:'Income',sub:M(inc),bars:[{v:inc,base:0,cls:'ct2',tip:'Everything coming in'}]}];
+  secNames.forEach(function(k,i){
+    var v=byS[k]; if(v<=0) return;
+    var base=Math.max(0,run-v);
+    wfCols.push({label:k,sub:'-'+M(v),bars:[{v:v,base:base,cls:chTone(i),tip:k+': '+M(v)+' / mo'}]});
+    run-=v;
+  });
+  wfCols.push({label:gap>=0?'Left over':'Short by',sub:M(Math.abs(gap)),subCls:gap>=0?'good':'bad',
+    bars:[{v:Math.abs(gap),base:0,cls:gap>=0?'ctg':'ctb',
+      tip:(gap>=0?'Left over: ':'Short by: ')+M(Math.abs(gap))}]});
+  var waterfall='<div class="sec"><h2>From income to what is left</h2>'+
+    '<p class="sub">Every live cost section taken off the top, in order of size, on the '+
+    modeLabel(mode).toLowerCase()+' column while '+(path==='buy'?'buying':'renting')+'.</p>'+
+    '<div class="card pad">'+chartCols({max:wfMax,h:170,cols:wfCols})+'</div></div>';
+
+  /* ---- donut of live costs, with a switch per section in the legend ---- */
+  var donutSlices=secNames.map(function(k,i){return {v:byS[k],label:k+' '+M(byS[k]),cls:chTone(i)};});
+  var legend=chartLegend(secNames.map(function(k,i){
+    var anyOn=S.fin.costs.some(function(c){return costInPath(c,path)&&c.section===k&&finLive(c);});
+    return {label:k,cls:chTone(i),off:!anyOn,
+      value:M(anyOn?byS[k]:bySAll[k]),
+      pct:(cost&&anyOn)?Math.round(byS[k]/cost*100)+'%':'—',
+      ctrl:finSw('secttog',k,anyOn,k,true)};
+  }));
+  var incomePeople=['Jaron','Aaliyah','Both'].filter(function(w){
+    return S.fin.jobs.some(function(j){return j.who===w;});});
+  var incLegend=chartLegend(incomePeople.map(function(w,i){
+    var v=S.fin.jobs.filter(function(j){return j.who===w&&finLive(j);})
+      .reduce(function(a,j){return a+(j[mode]||0);},0);
+    var all=S.fin.jobs.filter(function(j){return j.who===w;})
+      .reduce(function(a,j){return a+(j[mode]||0);},0);
+    var anyOn=S.fin.jobs.some(function(j){return j.who===w&&finLive(j);});
+    return {label:w==='Both'?'Shared / gig':WHO(w),cls:chTone(i+1),off:!anyOn,
+      value:M(anyOn?v:all),pct:(inc&&anyOn)?Math.round(v/inc*100)+'%':'—',
+      ctrl:finSw('whotog',w,anyOn,w==='Both'?'shared income':WHO(w),true)};
+  }));
+  var costPeople=['Jaron','Aaliyah','Both'].filter(function(w){
+    return S.fin.costs.some(function(c){return c.who===w&&costInPath(c,path);});});
+  var whoCost='<div class="ckey">'+costPeople.map(function(w,i){
+    var v=S.fin.costs.filter(function(c){return c.who===w&&finLive(c)&&costInPath(c,path);})
+      .reduce(function(a,c){return a+(c[mode]||0);},0);
+    return '<span><i class="'+chTone(i+3)+'"></i>'+E(w==='Both'?'Shared':WHO(w))+' '+M(v)+'</span>';
+  }).join('')+'</div>';
+
+  var split='<div class="sec"><h2>Where the money goes</h2>'+
+   '<p class="sub">Every switch here moves a whole group at once. The tables further down do it one '+
+   'line at a time.</p><div class="grid g2">'+
+   '<div class="card pad"><h3 class="ctitle">Costs by section</h3>'+
+   chartDonut(donutSlices,M(cost),'Live costs / mo')+legend+
+   (perDollar.length?'<p class="sm muted" style="margin-top:14px">Of every $100 coming in, '+
+     perDollar.slice(0,3).map(function(p){return '$'+Math.round(p[1])+' goes to '+E(p[0].toLowerCase());}).join(', ')+
+     '.</p>':'')+'</div>'+
+   '<div class="card pad"><h3 class="ctitle">Income by person</h3>'+
+   chartDonut(incomePeople.map(function(w,i){
+     return {v:S.fin.jobs.filter(function(j){return j.who===w&&finLive(j);})
+       .reduce(function(a,j){return a+(j[mode]||0);},0),
+       label:(w==='Both'?'Shared':WHO(w)),cls:chTone(i+1)};}),M(inc),'Live income / mo')+
+   incLegend+
+   '<h3 class="ctitle" style="margin-top:20px">Costs carried by</h3>'+whoCost+
+   '<div class="row" style="margin-top:14px"><button class="b o s" id="jobAdd">Add income</button>'+
+   '<button class="b o s" id="costAdd2">Add cost</button></div></div>'+
+   '</div></div>';
+
+  /* ---- the same month read four ways ---- */
+  /* The actual column only earns a place when both sides of it are filled in.
+     Most cost lines carry a researched figure and almost no income line does,
+     so counting it early would draw a month with real rent and no wages and
+     call it a forecast. */
+  var actReady=finIncome('both','actual')>0&&finCost('actual',path)>0;
+  var bandModes=FINMODES.filter(function(m){return m[0]!=='actual'||actReady;});
+  var bandVals=bandModes.map(function(m){
+    var i2=finIncome('both',m[0]), c2=finCost(m[0],path);
+    return {m:m[0],label:m[1],inc:i2,cost:c2,gap:i2-c2};});
+  var bandMax=Math.max.apply(null,bandVals.map(function(b){return Math.max(b.inc,b.cost);}).concat([1]));
+  var best=bandVals.slice().sort(function(a,b){return b.gap-a.gap;})[0];
+  var worst=bandVals.slice().sort(function(a,b){return a.gap-b.gap;})[0];
+  var band='<div class="sec"><h2>The same month, read '+
+   (['','one way','two ways','three ways','four ways'][bandVals.length]||'every way')+'</h2>'+
+   '<p class="sub">Identical lines, identical switches — only the estimate column changes. '+
+   'The spread between the ends is what the plan actually rests on.</p>'+
+   '<div class="card pad">'+
+   chartCols({max:bandMax,h:160,cols:bandVals.map(function(b){
+     return {label:b.label,sub:M(b.gap),subCls:b.gap>=0?'good':'bad',
+       bars:[{v:b.inc,cls:'ct2',tip:'Income '+M(b.inc)},{v:b.cost,cls:'ct5',tip:'Costs '+M(b.cost)}]};})})+
+   '<div class="ckey"><span><i class="ct2"></i>Income</span><span><i class="ct5"></i>Costs</span>'+
+   '<span class="muted">Number under each column is that month\'s surplus</span></div>'+
+   (bandVals.length>1?'<p class="sm muted" style="margin-top:12px">Best case '+
+     M(best.gap)+' a month on '+E(best.label.toLowerCase())+', worst '+M(worst.gap)+' on '+
+     E(worst.label.toLowerCase())+'. A '+M(best.gap-worst.gap)+' swing, '+
+     M((best.gap-worst.gap)*12)+' over a year.'+
+     (actReady?'':' The actual column is not drawn yet: it needs a researched figure on the '+
+       'income side as well as the cost side.')+'</p>':'')+
+   '</div></div>';
+
+  /* ---- twelve months of the current month, repeated ---- */
+  var proj=[],pv=0,pi;
+  for(pi=1;pi<=12;pi++){pv+=gap;proj.push(pv);}
+  var projection=(inc>0||cost>0)?'<div class="sec"><h2>Twelve months at this rate</h2>'+
+   '<p class="sub">Nothing clever: this month repeated twelve times, so the shape is what the '+
+   'current numbers compound to if neither side moves.</p>'+
+   '<div class="card pad">'+chartLine(proj,{neg:gap<0,label:'Cumulative surplus over twelve months'})+
+   '<div class="caxis"><span>Month 1</span><span>Month 6</span><span>Month 12</span></div>'+
+   '<div class="stats" style="margin-top:16px">'+
+   '<div class="stat '+(gap>=0?'good':'bad')+'"><b data-cv="'+(gap*3)+'">'+M(gap*3)+'</b><span>After 3 months</span></div>'+
+   '<div class="stat '+(gap>=0?'good':'bad')+'"><b data-cv="'+(gap*6)+'">'+M(gap*6)+'</b><span>After 6 months</span></div>'+
+   '<div class="stat '+(gap>=0?'good':'bad')+'"><b data-cv="'+(gap*12)+'">'+M(gap*12)+'</b><span>After a year</span></div>'+
+   '<div class="stat"><b data-cv="'+building+'">'+M(building)+'</b><span>Built / mo</span></div>'+
+   '<div class="stat"><b data-cv="'+burn+'">'+M(burn)+'</b><span>Spent / mo</span></div></div>'+
+   '<p class="sm muted" style="margin-top:12px">Built counts the surplus plus the '+M(toSavings)+
+   ' a month sitting in the Savings section, because money moved into savings was never spent. '+
+   'Spent is everything else'+(toDebt>0?', including '+M(toDebt)+' a month servicing debt':'')+'.</p>'+
+   '</div></div>':'';
+
+  /* ---- saved scenarios ---- */
   var pairs=scenAllFixed(), names=pairs.map(function(p){return p[0];});
   var act=S.fin.activeScenario, dirty=scenDirty();
   var cmp='';
   if(names.length){
+    var scRows=pairs.map(function(pr){var n=pr[0],sc=pr[1];
+      if(!sc||!sc.jobs||!sc.costs) return null;
+      var t=scenTotals(sc);
+      var offN=(sc.jobs.filter(function(j){return !finLive(j);}).length)+
+               (sc.costs.filter(function(c){return !finLive(c);}).length);
+      return {n:n,sc:sc,t:t,off:offN};}).filter(Boolean);
+    var scMax=Math.max.apply(null,scRows.map(function(r){
+      return Math.max(r.t.inc,r.t.cost);}).concat([Math.max(inc,cost),1]));
     cmp='<div class="sec"><h2>Scenarios side by side</h2>'+
-      '<p class="sub">Each one stores every income and cost line as it was when saved.</p>'+
+      '<p class="sub">Each one stores every income and cost line, and which of them were switched '+
+      'on, exactly as they were when saved.</p>'+
+      '<div class="card pad gap-b">'+chartCols({max:scMax,h:150,cols:
+        [{label:'Now'+(act?' ('+act+')':''),sub:M(gap),subCls:gap>=0?'good':'bad',
+          bars:[{v:inc,cls:'ct2',tip:'Income '+M(inc)},{v:cost,cls:'ct5',tip:'Costs '+M(cost)}]}]
+        .concat(scRows.map(function(r){
+          return {label:r.n,sub:M(r.t.gap),subCls:r.t.gap>=0?'good':'bad',
+            bars:[{v:r.t.inc,cls:'ct2',tip:'Income '+M(r.t.inc)},
+                  {v:r.t.cost,cls:'ct5',tip:'Costs '+M(r.t.cost)}]};}))})+
+      '<div class="ckey"><span><i class="ct2"></i>Income</span><span><i class="ct5"></i>Costs</span>'+
+      '<span class="muted">Number under each column is the surplus</span></div></div>'+
       '<div class="tw"><table><thead><tr><th>Scenario</th><th>Basis</th><th>Housing</th>'+
       '<th class="num">Income</th><th class="num">Costs</th><th class="num">Monthly</th>'+
-      '<th class="num">Yearly</th><th></th></tr></thead><tbody>'+
-      pairs.map(function(pr){var n=pr[0],sc=pr[1];
-        if(!sc||!sc.jobs||!sc.costs) return '';
-        var si=sc.jobs.reduce(function(a,j){return a+(j[sc.mode]||0);},0);
-        var scst=sc.costs.filter(function(c){
-          if(c.section==='Housing (rent)')return sc.path!=='buy';
-          if(c.section==='Housing (buy)')return sc.path==='buy';return true;})
-          .reduce(function(a,c){return a+(c[sc.mode]||0);},0);
-        var g=si-scst;
-        return '<tr'+(n===act?' style="background:var(--panel-2)"':'')+'>'+
-        '<td><b>'+E(n)+'</b>'+(n===act?' <span class="chip t">open</span>':'')+'</td>'+
-        '<td class="sm muted">'+E(sc.mode)+'</td><td class="sm muted">'+E(sc.path)+'</td>'+
-        '<td class="num">'+M(si)+'</td><td class="num">'+M(scst)+'</td>'+
-        '<td class="num" style="color:'+(g>=0?'var(--sage)':'var(--clay)')+'"><b>'+M(g)+'</b></td>'+
-        '<td class="num">'+M(g*12)+'</td>'+
-        '<td><button class="b o s" data-scload="'+E(n)+'">Open</button> '+
-        '<button class="x" data-scdel="'+E(n)+'">&times;</button></td></tr>';}).join('')+
+      '<th class="num">Yearly</th><th class="num">Off</th><th></th></tr></thead><tbody>'+
+      scRows.map(function(r){
+        return '<tr'+(r.n===act?' style="background:var(--panel-2)"':'')+'>'+
+        '<td><b>'+E(r.n)+'</b>'+(r.n===act?' <span class="chip t">open</span>':'')+'</td>'+
+        '<td class="sm muted">'+E(modeLabel(r.sc.mode))+'</td><td class="sm muted">'+E(r.sc.path)+'</td>'+
+        '<td class="num">'+M(r.t.inc)+'</td><td class="num">'+M(r.t.cost)+'</td>'+
+        '<td class="num" style="color:'+(r.t.gap>=0?'var(--sage)':'var(--clay)')+'"><b>'+M(r.t.gap)+'</b></td>'+
+        '<td class="num">'+M(r.t.gap*12)+'</td>'+
+        '<td class="num sm muted">'+(r.off||'—')+'</td>'+
+        '<td><button class="b o s" data-scload="'+E(r.n)+'">Open</button> '+
+        '<button class="x" data-scdel="'+E(r.n)+'">&times;</button></td></tr>';}).join('')+
       '</tbody></table></div></div>';
   }
+
+  /* ---- the lines themselves ---- */
+  var jobsOn=S.fin.jobs.filter(finLive).length;
+  var costsOn=S.fin.costs.filter(function(c){return finLive(c)&&costInPath(c,path);}).length;
+  var costsInPath=S.fin.costs.filter(function(c){return costInPath(c,path);}).length;
+
+  var incTable='<div class="sec"><div class="spread"><h2>Income lines</h2>'+
+   '<div class="row"><span class="chip p">'+jobsOn+' of '+S.fin.jobs.length+' on</span>'+
+   '<button class="b o s" data-alltog="jobs|1">All on</button>'+
+   '<button class="b o s" data-alltog="jobs|0">All off</button>'+
+   '<button class="b o s" id="jobAdd2">Add</button></div></div><div class="tw wide"><table>'+
+   '<thead><tr><th>On</th><th>Who</th><th>Name</th><th>Employer</th><th class="num">Low</th>'+
+   '<th class="num">Realistic</th><th class="num">High</th><th class="num">Actual</th><th></th></tr></thead><tbody>'+
+   (S.fin.jobs.length?S.fin.jobs.map(function(j){
+     var on=finLive(j);
+     return '<tr'+(on?'':' class="offrow"')+'>'+
+     '<td>'+finSw('jobtog',j.id,on,j.name||'this income line')+'</td>'+
+     '<td><span class="chip">'+E(WHO(j.who))+'</span></td><td><b>'+E(j.name)+'</b>'+
+     (on?'':'<span class="offtag">off</span>')+
+     (j.rate?'<div class="xs muted">'+$$$(j.rate)+'/hr</div>':'')+'</td>'+
+     '<td class="sm muted">'+E(j.employer||'')+'</td>'+
+     '<td class="num">'+M(j.low)+'</td><td class="num"><b>'+M(j.real)+'</b></td>'+
+     '<td class="num">'+M(j.high)+'</td>'+
+     '<td class="num">'+(j.actual?M(j.actual):'<span class="muted">-</span>')+'</td>'+
+     '<td><button class="b o s" data-jobe="'+j.id+'">Edit</button></td></tr>';}).join('')
+    :'<tr><td colspan="9" class="sm muted" style="text-align:center;padding:22px">No income lines yet.</td></tr>')+
+   '<tr style="background:var(--panel-2)"><td colspan="4"><b>Counted total</b></td>'+
+   '<td class="num"><b>'+M(finIncome('both','low'))+'</b></td>'+
+   '<td class="num"><b>'+M(finIncome('both','real'))+'</b></td>'+
+   '<td class="num"><b>'+M(finIncome('both','high'))+'</b></td>'+
+   '<td class="num"><b>'+M(finIncome('both','actual'))+'</b></td><td></td></tr>'+
+   (offJobs.length?'<tr><td colspan="4" class="sm muted">Switched off</td>'+
+     '<td class="num sm muted">'+M(finIncome('both','low',true)-finIncome('both','low'))+'</td>'+
+     '<td class="num sm muted">'+M(finIncome('both','real',true)-finIncome('both','real'))+'</td>'+
+     '<td class="num sm muted">'+M(finIncome('both','high',true)-finIncome('both','high'))+'</td>'+
+     '<td class="num sm muted">'+M(finIncome('both','actual',true)-finIncome('both','actual'))+'</td>'+
+     '<td></td></tr>':'')+
+   '</tbody></table></div></div>';
+
+  var costTable='<div class="sec"><div class="spread"><h2>Cost lines</h2>'+
+   '<div class="row"><span class="chip p">'+costsOn+' of '+costsInPath+' on</span>'+
+   '<button class="b o s" data-alltog="costs|1">All on</button>'+
+   '<button class="b o s" data-alltog="costs|0">All off</button>'+
+   '<button class="b o s" id="costAdd">Add</button></div></div><div class="tw wide"><table>'+
+   '<thead><tr><th>On</th><th>Section</th><th>Cost</th><th>Who</th><th class="num">Low</th>'+
+   '<th class="num">Realistic</th><th class="num">High</th><th class="num">Actual</th><th></th></tr></thead><tbody>'+
+   (S.fin.costs.length?S.fin.costs.map(function(c){
+     var on=finLive(c), inPath=costInPath(c,path);
+     return '<tr'+(on&&inPath?'':' class="offrow"')+'>'+
+     '<td>'+finSw('costtog',c.id,on,c.name||'this cost line')+'</td>'+
+     '<td class="sm muted">'+E(c.section)+'</td>'+
+     '<td><b>'+E(c.name)+'</b>'+(on?(inPath?'':'<span class="offtag">other path</span>')
+       :'<span class="offtag">off</span>')+'</td>'+
+     '<td><span class="chip">'+E(WHO(c.who))+'</span></td>'+
+     '<td class="num">'+M(c.low)+'</td><td class="num"><b>'+M(c.real)+'</b></td>'+
+     '<td class="num">'+M(c.high)+'</td>'+
+     '<td class="num">'+(c.actual?M(c.actual):'<span class="muted">-</span>')+'</td>'+
+     '<td><button class="b o s" data-coste="'+c.id+'">Edit</button></td></tr>';}).join('')
+    :'<tr><td colspan="9" class="sm muted" style="text-align:center;padding:22px">No cost lines yet.</td></tr>')+
+   '<tr style="background:var(--panel-2)"><td colspan="4"><b>Counted total</b></td>'+
+   '<td class="num"><b>'+M(finCost('low',path))+'</b></td>'+
+   '<td class="num"><b>'+M(finCost('real',path))+'</b></td>'+
+   '<td class="num"><b>'+M(finCost('high',path))+'</b></td>'+
+   '<td class="num"><b>'+M(finCost('actual',path))+'</b></td><td></td></tr>'+
+   (offCosts.length?'<tr><td colspan="4" class="sm muted">Switched off</td>'+
+     '<td class="num sm muted">'+M(finCost('low',path,true)-finCost('low',path))+'</td>'+
+     '<td class="num sm muted">'+M(finCost('real',path,true)-finCost('real',path))+'</td>'+
+     '<td class="num sm muted">'+M(finCost('high',path,true)-finCost('high',path))+'</td>'+
+     '<td class="num sm muted">'+M(finCost('actual',path,true)-finCost('actual',path))+'</td>'+
+     '<td></td></tr>':'')+
+   '</tbody></table></div></div>';
+
   return '<div class="page"><div class="phead"><h1>Financial</h1>'+
-   '<p>Every income and cost line, saved into scenarios you can compare. Nothing overwrites a saved '+
-   'scenario until you press Save.</p></div>'+
+   '<p>Every income and cost line, each one switchable, saved into scenarios you can compare. '+
+   'Nothing overwrites a saved scenario until you press Save.</p></div>'+
 
    '<div class="sec"><div class="spread"><h2>'+(act?E(act):'Working numbers')+'</h2>'+
    '<div class="row">'+(dirty?'<span class="dirty">Unsaved changes</span>':'')+
@@ -194,71 +502,32 @@ function vFinancial(sub){
    '<button class="b o" id="scenSaveAs">Save as new</button>'+
    '</div>'+
    (dirty?'<div class="note warn" style="margin-bottom:0"><b>Not saved.</b> '+
-     'Changes to income or cost lines are live on screen but "'+E(act)+'" still holds the old figures. '+
-     'Save to keep them, or Revert to throw them away.</div>':'')+
+     'Changes to income or cost lines — switches included — are live on screen but "'+E(act)+
+     '" still holds the old figures. Save to keep them, or Revert to throw them away.</div>':'')+
    '</div>'+
 
-   '<div class="stats">'+
-   '<div class="stat"><b>'+M(inc)+'</b><span>Income / mo</span></div>'+
-   '<div class="stat"><b>'+M(cost)+'</b><span>Costs / mo</span></div>'+
-   '<div class="stat '+(gap>=0?'good':'bad')+'"><b>'+M(gap)+'</b><span>'+
-   (gap>=0?'Surplus':'Shortfall')+'</span></div>'+
-   '<div class="stat"><b>'+M(gap*12)+'</b><span>Per year</span></div></div>'+
-   (gap<0?'<div class="note warn"><b>The gap is real.</b> At these numbers we are '+M(-gap)+
-     ' short every month. Income has to rise by that, or costs have to fall.</div>':'')+
-   '</div>'+cmp+
-
-   '<div class="sec"><h2>Where the money goes</h2><div class="grid g2">'+
-   '<div class="card pad"><h3 class="ctitle">Costs by section</h3>'+
-   Object.keys(byS).sort(function(a,b){return byS[b]-byS[a];}).map(function(k){
-     var pct=cost?byS[k]/cost*100:0;
-     return '<div class="mrow"><div class="spread"><span>'+E(k)+'</span><em>'+M(byS[k])+'</em></div>'+
-     '<div class="bar"><i class="pk" style="width:'+pct+'%"></i></div></div>';}).join('')+'</div>'+
-   '<div class="card pad"><h3 class="ctitle">Income by person</h3>'+
-   ['Jaron','Aaliyah','Both'].map(function(w){
-     var v=S.fin.jobs.filter(function(j){return j.who===w;})
-       .reduce(function(a,j){return a+(j[mode]||0);},0);
-     if(!v)return ''; var pct=inc?v/inc*100:0;
-     return '<div class="mrow"><div class="spread"><span>'+E(w==='Both'?'Shared / gig':WHO(w))+'</span>'+
-     '<em>'+M(v)+'</em></div><div class="bar"><i class="pp" style="width:'+pct+'%"></i></div></div>';
-   }).join('')+'<button class="b o s" id="jobAdd" style="margin-top:10px">Add income</button></div>'+
-   '</div></div>'+
-
-   '<div class="sec"><div class="spread"><h2>Income lines</h2>'+
-   '<button class="b o s" id="jobAdd2">Add</button></div><div class="tw"><table>'+
-   '<thead><tr><th>Who</th><th>Name</th><th>Employer</th><th class="num">Low</th>'+
-   '<th class="num">Realistic</th><th class="num">High</th><th class="num">Actual</th><th></th></tr></thead><tbody>'+
-   S.fin.jobs.map(function(j){
-     return '<tr><td><span class="chip">'+E(WHO(j.who))+'</span></td><td><b>'+E(j.name)+'</b>'+
-     (j.rate?'<div class="xs muted">'+$$$(j.rate)+'/hr</div>':'')+'</td>'+
-     '<td class="sm muted">'+E(j.employer||'')+'</td>'+
-     '<td class="num">'+M(j.low)+'</td><td class="num"><b>'+M(j.real)+'</b></td>'+
-     '<td class="num">'+M(j.high)+'</td>'+
-     '<td class="num">'+(j.actual?M(j.actual):'<span class="muted">-</span>')+'</td>'+
-     '<td><button class="b o s" data-jobe="'+j.id+'">Edit</button></td></tr>';}).join('')+
-   '<tr style="background:var(--panel-2)"><td colspan="3"><b>Total</b></td>'+
-   '<td class="num"><b>'+M(finIncome('both','low'))+'</b></td>'+
-   '<td class="num"><b>'+M(finIncome('both','real'))+'</b></td>'+
-   '<td class="num"><b>'+M(finIncome('both','high'))+'</b></td>'+
-   '<td class="num"><b>'+M(finIncome('both','actual'))+'</b></td><td></td></tr>'+
-   '</tbody></table></div></div>'+
-
-   '<div class="sec"><div class="spread"><h2>Cost lines</h2>'+
-   '<button class="b o s" id="costAdd">Add</button></div><div class="tw"><table>'+
-   '<thead><tr><th>Section</th><th>Cost</th><th>Who</th><th class="num">Low</th>'+
-   '<th class="num">Realistic</th><th class="num">High</th><th class="num">Actual</th><th></th></tr></thead><tbody>'+
-   S.fin.costs.map(function(c){return '<tr><td class="sm muted">'+E(c.section)+'</td>'+
-     '<td><b>'+E(c.name)+'</b></td><td><span class="chip">'+E(WHO(c.who))+'</span></td>'+
-     '<td class="num">'+M(c.low)+'</td><td class="num"><b>'+M(c.real)+'</b></td>'+
-     '<td class="num">'+M(c.high)+'</td>'+
-     '<td class="num">'+(c.actual?M(c.actual):'<span class="muted">-</span>')+'</td>'+
-     '<td><button class="b o s" data-coste="'+c.id+'">Edit</button></td></tr>';}).join('')+
-   '<tr style="background:var(--panel-2)"><td colspan="3"><b>Total</b></td>'+
-   '<td class="num"><b>'+M(finCost('low',path))+'</b></td>'+
-   '<td class="num"><b>'+M(finCost('real',path))+'</b></td>'+
-   '<td class="num"><b>'+M(finCost('high',path))+'</b></td>'+
-   '<td class="num"><b>'+M(finCost('actual',path))+'</b></td><td></td></tr>'+
-   '</tbody></table></div></div></div>';
+   stats+verdict+parked+'</div>'+
+   waterfall+split+band+projection+cmp+incTable+costTable+'</div>';
+}
+/* Six calendar months of logged shifts, oldest first, so the chart reads left
+   to right the way a year does. A month with nothing logged stays in the list
+   as a zero rather than being dropped, otherwise the gaps close up and a slow
+   month looks like it never happened. */
+function shiftMonths(n){
+  var out=[],d=new Date(),i;
+  d.setDate(1);
+  for(i=n-1;i>=0;i--){
+    var m=new Date(d.getFullYear(),d.getMonth()-i,1);
+    var key=m.getFullYear()+'-'+p2(m.getMonth()+1);
+    out.push({key:key,label:m.toLocaleDateString(undefined,{month:'short'}),
+      net:0,gross:0,hours:0});
+  }
+  S.fin.shifts.forEach(function(s){
+    var k=String(s.date||'').slice(0,7);
+    for(var j=0;j<out.length;j++) if(out[j].key===k){
+      out[j].net+=(s.net||0); out[j].gross+=(s.gross||0); out[j].hours+=(s.hours||0);}
+  });
+  return out;
 }
 function vActual(){
   var from=new Date();from.setDate(from.getDate()-90);
@@ -270,6 +539,14 @@ function vActual(){
   var jN=tot('Jaron','net'),aN=tot('Aaliyah','net');
   var eff=function(g,h){return h>0?g/h:0;};
   var months=Math.max(1,90/30.4);
+  var mons=shiftMonths(6), plan=finIncome('both','real');
+  var monMax=Math.max.apply(null,mons.map(function(m){return m.net;}).concat([plan,1]));
+  var logged=mons.filter(function(m){return m.net>0;});
+  var monAvg=logged.length?logged.reduce(function(a,m){return a+m.net;},0)/logged.length:0;
+  var monBest=logged.length?Math.max.apply(null,logged.map(function(m){return m.net;})):0;
+  var real=(jN+aN)/months, vsPlan=plan?real/plan*100:0;
+  var costNow=finCost(S.fin.costMode||'real',S.fin.path||'rent');
+  var realGap=real-costNow;
   return '<div class="page"><div class="phead"><h1>Actual earnings</h1>'+
    '<p>Log real shifts. Averages, effective hourly and after-tax rate all come from what actually landed, not the plan.</p></div>'+
    '<div class="row toolbar"><button class="b" id="shAdd">Log a shift</button>'+
@@ -285,10 +562,43 @@ function vActual(){
      '<div class="stat"><b>'+$$$(eff(n,h))+'</b><span>Net / hr</span></div></div>'+
      '<p class="sm muted" style="margin-top:10px">'+(g>0?'Take-home is '+Math.round(n/g*100)+'% of gross.':'No shifts logged yet.')+'</p>'+
      '</div>';}).join('')+'</div>'+
-   '<div class="note" style="margin-top:14px"><b>Auto scenario.</b> '+
-   'Combined that is <b>'+M((jN+aN)/months)+'</b> net a month from real data, against a plan of <b>'+
-   M(finIncome('both','real'))+'</b>. '+
-   '<button class="b o s" id="scenFromActual" style="margin-left:8px">Save that as a scenario</button></div></div>'+
+   /* With nothing logged there is no comparison to make, and drawing one
+      anyway would put a -100% against the plan on the strength of no data. */
+   (logged.length
+     ?'<div class="note'+(vsPlan<90?' warn':(vsPlan>=100?' good':''))+'" style="margin-top:14px">'+
+      '<b>Real against plan.</b> '+
+      'Combined that is <b>'+M(real)+'</b> net a month from logged shifts, against a plan of <b>'+
+      M(plan)+'</b>'+(plan?' — '+Math.round(vsPlan)+'% of it':'')+'. '+
+      'Set against the '+M(costNow)+' of live costs, the months that actually happened leave <b>'+
+      M(realGap)+'</b>. '+
+      '<button class="b o s" id="scenFromActual" style="margin-left:8px">Save that as a scenario</button></div>'
+     :'<div class="note" style="margin-top:14px"><b>Nothing logged yet.</b> '+
+      'The plan says '+M(plan)+' a month against '+M(costNow)+' of live costs. Log a few shifts and '+
+      'this page starts checking that against what actually landed.</div>')+'</div>'+
+
+   '<div class="sec"><h2>Six months of real money</h2>'+
+   '<p class="sub">Net, by calendar month, against the planned income line. Only the switched-on '+
+   'income lines make up that plan, so parking a job on the Financial page moves the bar here too.</p>'+
+   '<div class="card pad">'+
+   (logged.length
+     ?chartCols({max:monMax,h:160,cols:mons.map(function(m){
+        return {label:m.label,sub:m.net?M(m.net):'—',
+          bars:[{v:m.net,cls:m.net>=plan?'ct2':'ct1',
+            tip:m.label+': '+M(m.net)+' net over '+Math.round(m.hours)+' hours'},
+           {v:plan,cls:'ctm',tip:'Plan '+M(plan)}]};})})+
+      '<div class="ckey"><span><i class="ct2"></i>Beat the plan</span>'+
+      '<span><i class="ct1"></i>Under the plan</span><span><i class="ctm"></i>Plan</span></div>'+
+      '<div class="stats" style="margin-top:16px">'+
+      '<div class="stat"><b data-cv="'+monAvg+'">'+M(monAvg)+'</b><span>Avg logged month</span></div>'+
+      '<div class="stat"><b data-cv="'+monBest+'">'+M(monBest)+'</b><span>Best month</span></div>'+
+      '<div class="stat '+(monAvg>=plan?'good':'bad')+'"><b data-cv="'+(monAvg-plan)+'">'+
+        M(monAvg-plan)+'</b><span>Against plan</span></div>'+
+      '<div class="stat"><b data-cv="'+Math.round(takeHomeRate()*100)+'" data-cf="pct">'+
+        Math.round(takeHomeRate()*100)+'%</b><span>Take home</span></div>'+
+      '<div class="stat"><b data-cv="'+(jH+aH)+'" data-cf="h">'+(Math.round((jH+aH)*10)/10)+'h</b>'+
+        '<span>Hours / 90 days</span></div></div>'
+     :chEmpty('Nothing logged in the last six months. One shift is enough to start the chart.'))+
+   '</div></div>'+
    '<div class="sec"><h2>Shifts</h2>'+(sh.length?'<div class="tw"><table>'+
    '<thead><tr><th>Date</th><th>Job</th><th>Hours</th><th>Gross</th><th>Net</th><th>Note</th><th></th></tr></thead><tbody>'+
    sh.slice(0,80).map(function(s){var j=S.fin.jobs.filter(function(x){return x.id===s.jobId;})[0];

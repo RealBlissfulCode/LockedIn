@@ -38,6 +38,7 @@ from recipes_5 import RECIPES_5                  # noqa: E402
 from recipes_6 import RECIPES_6                  # noqa: E402
 import private_seed as SEED                      # noqa: E402
 from app_core import APP_CORE                    # noqa: E402
+from app_charts import APP_CHARTS                # noqa: E402
 from app_sync import APP_SYNC                    # noqa: E402
 from app_views1 import APP_VIEWS1                # noqa: E402
 from app_views2 import APP_VIEWS2                # noqa: E402
@@ -376,7 +377,8 @@ def render_html():
                          + "\n\nEither reword it in src/, or move it into private_seed.py.")
 
     app_js = ("(function(){\n'use strict';\nvar _D=window._DATA;\n"
-              + APP_CORE + APP_SYNC + APP_VIEWS1 + APP_VIEWS2 + APP_WIRE + "\n})();\n")
+              + APP_CORE + APP_CHARTS + APP_SYNC + APP_VIEWS1 + APP_VIEWS2 + APP_WIRE
+              + "\n})();\n")
 
     # The application code is sealed along with the data. It carries our names,
     # our employers and the placeholder text in every editor, so shipping it in

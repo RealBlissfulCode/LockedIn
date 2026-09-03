@@ -41,9 +41,16 @@ function errPanel(where,e){
    '<div class="row" style="margin-top:12px"><button class="b o" data-nav="meals">Go to Meals</button>'+
    '<button class="b o" id="settings">Open settings</button></div></div></div>';
 }
+/* A redraw asked for by a switch is not a navigation. It keeps the scroll
+   position and skips the page's slide-in, so the only thing that moves is the
+   part that changed: the numbers roll and the bars regrow. */
+var _quiet=false;
+function reroute(){_quiet=true;route();}
 function route(){
   var h=(location.hash||'#/meals').slice(2).split('/'), v=h[0]||'meals', sub=h[1]||'';
   var m=$('#view'); if(!m) return;
+  var quiet=_quiet, keepY=quiet?(window.pageYOffset||0):0;
+  _quiet=false;
   var html;
   try{
     html = v==='r'?vRecipe(sub) : v==='training'?vTraining(sub) : v==='shopping'?vShopping(sub)
@@ -53,7 +60,8 @@ function route(){
   }catch(e){ html=errPanel(v.charAt(0).toUpperCase()+v.slice(1),e);
     if(window.console&&console.error)console.error(e); }
   m.innerHTML=html;
-  try{window.scrollTo(0,0);}catch(e){}
+  if(quiet){var _pg=m.querySelector('.page'); if(_pg)_pg.classList.add('noanim');}
+  try{window.scrollTo(0,quiet?keepY:0);}catch(e){}
   try{
     $$('.tab,.btmnav button').forEach(function(b){
       b.classList.toggle('on', b.dataset.v===(v==='r'?'meals':v));});
@@ -253,7 +261,7 @@ function bindFin(sub){
     if(!confirm('Throw away the changes and go back to the saved "'+S.fin.activeScenario+'"?'))return;
     scenRevert();route();toast('Reverted');});
   ['#jobAdd','#jobAdd2'].forEach(function(s){on(s,'click',function(){jobEditor(null);});});
-  on('#costAdd','click',function(){costEditor(null);});
+  ['#costAdd','#costAdd2'].forEach(function(s){on(s,'click',function(){costEditor(null);});});
   on('#shAdd','click',function(){shiftEditor();});
   on('#shCsv','click',function(){
     var rows=[['Date','Who','Job','Hours','Gross','Net','Note']];
@@ -270,16 +278,36 @@ function bindFin(sub){
   on('#bpNew','click',function(){bpListEditor(null);});
   on('#stNew','click',function(){stratListEditor(null);});
   on('#stMode','change',function(){S.fin.stratMode=this.value;save();route();});
+  countUp($('#view'));
 }
+/* ---------------- switching lines in and out ----------------
+   One writer for every switch on the page. It never deletes and never edits a
+   figure: it sets `off` and redraws. Because `off` is part of the snapshot a
+   scenario stores, flipping one marks the open scenario dirty exactly like
+   changing a number does, which is the behaviour you want — the switches are
+   part of the plan, not a view setting. */
+function finToggle(kind,pred,to){
+  var arr=kind==='jobs'?S.fin.jobs:S.fin.costs, n=0;
+  arr.forEach(function(x){
+    if(!pred(x)) return;
+    var want=(to===null||to===undefined)?!x.off:!to;
+    if(!!x.off===want) return;
+    x.off=want; n++;});
+  if(n){save();reroute();}
+  return n;
+}
+var ONOFF=[['1','Counted in the totals'],['0','Switched off']];
 function jobEditor(id){
-  var j=id?S.fin.jobs.filter(function(x){return x.id===id;})[0]:{who:'Jaron',name:'',employer:'',title:'',rate:'',low:'',real:'',high:''};
+  var j=id?S.fin.jobs.filter(function(x){return x.id===id;})[0]:{who:'Jaron',name:'',employer:'',title:'',rate:'',low:'',real:'',high:'',actual:''};
   var m=modal(id?'Edit income':'Add income',
     form([{id:'jw',l:'Who',t:'select',o:whoOpts(),v:j.who},
       {id:'jn',l:'Name',v:j.name,ph:'Ritchey day job'},
       {id:'je',l:'Employer',v:j.employer},{id:'jt',l:'Title',v:j.title},
       {id:'jr',l:'Hourly rate',t:'number',step:'0.01',v:j.rate},
       {id:'jl',l:'Low / mo',t:'number',v:j.low},{id:'jm',l:'Realistic / mo',t:'number',v:j.real},
-      {id:'jh',l:'High / mo',t:'number',v:j.high}]),
+      {id:'jh',l:'High / mo',t:'number',v:j.high},
+      {id:'ja',l:'Actual / mo',t:'number',v:j.actual},
+      {id:'jo',l:'Counted',t:'select',o:ONOFF,v:j.off?'0':'1'}]),
     (id?'<button class="b o dz" id="jDel">Delete</button>':'')+
     '<button class="b o" data-close>Cancel</button><button class="b" id="jSave">Save</button>');
   var dl_=$('#jDel',m); if(dl_)dl_.onclick=function(){
@@ -287,7 +315,8 @@ function jobEditor(id){
   $('#jSave',m).onclick=function(){
     var o={id:id||uid(),who:$('#jw',m).value,name:$('#jn',m).value.trim()||'Income',
       employer:$('#je',m).value,title:$('#jt',m).value,rate:num($('#jr',m).value)||null,
-      low:num($('#jl',m).value),real:num($('#jm',m).value),high:num($('#jh',m).value)};
+      low:num($('#jl',m).value),real:num($('#jm',m).value),high:num($('#jh',m).value),
+      actual:num($('#ja',m).value)||null,off:$('#jo',m).value==='0'};
     if(id)S.fin.jobs=S.fin.jobs.map(function(x){return x.id===id?o:x;}); else S.fin.jobs.push(o);
     save();m.remove();route();};
 }
@@ -300,7 +329,8 @@ function costEditor(id){
         ['Debt','Debt'],['Savings','Savings']],v:c.section},
       {id:'cw',l:'Who',t:'select',o:whoOpts(),v:c.who},
       {id:'cl',l:'Low',t:'number',v:c.low},{id:'cr',l:'Realistic',t:'number',v:c.real},
-      {id:'ch',l:'High',t:'number',v:c.high},{id:'ca',l:'Actual',t:'number',v:c.actual}]),
+      {id:'ch',l:'High',t:'number',v:c.high},{id:'ca',l:'Actual',t:'number',v:c.actual},
+      {id:'co',l:'Counted',t:'select',o:ONOFF,v:c.off?'0':'1'}]),
     (id?'<button class="b o dz" id="cDel">Delete</button>':'')+
     '<button class="b o" data-close>Cancel</button><button class="b" id="cSave">Save</button>');
   var d=$('#cDel',m); if(d)d.onclick=function(){
@@ -308,7 +338,8 @@ function costEditor(id){
   $('#cSave',m).onclick=function(){
     var o={id:id||uid(),name:$('#cn',m).value.trim()||'Cost',section:$('#cs',m).value,
       who:$('#cw',m).value,low:num($('#cl',m).value),real:num($('#cr',m).value),
-      high:num($('#ch',m).value),actual:num($('#ca',m).value)||null};
+      high:num($('#ch',m).value),actual:num($('#ca',m).value)||null,
+      off:$('#co',m).value==='0'};
     if(id)S.fin.costs=S.fin.costs.map(function(x){return x.id===id?o:x;}); else S.fin.costs.push(o);
     save();m.remove();route();};
 }
@@ -665,6 +696,31 @@ document.addEventListener('click',function(e){
   if((el=t.closest('[data-sess]'))){sessModal(+el.dataset.sess);return;}
   if((el=t.closest('[data-jobe]'))){jobEditor(el.dataset.jobe);return;}
   if((el=t.closest('[data-coste]'))){costEditor(el.dataset.coste);return;}
+
+  /* switches: one line, a whole cost section, one earner, or everything */
+  if((el=t.closest('[data-jobtog]'))){var jid=el.dataset.jobtog;
+    finToggle('jobs',function(x){return x.id===jid;},null);return;}
+  if((el=t.closest('[data-costtog]'))){var cid=el.dataset.costtog;
+    finToggle('costs',function(x){return x.id===cid;},null);return;}
+  if((el=t.closest('[data-secttog]'))){
+    var sect=el.dataset.secttog, pth=S.fin.path||'rent';
+    var anyOn=S.fin.costs.some(function(c){
+      return c.section===sect&&costInPath(c,pth)&&finLive(c);});
+    finToggle('costs',function(c){return c.section===sect&&costInPath(c,pth);},!anyOn);
+    return;}
+  if((el=t.closest('[data-whotog]'))){
+    var wk=el.dataset.whotog;
+    var onNow=S.fin.jobs.some(function(j){return j.who===wk&&finLive(j);});
+    finToggle('jobs',function(j){return j.who===wk;},!onNow);
+    return;}
+  if((el=t.closest('[data-alltog]'))){
+    var ap=el.dataset.alltog.split('|'), want=ap[1]==='1';
+    var pth2=S.fin.path||'rent';
+    var moved=finToggle(ap[0],ap[0]==='costs'
+      ?function(c){return costInPath(c,pth2);}
+      :function(){return true;},want);
+    if(!moved) toast(want?'Everything was already counted':'Everything was already off');
+    return;}
   if((el=t.closest('[data-shd]'))){S.fin.shifts=S.fin.shifts.filter(function(x){
     return x.id!==el.dataset.shd;});save();route();return;}
   if((el=t.closest('[data-scload]'))){

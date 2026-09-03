@@ -524,6 +524,8 @@ transition:.18s var(--ez)}
 /* ------------------------------------------------------------ misc polish */
 :focus-visible{outline:2px solid var(--brass);outline-offset:2px;border-radius:3px}
 .tw table{min-width:560px}
+/* The money tables carry a switch column on top of eight of their own. */
+.tw.wide table{min-width:700px}
 .chip{overflow-wrap:break-word}
 
 @media (max-width:860px){
@@ -654,6 +656,105 @@ background:linear-gradient(to right,transparent,var(--panel))}
 @media (max-width:860px){.g2,.g3{grid-template-columns:1fr}.grid>*{flex:1 1 100%}
 .fr>*{flex:1 1 100%}.stats{grid-template-columns:repeat(2,1fr)}}
 }
+
+/* ---------------- switches ----------------
+   Income and cost lines can be switched out of the totals without being
+   deleted, so the row has to read as "still here, not counted" rather than as
+   an empty slot. The switch is a real button: keyboard reachable, and it says
+   what it does to a screen reader through aria-pressed. */
+.sw{position:relative;flex:none;width:36px;height:20px;padding:0;border:1px solid var(--line-2);
+background:var(--panel-2);border-radius:999px;cursor:pointer;transition:.24s var(--ez)}
+.sw i{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;
+background:var(--ink-4);transition:.24s var(--ez)}
+.sw.on{background:var(--brass);border-color:var(--brass)}
+.sw.on i{transform:translateX(16px);background:var(--on-accent)}
+.sw:hover{border-color:var(--brass)}
+.sw:focus-visible{outline:0;box-shadow:var(--glow)}
+.sw.xs{width:30px;height:17px}
+.sw.xs i{width:11px;height:11px}
+.sw.xs.on i{transform:translateX(13px)}
+/* A switched-off row keeps its numbers legible. Fading it to nothing would
+   hide the figure you are deciding about. */
+tr.offrow{transition:opacity .24s var(--ez)}
+tr.offrow>td{opacity:.44}
+tr.offrow>td:first-child{opacity:1}
+tr.offrow .chip{opacity:.75}
+.offtag{font:700 9px/1 var(--f-body);letter-spacing:.14em;text-transform:uppercase;
+color:var(--ink-4);margin-left:7px;vertical-align:1px}
+
+/* ---------------- charts ---------------- */
+.cempty{padding:26px 4px;text-align:center;color:var(--ink-4);font-size:12.5px}
+.cchart{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:8px;align-items:end}
+.ccol{min-width:0;text-align:center}
+.cstack{position:relative;height:var(--ch,150px);border-bottom:1px solid var(--line)}
+.cb{position:absolute;left:var(--l,8%);right:var(--r,8%);bottom:var(--b,0);height:var(--h,0);
+border-radius:4px 4px 0 0;transform-origin:bottom;
+animation:cgrow .58s var(--ez) both;animation-delay:var(--d,0s)}
+@keyframes cgrow{from{transform:scaleY(0);opacity:.3}to{transform:scaleY(1);opacity:1}}
+.clab{margin-top:9px;font:600 10.5px/1.3 var(--f-body);color:var(--ink-3);
+overflow-wrap:break-word;hyphens:auto}
+.csub{margin-top:4px;font:700 12px/1 var(--f-mono);color:var(--ink)}
+.csub.good{color:var(--sage)}.csub.bad{color:var(--clay)}
+.ct1{background:var(--brass)}.ct2{background:var(--sage)}.ct3{background:var(--steel)}
+.ct4{background:var(--amber)}.ct5{background:var(--clay)}.ct6{background:var(--ink-4)}
+.ctg{background:var(--sage)}.ctb{background:var(--clay)}.ctm{background:var(--line-2)}
+
+.cdonut{position:relative;width:100%;max-width:210px;margin:0 auto}
+.cdonut svg{display:block;width:100%;height:auto}
+.cdonut circle{fill:none;stroke-width:13}
+.cdtrack{stroke:var(--panel-2)}
+.cdseg{stroke-linecap:butt;stroke-dasharray:var(--len) 100;
+animation:cdsweep .78s var(--ez) both;animation-delay:var(--d,0s)}
+@keyframes cdsweep{from{stroke-dasharray:0 100}to{stroke-dasharray:var(--len) 100}}
+.cdseg.ct1{stroke:var(--brass)}.cdseg.ct2{stroke:var(--sage)}.cdseg.ct3{stroke:var(--steel)}
+.cdseg.ct4{stroke:var(--amber)}.cdseg.ct5{stroke:var(--clay)}.cdseg.ct6{stroke:var(--ink-4)}
+.cdmid{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
+justify-content:center;pointer-events:none;text-align:center;padding:0 22px}
+.cdmid b{font:700 21px/1 var(--f-mono);letter-spacing:-.03em;color:var(--ink)}
+.cdmid span{margin-top:6px;font:700 8.5px/1 var(--f-body);letter-spacing:.18em;
+text-transform:uppercase;color:var(--ink-4)}
+
+.cline{display:block;width:100%;height:auto;overflow:visible}
+.cpath{fill:none;stroke:var(--brass);stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;
+stroke-dasharray:1;animation:cdraw 1s var(--ez) both}
+@keyframes cdraw{from{stroke-dashoffset:1}to{stroke-dashoffset:0}}
+.carea{fill:url(#cgFill);stroke:none;animation:cfade .9s var(--ez) both;animation-delay:.25s}
+@keyframes cfade{from{opacity:0}to{opacity:1}}
+.cgs0{stop-color:var(--brass);stop-opacity:.28}
+.cgs1{stop-color:var(--brass);stop-opacity:0}
+.cline.neg .cpath{stroke:var(--clay)}
+.cline.neg .cgs0{stop-color:var(--clay)}
+.cline.neg .cgs1{stop-color:var(--clay)}
+.czero{stroke:var(--line-2);stroke-width:1;stroke-dasharray:4 4}
+.cdot{fill:var(--brass);stroke:var(--panel);stroke-width:1.6;
+animation:cpop .3s var(--ez) both;animation-delay:var(--d,0s)}
+.cline.neg .cdot{fill:var(--clay)}
+@keyframes cpop{from{transform:scale(0);opacity:0}to{transform:scale(1);opacity:1}}
+.caxis{display:flex;justify-content:space-between;margin-top:8px;
+font:600 10.5px/1 var(--f-body);color:var(--ink-4)}
+
+.cleg{margin-top:16px}
+.clrow{display:flex;align-items:center;gap:9px;padding:7px 0;border-top:1px solid var(--line);
+font-size:13px;transition:opacity .24s var(--ez)}
+.clrow:first-child{border-top:0}
+.clrow.off{opacity:.45}
+.cdotc{width:9px;height:9px;border-radius:2.5px;flex:none}
+.cln{flex:1 1 auto;min-width:0;overflow-wrap:break-word}
+.clv{font-family:var(--f-mono);font-weight:700;font-size:12.5px}
+.clp{font-family:var(--f-mono);font-size:11px;color:var(--ink-4);width:38px;text-align:right}
+.ckey{display:flex;flex-wrap:wrap;gap:7px 15px;margin-top:14px;
+font:600 11px/1 var(--f-body);color:var(--ink-3)}
+.ckey span{display:inline-flex;align-items:center;gap:6px}
+.ckey i{width:9px;height:9px;border-radius:2.5px;display:block}
+/* A view redrawn because a switch was flipped should not slide in again; the
+   charts still replay, which is the part that carries the change. */
+.page.noanim{animation:none}
+@media (max-width:560px){
+.cchart{gap:5px}
+.clab{font-size:9.5px}
+.csub{font-size:11px}
+}
+
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 """
