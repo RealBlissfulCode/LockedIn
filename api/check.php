@@ -48,6 +48,7 @@ check('Google client id set', $clientId !== '',
 /* ---- database ---- */
 $pdo = null;
 $dbErr = '';
+$dbFix = '';
 if ($cfgOk) {
     try {
         $pdo = new PDO(
@@ -56,14 +57,55 @@ if ($cfgOk) {
             [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_TIMEOUT => 5]
         );
     } catch (Throwable $e) {
-        /* The driver puts the username and host in the message, so only the
-           SQLSTATE goes on screen. */
-        $dbErr = 'SQLSTATE ' . (string) ($e->getCode() ?: '?');
+        /* MySQL puts the username and the host in the message, so the message
+           itself never goes on screen. It is only read here to work out which
+           of the four things is wrong, because "check your settings" is not
+           advice when there are four of them. */
+        $msg = $e->getMessage();
+        $code = (string) ($e->getCode() ?: '');
+        if (str_contains($msg, '1045') || $code === '1045' || $code === '28000') {
+            $dbErr = 'Access denied. The username or the password is wrong.';
+            $dbFix = 'In hPanel go to Databases, Management. The list there shows the real '
+                   . 'database name and the real username, and both start with your account '
+                   . 'prefix, so they look like u123456789_lockedin rather than lockedin. '
+                   . 'Copy them exactly. If you cannot remember the password, use Change '
+                   . 'password on that user and paste the new one into config.php.';
+        } elseif (str_contains($msg, '1049') || str_contains($msg, 'Unknown database')) {
+            $dbErr = 'Connected to MySQL, but there is no database with that name.';
+            $dbFix = 'db_name has to be the full name from hPanel, Databases, Management, '
+                   . 'including the account prefix.';
+        } elseif (str_contains($msg, '1044')) {
+            $dbErr = 'That user exists but has no rights on that database.';
+            $dbFix = 'In hPanel, Databases, Management, check the user is attached to this '
+                   . 'database with all privileges.';
+        } elseif (str_contains($msg, '2002') || str_contains($msg, '2005')
+               || str_contains($msg, 'No such file') || str_contains($msg, 'Unknown MySQL server')) {
+            $dbErr = 'Cannot reach a MySQL server at that host.';
+            $dbFix = 'On Hostinger db_host is localhost, even though hPanel shows a longer '
+                   . 'hostname next to the database.';
+        } else {
+            $dbErr = 'SQLSTATE ' . ($code ?: '?');
+            $dbFix = 'Check db_host, db_name, db_user and db_pass in config.php against '
+                   . 'hPanel, Databases, Management.';
+        }
     }
 }
-check('Database connects', $pdo !== null, $dbErr,
-      'Check db_host, db_name, db_user and db_pass in config.php. On Hostinger the '
-      . 'host is localhost and the user and database both start with your account prefix.');
+check('Database connects', $pdo !== null, $dbErr, $dbFix);
+
+/* Only worth saying when the connection actually failed, and it is the single
+   most common reason it does. Neither value is printed, only its shape. */
+if ($cfgOk && $pdo === null) {
+    $u = (string) ($c['db_user'] ?? '');
+    $n = (string) ($c['db_name'] ?? '');
+    $looksPrefixed = (bool) preg_match('/^u\d+_/', $u) && (bool) preg_match('/^u\d+_/', $n);
+    check('Username and database look prefixed', $looksPrefixed,
+          $looksPrefixed
+            ? 'Both start with an account prefix'
+            : 'One of them has no u..._ prefix on it',
+          'Shared hosting almost always prefixes both, so the real values look like '
+          . 'u123456789_lockedin. Using the short name you typed when creating them is '
+          . 'the usual cause of access denied.');
+}
 
 $want = ['accounts', 'households', 'members', 'invites', 'docs', 'sessions'];
 $have = [];
