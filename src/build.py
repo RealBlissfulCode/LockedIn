@@ -10,16 +10,14 @@ the aisle map in ingredient_list.py, and the JSON files next to this script.
 Macros are computed from gram weights, costs from the price table, tags from the
 macros. Nothing is typed by hand into index.html.
 
-Anything personal (what we earn, what we owe, where we might live, the strategy
-lists and the plans) lives in private_seed.py and is ENCRYPTED into the page with
-the passcode, so View Source shows ciphertext and nothing else. See crypto_box().
+Nothing personal is in here any more. The page ships the recipe book, the
+exercise database and the application code, all of it generic. Everything about
+a person arrives from the API after they sign in, which is the only way it can
+work when the person is not us.
 """
 import argparse
-import hashlib
-import hmac
 import json
 import os
-import struct
 import sys
 from collections import Counter
 
@@ -36,16 +34,16 @@ from recipes_3 import RECIPES_3                  # noqa: E402
 from recipes_4 import RECIPES_4                  # noqa: E402
 from recipes_5 import RECIPES_5                  # noqa: E402
 from recipes_6 import RECIPES_6                  # noqa: E402
-import private_seed as SEED                      # noqa: E402
 from app_core import APP_CORE                    # noqa: E402
+from app_auth import APP_AUTH                    # noqa: E402
+from app_state import APP_STATE                  # noqa: E402
+from app_setup import APP_SETUP, APP_PLANNER, APP_HOUSEHOLD  # noqa: E402
 from app_charts import APP_CHARTS                # noqa: E402
-from app_sync import APP_SYNC                    # noqa: E402
 from app_views1 import APP_VIEWS1                # noqa: E402
 from app_views2 import APP_VIEWS2                # noqa: E402
 from app_wire import APP_WIRE                    # noqa: E402
 from spa_css import APP_CSS                      # noqa: E402
-from gate import GATE_HTML, GATE_JS              # noqa: E402
-from sync_php import SYNC_PHP                    # noqa: E402
+from gate import GATE_HTML                       # noqa: E402
 
 RECIPES = RECIPES_1 + RECIPES_2 + RECIPES_3 + RECIPES_4 + RECIPES_5 + RECIPES_6
 
@@ -55,68 +53,6 @@ NUTS = ["kcal", "p", "c", "f", "fib", "leu", "ca", "fe", "mg", "k", "zn", "na",
 DV = {"ca": 1300, "fe": 18, "mg": 420, "k": 4700, "zn": 11, "b12": 2.4, "vitd": 20}
 MICRO_NAME = {"ca": "CALCIUM", "fe": "IRON", "mg": "MAGNESIUM",
               "k": "POTASSIUM", "zn": "ZINC"}
-
-# The passcode. Changing it here changes it everywhere on the next build, and
-# invalidates any copy of index.html built with the old one.
-PASSCODE = "2121"
-
-# PBKDF2 rounds. High enough to make guessing a four digit code annoying, low
-# enough that an unlock on a phone still feels instant. ~250ms on a mid phone.
-KDF_ROUNDS = 200000
-
-# Fixed so a rebuild with unchanged content produces an unchanged file, which is
-# what makes --check meaningful. The salt is not a secret; the passcode is.
-SALT = b"handbook-v6-seed"
-NONCE = b"\x11\x9c\x3e\x57\xa2\x08\xd4\x6b\x71\x2f\x93\xbc"
-
-
-# ------------------------------------------------------------------- crypto
-# HMAC-SHA256 in counter mode, encrypt-then-MAC. Both sides are dependency free:
-# stdlib here, WebCrypto in the browser. The goal is confidentiality of the seed
-# against someone reading the served file, which this gives. It is not a defence
-# against someone who already knows the passcode.
-
-def _derive(passcode):
-    """passcode -> (encryption key, mac key)."""
-    dk = hashlib.pbkdf2_hmac("sha256", passcode.encode("utf-8"), SALT, KDF_ROUNDS, 64)
-    return dk[:32], dk[32:]
-
-
-def _keystream(key, nbytes):
-    out = bytearray()
-    counter = 0
-    while len(out) < nbytes:
-        block = hmac.new(key, NONCE + struct.pack(">I", counter), hashlib.sha256).digest()
-        out += block
-        counter += 1
-    return bytes(out[:nbytes])
-
-
-def sync_token(passcode):
-    """What the browser will send to api/sync.php.
-
-    It is a hash of the mac key the gate already derives, so the endpoint is
-    exactly as private as the passcode and the client has nothing extra to
-    remember. Storing the hash rather than the key means the PHP file does not
-    contain anything that can be replayed as-is.
-    """
-    _enc, mac = _derive(passcode)
-    return hashlib.sha256(mac).hexdigest()
-
-
-def crypto_box(obj, passcode):
-    """Encrypt a JSON-able object. Returns a dict the browser can decrypt."""
-    plain = json.dumps(obj, separators=(",", ":")).encode("utf-8")
-    enc_key, mac_key = _derive(passcode)
-    ks = _keystream(enc_key, len(plain))
-    cipher = bytes(a ^ b for a, b in zip(plain, ks))
-    tag = hmac.new(mac_key, NONCE + cipher, hashlib.sha256).hexdigest()[:32]
-    import base64
-    return {"v": 1, "n": NONCE.hex(), "s": SALT.decode("ascii"), "r": KDF_ROUNDS,
-            "t": tag, "d": base64.b64encode(cipher).decode("ascii")}
-
-
-# ---------------------------------------------------------------- computation
 
 def compute(r):
     """Per-serving nutrition, summed from the gram weights of the ingredients."""
@@ -144,6 +80,62 @@ def satiety(per, cat):
 def difficulty(r):
     t = r["prep"] + r["cook"]
     return ("EASY" if t <= 10 else ("MODERATE" if t <= 25 else "ADVANCED")), t
+
+
+# Diet flags, worked out from the ingredient keys rather than typed per recipe.
+# The signup questionnaire filters on these, so getting one wrong means somebody
+# with an allergy gets shown food they cannot eat. Anything not clearly safe is
+# treated as containing the thing.
+DAIRY = {"milk_2", "milk_skim", "whey_isolate", "casein_powder", "greek_yogurt_0",
+         "greek_yogurt_2", "cottage_cheese_2", "cottage_cheese_4", "cheddar", "feta",
+         "mozzarella_part_skim", "parmesan", "cream_cheese_whipped", "butter",
+         "ricotta_part_skim", "sour_cream_light", "string_cheese", "kefir_plain",
+         "heavy_cream", "half_and_half", "ice_cream_vanilla", "milk_choc"}
+EGG = {"egg_whole", "egg_white", "mayo_olive", "mayo_light"}
+PEANUT = {"pb_powder", "peanut_butter", "peanuts", "pb2_choc"}
+TREENUT = {"almonds", "almond_butter", "almond_milk_unsw", "cashews", "walnuts",
+           "pecans", "pistachios", "almond_flour", "coconut_flour"}
+SOY = {"edamame_shelled", "tofu_firm", "tempeh", "soy_sauce_gf", "soy_milk",
+       "miso_paste", "tamari"}
+FISH = {"canned_salmon", "canned_tuna", "cod", "salmon_fillet", "shrimp", "tilapia",
+        "sardines", "fish_sauce", "worcestershire"}
+MEAT = {"chicken_breast", "chicken_thigh", "ground_turkey_93", "ground_beef_90",
+        "ground_beef_93", "steak_sirloin", "pork_tenderloin", "bacon_turkey",
+        "deli_turkey", "rotisserie_chicken", "beef_jerky", "ham_deli", "sausage_chicken"}
+CORN = {"corn_tortilla", "cornmeal_polenta", "cornstarch", "corn_kernels", "popcorn",
+        "tortilla_chips", "corn_flour"}
+
+
+def diet_flags(keys):
+    """What a recipe is free of, from the ingredient keys it uses."""
+    ks = set(keys)
+    has_dairy = bool(ks & DAIRY)
+    has_egg = bool(ks & EGG)
+    has_fish = bool(ks & FISH)
+    has_meat = bool(ks & MEAT)
+    out = []
+    if not (has_meat or has_fish):
+        out.append("vegetarian")
+        if not (has_dairy or has_egg):
+            out.append("vegan")
+    if not has_dairy:
+        out.append("dairyfree")
+    if not (ks & PEANUT):
+        out.append("peanutfree")
+    if not (ks & TREENUT):
+        out.append("treenutfree")
+    if not (ks & SOY):
+        out.append("soyfree")
+    if not has_egg:
+        out.append("eggfree")
+    if not (ks & CORN):
+        out.append("cornfree")
+    if not has_fish:
+        out.append("fishfree")
+    # Every recipe in the book is gluten free by construction, which is the
+    # whole premise of the set, so it is asserted rather than derived.
+    out.append("glutenfree")
+    return out
 
 
 def autotags(r, per, sat_lvl):
@@ -260,6 +252,7 @@ def build_public():
             "k": round(per["kcal"]), "p": round(per["p"], 1), "c": round(per["c"], 1),
             "f": round(per["f"], 1), "fib": round(per["fib"], 1), "leu": round(per["leu"], 2),
             "tg": autotags(r, per, lvl),
+            "df": diet_flags([i[0] for i in r["ing"]]),
             "cw": round(w, 2), "cws": round(ws, 2), "cc": round(c, 2), "ccs": round(cs, 2),
             "ing": [[m, k, g] for k, g, m in r["ing"]],
             "st": r["steps"], "storage": r.get("storage", ""), "prep": r.get("prep_notes", ""),
@@ -292,21 +285,9 @@ def build_public():
     return blob, issues
 
 
-def build_private():
-    """Everything personal. This is what gets encrypted."""
-    return {
-        "costs": load_json("costs.json"),
-        "jobs": load_json("jobs.json"),
-        "purchases": SEED.PURCHASES,
-        "strategies": SEED.STRATEGIES,
-        "planning": SEED.PLANNING,
-    }
-
-
-# The recipe and exercise database ships unencrypted, because it is generic and
-# because base64 does not compress: sealing it would turn ~150 KB over the wire
-# into ~1.3 MB. The trade only holds while nothing personal is in it, so the
-# build refuses to produce a file that leaks one of these.
+# The whole page is public now, so this guard matters more than it used to, not
+# less. If one of these reaches a build it means somebody typed something real
+# into a file that is meant to hold nothing but examples.
 FORBIDDEN = ["Aaliyah", "Jaron", "Ritchey", "CRMO", "Timnath", "Zoup", "MysticNoob",
              "CHFA", "Windsor", "Loveland", "Larimer", "Blissful", "Fort Collins"]
 
@@ -355,45 +336,28 @@ SHELL_BODY = (
 )
 
 
-def sync_php_text():
-    return SYNC_PHP.replace("__TOKEN__", sync_token(PASSCODE))
-
-
-def write_sync_php():
-    d = os.path.join(ROOT, "api")
-    if not os.path.isdir(d):
-        os.makedirs(d)
-    with open(os.path.join(d, "sync.php"), "w", encoding="utf-8", newline="\n") as fh:
-        fh.write(sync_php_text())
-
-
 def render_html():
     public, issues = build_public()
 
     leaks = check_public(public)
     if leaks:
-        raise SystemExit("REFUSING TO BUILD: personal text in the unencrypted data blob\n  "
+        raise SystemExit("REFUSING TO BUILD: personal text in the shipped data\n  "
                          + "\n  ".join(leaks)
-                         + "\n\nEither reword it in src/, or move it into private_seed.py.")
+                         + "\n\nReword it in src/. Nothing personal belongs in a build now.")
 
+    # Nothing is encrypted any more and nothing needs to be. Everything the page
+    # carries is generic, and everything about a person arrives from the API
+    # after they sign in.
     app_js = ("(function(){\n'use strict';\nvar _D=window._DATA;\n"
-              + APP_CORE + APP_CHARTS + APP_SYNC + APP_VIEWS1 + APP_VIEWS2 + APP_WIRE
-              + "\n})();\n")
+              + APP_CORE + APP_CHARTS + APP_AUTH + APP_STATE + APP_SETUP + APP_PLANNER + APP_HOUSEHOLD
+              + APP_VIEWS1 + APP_VIEWS2 + APP_WIRE
+              + "\nboot();\n})();\n")
 
-    # The application code is sealed along with the data. It carries our names,
-    # our employers and the placeholder text in every editor, so shipping it in
-    # the clear would defeat the point of encrypting the seed. Decrypting ~320 KB
-    # measures around 115 ms in a browser, which is well inside the unlock.
-    sealed = build_private()
-    sealed["app"] = app_js
-    box = crypto_box(sealed, PASSCODE)
-
-    data_js = ("window._DATA=" + json.dumps(public, separators=(",", ":")) + ";\n"
-               "window._SEALED=" + json.dumps(box, separators=(",", ":")) + ";\n")
+    data_js = "window._DATA=" + json.dumps(public, separators=(",", ":")) + ";\n"
 
     html = (SHELL_HEAD + APP_CSS + SHELL_BODY
             + '<script>' + data_js + '</script>'
-            + '<script>' + GATE_JS + '</script>'
+            + '<script>' + app_js + '</script>'
             + '</body></html>')
     return html, public, issues
 
@@ -422,13 +386,6 @@ def main():
         stale = []
         if current != html:
             stale.append("index.html")
-        php_path = os.path.join(ROOT, "api", "sync.php")
-        php_now = ""
-        if os.path.exists(php_path):
-            with open(php_path, encoding="utf-8", newline="") as fh:
-                php_now = fh.read()
-        if php_now != sync_php_text():
-            stale.append("api/sync.php")
         if stale:
             print("STALE: %s" % ", ".join(stale))
             print("Run: python3 src/build.py")
@@ -442,8 +399,6 @@ def main():
     # byte-identical on every platform or --check means nothing.
     with open(out, "w", encoding="utf-8", newline="\n") as fh:
         fh.write(html)
-
-    write_sync_php()
 
     if not args.quiet:
         print("index.html  %.0f KB" % (len(html) / 1024.0))

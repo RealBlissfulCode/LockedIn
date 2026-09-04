@@ -763,6 +763,65 @@ font:600 11px/1 var(--f-body);color:var(--ink-3)}
 .csub{font-size:11px}
 }
 
+
+/* ---------------- sign in ----------------
+   The gate box was built for a keypad. It now holds a Google button, an invite
+   code, or an error, so it needs to breathe a bit more than it did. */
+.gbtn{display:flex;justify-content:center;margin:22px 0 6px;min-height:44px}
+.gwait{font:600 13px/1 var(--f-body);color:var(--ink-3);padding:13px}
+.glink{background:none;border:0;color:var(--ink-3);font:600 12.5px/1 var(--f-body);
+cursor:pointer;padding:10px;margin-top:6px;text-decoration:underline;
+text-underline-offset:3px}
+.glink:hover{color:var(--brass)}
+.gcode{width:100%;margin:18px 0 4px;padding:14px;text-align:center;
+font:700 22px/1 var(--f-mono);letter-spacing:.32em;text-indent:.32em;
+border:1px solid var(--line-2);border-radius:var(--r);background:var(--bg-2);color:var(--ink)}
+.gcode:focus{outline:0;border-color:var(--brass);box-shadow:var(--glow)}
+.gfound{padding:13px;border:1px solid var(--line);border-radius:var(--r);
+background:var(--panel-2);margin-top:12px}
+.gfound b{display:block;font-size:15px}
+.gfound span{display:block;font-size:12px;color:var(--ink-3);margin-top:3px}
+
+/* An invite code is read out loud and typed on a phone, so it gets spacing. */
+.invcode{font-family:var(--f-mono);letter-spacing:.14em}
+.invbig{font:700 30px/1 var(--f-mono);letter-spacing:.22em;text-align:center;
+padding:22px 10px;margin:16px 0;border:1px dashed var(--line-2);border-radius:var(--r);
+background:var(--panel-2);color:var(--brass);word-break:break-all}
+
+/* Signing up is the one screen with no app behind it yet, so everything that
+   navigates gets out of the way. */
+body.signup .tabs,body.signup .btmnav,body.signup .whoswitch,
+body.signup #syncSlot,body.signup #settings{display:none}
+body.signup{padding-bottom:20px}
+body.signup .wrap{padding-top:34px}
+
+/* ---------------- signup wizard ----------------
+   Same components as the rest of the app, just given room. Somebody is doing
+   this once and every question has to look answerable. */
+.setup{max-width:720px;margin:0 auto}
+.setuphead{margin-bottom:26px}
+.setuphead h1{font-size:29px;letter-spacing:-.03em;margin:0 0 8px}
+.setuphead p{color:var(--ink-3);margin:0;max-width:62ch}
+.setupbar{height:3px;background:var(--panel-2);border-radius:99px;overflow:hidden;margin-bottom:16px}
+.setupbar i{display:block;height:100%;background:var(--brass);border-radius:99px;
+transition:width .45s var(--ez)}
+.setupstep{font:700 9.5px/1 var(--f-body);letter-spacing:.2em;text-transform:uppercase;
+color:var(--ink-4);margin:0 0 10px}
+.setupfoot{display:flex;gap:10px;justify-content:flex-end;margin-top:30px;
+padding-top:20px;border-top:1px solid var(--line)}
+.picks{display:grid;gap:9px;grid-template-columns:repeat(auto-fit,minmax(216px,1fr))}
+.pick{text-align:left;padding:14px 16px;border:1px solid var(--line-2);border-radius:var(--r);
+background:var(--panel);cursor:pointer;transition:.18s var(--ez);color:var(--ink)}
+.pick:hover{border-color:var(--brass);transform:translateY(-1px)}
+.pick b{display:block;font-size:14px;font-weight:600}
+.pick span{display:block;font-size:12px;color:var(--ink-3);margin-top:4px;line-height:1.45}
+.pick.on{border-color:var(--brass);background:var(--panel-2);box-shadow:var(--glow)}
+.pick.on b{color:var(--brass)}
+@media (max-width:560px){
+.setuphead h1{font-size:23px}
+.picks{grid-template-columns:1fr}
+}
+
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 """

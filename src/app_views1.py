@@ -57,7 +57,7 @@ function vMeals(){
   return '<div class="page"><div class="phead"><h1>Meals</h1>'+
    '<p>'+all().length+' recipes, all gluten-free. Average '+$$$(avgCost())+' a serving at the cheaper of Walmart or Costco.</p></div>'+
 
-   '<div class="sec"><h2>What '+(S.who==='j'?'I':E(P().name))+' need today</h2>'+
+   '<div class="sec"><h2>What '+(shared()?E(P().name)+' needs':'I need')+' today</h2>'+
    '<p class="sub">Adjusted for '+TRAIN[d.workout].n.toLowerCase()+'. Change it on the Training tab.</p>'+
    '<div class="grid g2"><div class="card pad">'+statRow(tgt)+
    '<div class="mrow" style="margin-top:16px"></div>'+
@@ -99,7 +99,8 @@ function vMeals(){
      ['HIGH FIBER','High fiber']],flt.tag)+'</select></label>'+
    '<label class="f"><span>Sort</span><select id="fsort">'+opt([['rec','Protein'],['cheap','Cheapest'],
      ['t','Fastest'],['k','Most calories'],['az','A to Z']],flt.sort)+'</select></label></div>'+
-   '<div class="row"><button class="b o s" id="addOwn">Add my own recipe</button>'+
+   '<div class="row"><button class="b s" data-nav="mealplan">Make a meal plan</button>'+
+   '<button class="b o s" id="addOwn">Add my own recipe</button>'+
    '<button class="b o s" data-nav="lists">Recipe lists'+
    (Object.keys(S.lists||{}).length?' <span class="chip p">'+Object.keys(S.lists).length+'</span>':'')+
    '</button>'+

@@ -8,32 +8,89 @@ APP_CORE = r"""
    ============================================================ */
 var R=_D.recipes, BASEING=_D.ing, AISLES=_D.aisles, LEARN=_D.learn;
 var EX=_D.exercises, SESS=_D.sessions;
-/* Everything personal arrives decrypted from the gate, never from _D. */
-var SEED=window._SEED||{};
-var SEEDCOST=SEED.costs||[], SEEDJOB=SEED.jobs||[];
-var KEY='handbook.v5';
+/* Local cache of the signed in account's state. The server holds the copy that
+   matters; this is what makes the app usable on a plane. */
+var KEY='lockedin.v7';
 
 /* ---------------- state ---------------- */
+/* A fresh account is one person and nothing else. No second profile waiting to
+   be renamed, no seeded shopping list, no costs already filled in. Everything
+   in here past the first member is something you chose to add. */
+function blankMember(name,sex){
+  return {id:uid(),name:name||'Me',sex:sex||'m',w:null,h:null,age:null,bf:null,
+          act:1.45,goal:1,pf:1,accent:''};
+}
 function DEF(){return{
- v:6, who:'j', savedAt:null, theme:'dark',
- prof:{j:{name:'Me',sex:'m',w:150,h:68,age:20,bf:20,act:1.55,goal:1.09,pf:1.1},
-       a:{name:'Aaliyah',sex:'f',w:120,h:66.5,age:20,bf:24,act:1.45,goal:1.0,pf:0.8}},
+ v:7, who:null, savedAt:null, theme:'dark',
+ members:[], household:'',
  ingOv:{}, fav:[], lists:{}, mine:[], photos:{},
- shop:{active:'Weekly shop', lists:{'Weekly shop':{cat:'Groceries',fav:true,items:[]}}},
+ shop:{active:null, lists:{}},
  days:{},
  fin:{jobs:[],shifts:[],costs:[],scenarios:{},purchases:{},strategies:{},
       costMode:'real',path:'rent',activeScenario:null, draft:null},
  plan:{cols:[]},
  sched:{tmpl:{}, cols:[]},
- exLog:{}, seeded:false, seeded6:false
+ exLog:{}, prefs:{}, onboarded:false, seeded:false, seeded6:false
 };}
+/* Anything saved before the household rewrite has two profiles and rows tagged
+   with names. Turn those two profiles into members, then walk every row that
+   ever stored a person and swap the name for the new id. Miss one and an
+   income line ends up belonging to nobody, so the list below is the full set
+   of places a person token was ever written. */
+function migrateToMembers(o){
+  if(o.members&&o.members.length) return o;
+  var map={};
+  o.members=[];
+  ['j','a'].forEach(function(k){
+    var pr=(o.prof||{})[k]; if(!pr) return;
+    var m=blankMember(pr.name||(k==='j'?'Me':'Her'),pr.sex||(k==='j'?'m':'f'));
+    ['w','h','age','bf','act','goal','pf'].forEach(function(f){
+      if(pr[f]!==undefined&&pr[f]!==null) m[f]=pr[f];});
+    o.members.push(m);
+    map[k]=m.id;
+  });
+  /* The old fixed tokens, and the names they were showing under. */
+  map['Jaron']=map.j; map['Aaliyah']=map.a; map['Both']=EVERYONE;
+  if((o.prof||{}).j&&o.prof.j.name) map[o.prof.j.name]=map.j;
+  if((o.prof||{}).a&&o.prof.a.name) map[o.prof.a.name]=map.a;
+
+  function fix(v){
+    if(v===undefined||v===null||v==='') return v;
+    if(map[v]!==undefined) return map[v];
+    return v;
+  }
+  o.who=map[o.who]||map.j||null;
+
+  (o.fin&&o.fin.jobs||[]).forEach(function(x){x.who=fix(x.who);});
+  (o.fin&&o.fin.costs||[]).forEach(function(x){x.who=fix(x.who);});
+  Object.keys(o.fin&&o.fin.scenarios||{}).forEach(function(n){
+    var sc=o.fin.scenarios[n]||{};
+    (sc.jobs||[]).forEach(function(x){x.who=fix(x.who);});
+    (sc.costs||[]).forEach(function(x){x.who=fix(x.who);});
+  });
+  Object.keys(o.days||{}).forEach(function(ds){
+    var d=o.days[ds]||{};
+    if(d.trainWho) d.trainWho=fix(d.trainWho);
+    (d.meals||[]).forEach(function(x){x.who=fix(x.who);});
+    (d.sched||[]).forEach(function(x){x.who=fix(x.who);});
+  });
+  ((o.sched||{}).cols||[]).forEach(function(c){
+    Object.keys(c.days||{}).forEach(function(k){
+      (c.days[k]||[]).forEach(function(x){x.who=fix(x.who);});});
+  });
+  Object.keys((o.sched||{}).tmpl||{}).forEach(function(k){
+    (o.sched.tmpl[k]||[]).forEach(function(x){x.who=fix(x.who);});
+  });
+  delete o.prof;
+  o.v=7;
+  return o;
+}
 var S=(function(){
   try{var raw=localStorage.getItem(KEY);
     if(raw){var o=JSON.parse(raw),d=DEF();
       for(var k in d) if(!(k in o)) o[k]=d[k];
-      for(var p in d.prof) if(!o.prof[p]) o.prof[p]=d.prof[p];
       for(var f in d.fin) if(!(f in o.fin)) o.fin[f]=d.fin[f];
-      return o;}
+      return migrateToMembers(o);}
   }catch(e){}
   return DEF();
 })();
@@ -43,49 +100,10 @@ function save(){ S.savedAt=Date.now();
   catch(e){toast('Storage full. Save to file, then remove some photos.');}
   try{syncSchedule();}catch(e){}}
 
-/* Seed from the Moving In workbook, ONCE per browser.
-
-   These are not templates and they are not owned by the app. The moment they
-   land they are ordinary rows: rename them, edit them, delete them, and they
-   stay however you left them. Nothing here re-appears on the next deploy, and
-   deleting the last strategy list does not bring it back. The flags below are
-   the whole mechanism. */
-if(!S.seeded){
-  S.fin.costs=SEEDCOST.map(function(c,i){return{id:'c'+i,name:c.name,section:c.section,
-    who:c.who,low:c.low,real:c.real,high:c.high,actual:c.exact||null};});
-  S.fin.jobs=SEEDJOB.map(function(j,i){return{id:'j'+i,who:j.who,name:j.name,
-    employer:j.employer,title:j.title,rate:null,low:j.low,real:j.real,high:j.high};});
-  S.seeded=true; save();
-}
-if(!S.seeded6){
-  var SP=SEED.purchases||{}, SS=SEED.strategies||{}, SL=SEED.planning||[];
-  /* Only fill a slot that is genuinely empty, so nothing you already made is
-     touched and a list you deleted before this build does not come back. */
-  Object.keys(SP).forEach(function(n){
-    if(S.fin.purchases[n]) return;
-    S.fin.purchases[n]={cat:SP[n].cat,note:SP[n].note||'',
-      items:SP[n].items.map(function(it){
-        return {id:uid(),name:it.name,price:it.price,link:it.link||'',
-                notes:it.notes||'',fields:it.fields||{}};})};
-  });
-  Object.keys(SS).forEach(function(n){
-    if(S.fin.strategies[n]) return;
-    S.fin.strategies[n]={note:SS[n].note||'',
-      items:SS[n].items.map(function(it){
-        return {id:uid(),name:it.name,low:it.low,real:it.real,high:it.high,
-                rate:it.rate||'',effort:it.effort||'',when:it.when||'',
-                status:it.status||'',how:it.how||''};})};
-  });
-  SL.forEach(function(c){
-    if(S.plan.cols.some(function(x){return x.name===c.name;})) return;
-    S.plan.cols.push({id:uid(),name:c.name,note:c.note||'',
-      subs:(c.subs||[]).map(function(s){
-        return {id:uid(),name:s.name,note:s.note||'',
-          items:(s.items||[]).map(function(i){
-            return {id:uid(),text:i.text,note:i.note||'',done:false};})};})});
-  });
-  S.seeded6=true; save();
-}
+/* The old build shipped one household's costs, jobs, purchase lists and plans
+   baked into the page and dropped them into the first browser that opened it.
+   A product cannot do that. New accounts start empty and get their starting
+   points from onboarding instead, which is in app_setup. */
 
 /* There used to be exactly one weekly template. Fold whatever is in it into a
    collection so nothing already entered is lost, and clear the old slot so this
@@ -182,6 +200,51 @@ function applyCollection(id,scope){
   return n;
 }
 
+/* ---------------- who is who ----------------
+   The app used to know about exactly two people, stored as prof.j and prof.a,
+   with rows tagged 'Jaron', 'Aaliyah' or 'Both'. That worked for one household
+   and nothing else. Now a household is a list of members, each with an id, and
+   a row is tagged with that id or with 'all' for something shared.
+
+   Everything user facing goes through WHO so renaming somebody updates the
+   whole app at once, and nothing stored ever holds a name. */
+var EVERYONE='all';
+function MEMS(){return S.members||[];}
+function MEM(id){
+  var m=MEMS();
+  for(var i=0;i<m.length;i++) if(m[i].id===id) return m[i];
+  return null;
+}
+function firstMember(){var m=MEMS();return m.length?m[0]:null;}
+/* Whoever is selected up top is the default actor for anything logged. If the
+   selection points at somebody who has since been removed, fall back rather
+   than handing every caller a null. */
+function ME(){
+  if(S.who&&MEM(S.who)) return S.who;
+  var f=firstMember();
+  return f?f.id:null;
+}
+function P(){return MEM(ME())||blankMember();}
+function WHO(tok){
+  if(tok===EVERYONE) return MEMS().length>2?'Everyone':'Both of us';
+  var m=MEM(tok);
+  return m?m.name:'';
+}
+function MENAME(){return WHO(ME());}
+function whoOpts(){
+  var o=MEMS().map(function(m){return [m.id,m.name];});
+  if(MEMS().length>1) o.push([EVERYONE,MEMS().length>2?'Everyone':'Both of us']);
+  return o;
+}
+/* Only ever true when there is somebody else to share with, so a solo account
+   never sees a Who dropdown offering to split things with nobody. */
+function shared(){return MEMS().length>1;}
+/* Every token a row can be tagged with, members first and the shared bucket
+   last, for anything that groups by person. */
+function whoTokens(){
+  return MEMS().map(function(m){return m.id;}).concat([EVERYONE]);
+}
+
 /* ---------------- helpers ---------------- */
 function $(s,r){return (r||document).querySelector(s);}
 function $$(s,r){return [].slice.call((r||document).querySelectorAll(s));}
@@ -233,21 +296,6 @@ function applyTheme(){
   }
   document.documentElement.setAttribute('data-theme',t);
 }
-function P(){return S.prof[S.who];}
-/* whoever is selected up top is the default actor for anything logged */
-/* Rows are stored against the fixed tokens 'Jaron', 'Aaliyah' and 'Both' so a
-   rename never orphans an income line or a shift. Only what is shown on screen
-   follows the profile name, which is what WHO is for. Anything user-facing goes
-   through it; anything saved keeps the token. */
-function ME(){return S.who==='j'?'Jaron':'Aaliyah';}
-function WHO(tok){
-  if(tok==='Jaron') return (S.prof.j.name||'Jaron');
-  if(tok==='Aaliyah') return (S.prof.a.name||'Aaliyah');
-  if(tok==='Both') return 'Both of us';
-  return tok||'';
-}
-function MENAME(){return WHO(ME());}
-function whoOpts(){return [['Jaron',WHO('Jaron')],['Aaliyah',WHO('Aaliyah')],['Both','Both of us']];}
 function num(x,d){var n=parseFloat(x);return isNaN(n)?(d||0):n;}
 
 /* ---------------- ingredients: base + user overrides ---------------- */
@@ -311,10 +359,14 @@ var TRAIN={
 };
 function dayLog(ds){ if(!S.days[ds]) S.days[ds]={workout:'rest',meals:[],notes:'',w:null,sched:[],spend:[]};
   var d=S.days[ds]; if(!d.sched)d.sched=[]; if(!d.spend)d.spend=[]; return d;}
+/* who is a member id. A member who has not filled in their body stats yet gets
+   the neutral defaults rather than a division by nothing, so the meals page
+   still works on day one. */
 function dayTarget(who,tt){
-  var b=calc(S.prof[who]), t=TRAIN[tt||'rest'];
+  var m=MEM(who)||P();
+  var b=calc(m), t=TRAIN[tt||'rest'];
   var kcal=Math.round(b.kcal*t.k), pr=Math.round(b.p*t.p), cb=Math.round(b.c*t.c);
-  var ft=Math.round((kcal-pr*4-cb*4)/9), floor=Math.round(S.prof[who].w*0.3);
+  var ft=Math.round((kcal-pr*4-cb*4)/9), floor=Math.round((m.w||150)*0.3);
   if(ft<floor){ft=floor;cb=Math.round((kcal-pr*4-ft*9)/4);}
   return {kcal:kcal,p:pr,c:cb,f:ft,fib:Math.round(kcal/1000*14),w:b.w,tr:t,base:b};
 }
