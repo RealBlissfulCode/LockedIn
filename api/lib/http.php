@@ -4,6 +4,9 @@
 declare(strict_types=1);
 
 function send(int $code, array $body): never {
+    /* Bin anything that leaked out before us, so the reply is JSON and only
+       JSON even if something upstream printed a warning. */
+    while (ob_get_level() > 0) ob_end_clean();
     http_response_code($code);
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: no-store');

@@ -15,6 +15,13 @@ APP_AUTH = r"""
 /* ============================ session ============================ */
 var ACCOUNT=null, HOUSE=null, CLIENT_ID='';
 
+/* Where the API lives, worked out once. A bare relative 'api/...' resolves
+   against whatever path the page happens to be on, so the app served from
+   anywhere other than its own directory would start asking for /api/api/. */
+var API_BASE=(function(){
+  return location.pathname.replace(/[^\/]*$/,'')+'api/';
+})();
+
 function api(path,opts){
   opts=opts||{};
   var o={credentials:'same-origin',headers:{'X-LockedIn':'1'}};
@@ -23,16 +30,36 @@ function api(path,opts){
     o.headers['Content-Type']='application/json';
     o.body=JSON.stringify(opts.body);
   }
-  return fetch('api/'+path,o).then(function(r){
+  return fetch(API_BASE+path,o).then(function(r){
+    var ct=r.headers.get('content-type')||'';
+    /* HTML back from an API call means the server handed us the app instead of
+       running the PHP: either it is not uploaded, or the host is not executing
+       it. Worth its own name, because "invalid response" sends you looking in
+       entirely the wrong place. */
+    if(ct.indexOf('json')<0){
+      return r.text().then(function(t){
+        var html=/^\s*<(!doctype|html)/i.test(t);
+        return {ok:false,error:html?'no_api':'bad_response',__status:r.status};
+      });
+    }
     return r.json().catch(function(){return {ok:false,error:'bad_response'};})
       .then(function(j){ j.__status=r.status; return j; });
+  }).catch(function(){
+    return {ok:false,error:'offline',__status:0};
   });
 }
 
 /* Everything the app needs to know about who is looking at it. Called on boot
    and again after anything that could change the household. */
+var API_TROUBLE='';
 function loadSession(){
   return api('auth.php?do=me').then(function(r){
+    API_TROUBLE = r.error==='no_api'
+      ? 'The server sent back the app instead of running the API. Either api/ has not '+
+        'been uploaded to this host, or this host is not running PHP.'
+      : r.error==='not_configured'
+      ? 'The server has no api/config.php yet. Copy api/config.sample.php to it and fill it in.'
+      : '';
     CLIENT_ID=r.clientId||CLIENT_ID;
     ACCOUNT=r.signedIn?r.account:null;
     HOUSE=r.signedIn?r.household:null;
@@ -51,6 +78,7 @@ function signInScreen(msg){
     '<p class="gsub">Meals, training, money and plans. For one person or a whole house.</p>'+
     '<div id="gbtn" class="gbtn"></div>'+
     '<p class="gerr" id="gerr"'+(msg?'':' hidden')+'>'+E(msg||'')+'</p>'+
+    (msg?'<p class="gnote"><a class="glink" href="api/check.php">Run the setup check</a></p>':'')+
     '<p class="gnote">Sign in with Google. We only ever ask for your name, your email '+
     'and your picture, and there is no password for anyone to lose.</p>'+
     '<button class="glink" id="gjoin">I have an invite code</button>'+
@@ -78,8 +106,9 @@ function mountGoogle(){
   var slot=document.getElementById('gbtn');
   if(!slot) return;
   if(!CLIENT_ID){
-    slot.innerHTML='<p class="gerr">This copy has no Google client id set. '+
-      'Fill in google_client_id in api/config.php.</p>';
+    slot.innerHTML='<p class="gerr">'+E(API_TROUBLE||
+      'This copy has no Google client id set. Fill in google_client_id in api/config.php.')+
+      '</p><p class="gnote"><a class="glink" href="'+E(API_BASE)+'check.php">Run the setup check</a></p>';
     return;
   }
   withGoogle(function(){
@@ -102,11 +131,26 @@ function onGoogleCredential(res){
   if(slot) slot.innerHTML='<div class="gwait">Signing in</div>';
   api('auth.php?do=google',{body:{credential:res.credential}}).then(function(r){
     if(!r.ok){
+      /* Say which of the two it is. Google refusing the token and the server
+         not being able to store the result need completely different fixes,
+         and "try again" is the wrong advice for both. */
       var why={
-        bad_token:'Google would not confirm that sign in. Try again.',
-        email_in_use:'That email is already on another account.',
-        not_configured:'The server is not set up yet.'
-      }[r.error]||'Sign in failed. Try again.';
+        bad_token:'Google would not confirm that sign in. If this keeps happening, this '+
+          'site is probably not listed under Authorized JavaScript origins on the OAuth client.',
+        email_in_use:'That email address is already on another account.',
+        not_configured:'This server has no api/config.php yet.',
+        db_not_ready:'Signed in with Google, but the database is not ready. Open '+
+          '/api/check.php and it will say which part.',
+        db_unavailable:'Signed in with Google, but the server cannot reach its database. '+
+          'Open /api/check.php and it will say which part.',
+        server_error:'Something broke on the server. Open /api/check.php and it will say what.',
+        bad_response:'The server replied with something that was not an answer. Open '+
+          '/api/check.php and it will say what.',
+        bad_origin:'The browser blocked that request. Reload the page and try again.',
+        no_api:'The server sent back the app instead of running the API. Either api/ has '+
+          'not been uploaded to this host, or this host is not running PHP.',
+        offline:'Could not reach the server at all. Check the connection and try again.'
+      }[r.error]||('Sign in failed ('+(r.error||('HTTP '+r.__status))+'). Open /api/check.php.');
       signInScreen(why);
       return;
     }
