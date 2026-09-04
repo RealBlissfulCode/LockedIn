@@ -16,37 +16,54 @@ file, no framework, no backend, no database, no accounts.
 - Recipe lists, shopping lists, strategy lists, plans, big-purchase comparisons
 - Dark and light themes, and it installs to a phone home screen
 
-## The passcode
+## Signing in
 
-The app is behind a four digit code. It is **2121**, set in `PASSCODE` at the top
-of `src/build.py`. Change it there and rebuild and it changes everywhere.
+Google, and nothing else. The browser asks Google for an ID token, posts it to
+`api/auth.php`, and the server checks the signature against Google's published
+keys before it will believe a word of it. There is no password to lose and no
+client secret in the app to leak.
 
-**Be clear about what this protects.** Everything personal is encrypted into the
-page at build time. What we earn, what we owe, where we might live, the strategy
-lists, the plans, and the application code itself, which carries our names and the
-placeholder text in every editor. Until the right code is entered, View
-Source shows a lock screen, the recipe database and a block of base64. There is
-no readable copy of any of it anywhere in the file.
+The old four digit passcode is gone. It encrypted the whole page, application
+code included, because everything personal was baked in at build time. That was
+right for one household. It cannot work for a product, because there is nothing
+to bake in: the data belongs to whoever signed in, and it arrives from the API
+after they do.
 
-What it does **not** do is survive someone determined. Four digits is ten thousand
-guesses. The key derivation is deliberately slow (200,000 PBKDF2 rounds, about
-80 ms per guess) so a full sweep costs hours rather than seconds, but that is the
-ceiling of what a four digit code can buy. It stops anyone who finds the URL. It
-would not stop somebody who wanted in.
+### What a new account gets
 
-The recipe and exercise database ships **unencrypted**, because it is generic and
-because base64 does not compress: sealing it would turn ~150 KB over the wire into
-~1.3 MB. That trade only holds while nothing personal is in it, so `src/build.py`
-keeps a `FORBIDDEN` list and **refuses to build** if one of our names, employers,
-towns or diagnoses reaches the unencrypted half. If it stops you, either reword
-the text or move it into `src/private_seed.py`.
+One person, and nothing else. No second profile waiting to be renamed, no
+seeded shopping list, no costs already filled in. Signup asks five short
+questions and every answer does something you can see:
 
-The browser remembers the code so it does not ask every time. Settings has a
-**Lock this device** button that forgets it. The data itself is never touched
-by locking.
+| Question | What it changes |
+| --- | --- |
+| Your name and body stats | Calorie and protein targets. Stats can be skipped and added later. |
+| Anyone else | Members, so people are on the plans before they have a login. |
+| How you eat | A hard filter on the recipe book. Break it and a recipe never appears. |
+| What you are going for | Ranks what is left, using the tags the build already computes. |
+| Training | Goal, kit and days a week, for the starting exercise list. |
+| Money | Lays out about thirty budget categories with every amount blank. |
 
-Decryption needs `crypto.subtle`, which browsers only expose over **https or
-localhost**. The gate says so if it is opened over plain http.
+That last one matters. Seeing that a haircut is a line you forgot is the useful
+part. What a haircut costs where you live is not something an app should be
+guessing at, so the rows arrive empty.
+
+Diet flags are worked out at build time from the ingredient keys, in
+`diet_flags()`. They are real filters, not labels: 76 of the 251 recipes are
+dairy free and 52 are vegan, and somebody who ticks dairy free never sees the
+other 175 again.
+
+### Meal plans
+
+`Make a meal plan` on the Meals page. Pick who and how many days, and it fills
+each day against that person's calorie and protein target, using training days
+where they are already on the calendar. Nothing is written until you press the
+button, because a plan that applies itself is a plan you have to undo. Any meal
+can be swapped for the next best thing in its category.
+
+It is greedy rather than clever, and deliberately so. It gets a day close and
+leaves you something worth arguing with. A plan you cannot argue with is a plan
+you cannot use.
 
 ## Time and mobile
 

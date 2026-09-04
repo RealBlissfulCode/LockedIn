@@ -17,8 +17,10 @@ function chrome(){
   $('#btm').innerHTML=TABS.map(function(t){return '<button data-v="'+t[0]+'" data-nav="'+t[0]+'" aria-label="'+t[1]+'">'+
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">'+
     ICO[t[0]]+'</svg><span>'+t[2]+'</span></button>';}).join('');
-  $('#who').innerHTML=['j','a'].map(function(k){return '<button data-w="'+k+'"'+
-    (S.who===k?' class="on"':'')+'>'+E(S.prof[k].name)+'</button>';}).join('');
+  /* One person means there is nobody to switch to, so the control does not
+     appear at all rather than sitting there as a single dead button. */
+  $('#who').innerHTML=shared()?MEMS().map(function(m){return '<button data-w="'+E(m.id)+'"'+
+    (ME()===m.id?' class="on"':'')+'>'+E(m.name)+'</button>';}).join(''):'';
   var sp=$('#syncSlot'); if(sp) sp.innerHTML=syncPill();
   var th=$('#themeBtn');
   if(th){var cur=S.theme||'dark';
@@ -64,6 +66,8 @@ function route(){
     html = v==='r'?vRecipe(sub) : v==='training'?vTraining(sub) : v==='shopping'?vShopping(sub)
       : v==='financial'?vFinancial(sub) : v==='planning'?vPlanning(sub)
       : v==='lists'?vRecipeLists()
+      : v==='household'?vHousehold()
+      : v==='mealplan'?vMealPlan()
       : v==='schedule'?vSchedule(sub) : vMeals();
   }catch(e){ html=errPanel(v.charAt(0).toUpperCase()+v.slice(1),e);
     if(window.console&&console.error)console.error(e); }
@@ -92,7 +96,7 @@ function bind(){
       var a=estDayCost(dayTarget('j',dayLog(today()).workout),S.costMode||'all');
       var b=estDayCost(dayTarget('a',dayLog(today()).workout),S.costMode||'all');
       $('#bothOut').innerHTML='<div class="note" style="margin-top:12px"><b>Both of us.</b> '+
-        $$$(a.byKcal)+' for me plus '+$$$(b.byKcal)+' for '+E(S.prof.a.name)+' is <b>'+
+        $$$(a.byKcal)+' for me plus '+$$$(b.byKcal)+' for '+E(WHO(otherMember()))+' is <b>'+
         $$$(a.byKcal+b.byKcal)+' a day</b>, '+$$$((a.byKcal+b.byKcal)*30)+' a month.</div>';});
     on('#addOwn','click',ownRecipe);
   }
@@ -128,11 +132,49 @@ function bind(){
       if(!S.lists[n]) S.lists[n]=[];
       save();route();});
   }
+  if(v==='household') bindHousehold();
+  if(v==='mealplan') bindMealPlan();
   if(v==='financial') bindFin(h[1]);
   if(v==='planning') bindPlan(h[1]);
   if(v==='schedule') bindSched(h[1]);
 }
 function on(sel,ev,fn){var e=$(sel); if(e)e.addEventListener(ev,fn);}
+/* Whoever is not currently selected. Only meaningful in a household of two,
+   which is the only place it gets called. */
+function otherMember(){
+  var m=MEMS().filter(function(x){return x.id!==ME();});
+  return m.length?m[0].id:ME();
+}
+/* Body stats drive the calorie and macro targets, so they live next to the
+   name rather than behind another screen. Blank is allowed: the meals page
+   falls back to neutral defaults until somebody fills them in. */
+function drawSettingsMembers(m){
+  var box=$('#stMembers',m); if(!box) return;
+  box.innerHTML=MEMS().map(function(p,i){
+    return '<div class="card pad" style="margin-top:10px">'+
+     '<div class="spread"><b>'+E(p.name||'Someone')+'</b>'+
+     (MEMS().length>1?'<button class="x" data-memdel="'+E(p.id)+'">&times;</button>':'')+'</div>'+
+     '<div class="fr" style="margin-top:10px">'+
+     '<label class="f"><span>Name</span><input data-mf="'+E(p.id)+'|name" value="'+E(p.name||'')+'"></label>'+
+     '<label class="f"><span>Sex</span><select data-mf="'+E(p.id)+'|sex">'+
+       opt([['m','Male'],['f','Female']],p.sex||'m')+'</select></label>'+
+     '<label class="f"><span>Weight (lb)</span><input type="number" data-mf="'+E(p.id)+'|w" value="'+E(p.w==null?'':p.w)+'"></label>'+
+     '<label class="f"><span>Height (in)</span><input type="number" step="0.5" data-mf="'+E(p.id)+'|h" value="'+E(p.h==null?'':p.h)+'"></label>'+
+     '<label class="f"><span>Age</span><input type="number" data-mf="'+E(p.id)+'|age" value="'+E(p.age==null?'':p.age)+'"></label>'+
+     '<label class="f"><span>Body fat %</span><input type="number" data-mf="'+E(p.id)+'|bf" value="'+E(p.bf==null?'':p.bf)+'"></label>'+
+     '</div></div>';}).join('');
+  $$('[data-mf]',box).forEach(function(inp){
+    inp.onchange=function(){
+      var pr=this.dataset.mf.split('|'), who=MEM(pr[0]); if(!who)return;
+      var f=pr[1], v=this.value;
+      if(f==='name') who.name=v.trim()||'Someone';
+      else if(f==='sex') who.sex=v;
+      else who[f]=(v===''?null:num(v));
+      save(); chrome();
+      if(f==='name') drawSettingsMembers(m);
+    };
+  });
+}
 
 /* ============================ shopping wiring ============================ */
 function bindShop(){
@@ -306,7 +348,7 @@ function finToggle(kind,pred,to){
 }
 var ONOFF=[['1','Counted in the totals'],['0','Switched off']];
 function jobEditor(id){
-  var j=id?S.fin.jobs.filter(function(x){return x.id===id;})[0]:{who:'Jaron',name:'',employer:'',title:'',rate:'',low:'',real:'',high:'',actual:''};
+  var j=id?S.fin.jobs.filter(function(x){return x.id===id;})[0]:{who:ME(),name:'',employer:'',title:'',rate:'',low:'',real:'',high:'',actual:''};
   var m=modal(id?'Edit income':'Add income',
     form([{id:'jw',l:'Who',t:'select',o:whoOpts(),v:j.who},
       {id:'jn',l:'Name',v:j.name,ph:'Ritchey day job'},
@@ -329,7 +371,7 @@ function jobEditor(id){
     save();m.remove();route();};
 }
 function costEditor(id){
-  var c=id?S.fin.costs.filter(function(x){return x.id===id;})[0]:{name:'',section:'Living',who:'Both',low:'',real:'',high:'',actual:''};
+  var c=id?S.fin.costs.filter(function(x){return x.id===id;})[0]:{name:'',section:'Living',who:shared()?EVERYONE:ME(),low:'',real:'',high:'',actual:''};
   var m=modal(id?'Edit cost':'Add cost',
     form([{id:'cn',l:'Cost',v:c.name},
       {id:'cs',l:'Section',t:'select',o:[['Living','Living'],['Utilities','Utilities'],
@@ -667,6 +709,32 @@ document.addEventListener('click',function(e){
   try{
   if((el=t.closest('[data-nav]'))){nav(el.dataset.nav);return;}
   if((el=t.closest('[data-w]'))){S.who=el.dataset.w;save();route();return;}
+  if((el=t.closest('[data-mpswap]'))){
+    var sp=el.dataset.mpswap.split('|'); swapPlanMeal(+sp[0],+sp[1]); return;}
+  if((el=t.closest('[data-hcopy]'))){
+    var cc=el.dataset.hcopy;
+    try{navigator.clipboard.writeText(cc);toast('Code copied');}catch(e){toast(cc);}
+    return;}
+  if((el=t.closest('[data-hrevoke]'))){
+    api('household.php?do=revoke',{body:{code:el.dataset.hrevoke}}).then(drawInvites);
+    return;}
+  if((el=t.closest('[data-hover]'))){
+    if(!confirm('Hand the household over? They become the owner and you become a member.'))return;
+    api('household.php?do=handOver',{body:{memberId:+el.dataset.hover}}).then(function(){
+      refreshHouse().then(route);});
+    return;}
+  if((el=t.closest('[data-hdrop]'))){
+    if(!confirm('Remove them? Their private notes go with them. Everything shared stays.'))return;
+    api('household.php?do=removeSeat',{body:{memberId:+el.dataset.hdrop}}).then(function(){
+      refreshHouse().then(route);});
+    return;}
+  if((el=t.closest('[data-memdel]'))){
+    var mid=el.dataset.memdel;
+    if(MEMS().length<2){toast('A household needs at least one person');return;}
+    if(!confirm('Remove '+WHO(mid)+'? Anything logged against them stays, tagged to nobody.'))return;
+    S.members=MEMS().filter(function(x){return x.id!==mid;});
+    if(S.who===mid) S.who=ME();
+    save();chrome();route();return;}
   if((el=t.closest('[data-fav]'))){e.stopPropagation();
     var id=el.dataset.fav,i=S.fav.indexOf(id);
     if(i>=0)S.fav.splice(i,1);else S.fav.push(id); save();route();return;}
@@ -854,11 +922,14 @@ function settingsModal(){
    '<button class="b o" id="stLoad">Load a file</button></div>'+
    '<p class="xs muted">Last saved: '+E(when)+'</p>'+
    '<div class="hr"></div>'+
-   '<h4 class="lbl">Profiles</h4><div class="fr" style="margin-top:10px">'+
-   '<label class="f"><span>My name</span><input id="stJ" value="'+E(S.prof.j.name)+'"></label>'+
-   '<label class="f"><span>Her name</span><input id="stA" value="'+E(S.prof.a.name)+'"></label></div>'+
-   '<p class="xs muted">Whoever is selected in the top bar is who new entries get logged as. '+
-   'You can still change it on any entry.</p>'+
+   '<h4 class="lbl">Household</h4>'+
+   '<label class="f" style="margin-top:10px"><span>Household name</span>'+
+   '<input id="stHouse" value="'+E(S.household||'')+'" placeholder="My household"></label>'+
+   '<div id="stMembers"></div>'+
+   '<div class="row" style="margin-top:10px"><button class="b o s" id="stAddMem">Add someone</button>'+
+   '<button class="b o s" data-nav="household">Invites and sharing</button></div>'+
+   (shared()?'<p class="xs muted">Whoever is selected in the top bar is who new entries get logged '+
+     'as. You can still change it on any entry.</p>':'')+
    '<div class="hr"></div>'+
    '<h4 class="lbl">Exports</h4><div class="row" style="margin-top:10px">'+
    '<button class="b o s" id="stIng">Ingredients CSV</button>'+
@@ -900,8 +971,13 @@ function settingsModal(){
   $('#stLoad',m).onclick=function(){var i=document.createElement('input');i.type='file';i.accept='.json';
     i.onchange=function(){importAll(i.files[0],function(ok){if(ok){m.remove();route();toast('Loaded');}});};
     i.click();};
-  $('#stJ',m).onchange=function(){S.prof.j.name=this.value||'Me';save();chrome();};
-  $('#stA',m).onchange=function(){S.prof.a.name=this.value||'Aaliyah';save();chrome();};
+  var hn=$('#stHouse',m);
+  if(hn) hn.onchange=function(){S.household=this.value.trim();save();};
+  drawSettingsMembers(m);
+  var am=$('#stAddMem',m);
+  if(am) am.onclick=function(){
+    S.members.push(blankMember('Someone','m'));
+    save();chrome();drawSettingsMembers(m);};
   $('#stIng',m).onclick=function(){
     var rows=[['Ingredient','Aisle','Walmart/100g','Costco/100g','Best','Store','UsedIn','Edited']];
     allIngKeys().forEach(function(k){var g=ING(k);
@@ -1050,15 +1126,15 @@ function wrapT(x,t,px,py,mw,lh){var w=String(t).split(' '),line='',yy=py,used=0;
     if(x.measureText(tt).width>mw&&line){x.fillText(line,px,yy);line=w[i]+' ';yy+=lh;used+=lh;}else line=tt;}
   x.fillText(line,px,yy);return used+lh;}
 
+/* Nothing draws until boot() has been round the API and knows who is looking.
+   Painting first and filling in afterwards means the first thing on screen is
+   either nobody's data or somebody else's. boot() is called at the bottom of
+   the bundle, after every module is defined. */
 try{ applyTheme(); }catch(e){}
-try{ chrome(); }catch(e){ if(window.console)console.error('chrome',e); }
 if(!location.hash)location.hash='#/meals';
-route();
-/* Take a baseline of every branch before anything can change, so the first
-   save does not stamp the whole document as freshly edited. */
+/* A baseline of every branch before anything can change, so the first save
+   does not stamp the whole document as freshly edited. */
 try{ syncTouch(); }catch(e){}
-try{ if(SEED.__token) syncInit(SEED.__token); else syncSet('off','No sync token in this build.'); }
-catch(e){ if(window.console)console.error('sync',e); }
 window.onerror=function(msg,src,ln,col,err){
   var v=$('#view');
   if(v&&!v.innerHTML){ v.innerHTML=errPanel('The app',err||{message:msg}); }

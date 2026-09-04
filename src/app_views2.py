@@ -134,7 +134,7 @@ function costInPath(c,path){
 function finIncome(who,mode,all){
   return S.fin.jobs.filter(function(j){
     if(!all&&!finLive(j)) return false;
-    return who==='both'||j.who===who||j.who==='Both';})
+    return who==='both'||j.who===who||j.who===EVERYONE;})
     .reduce(function(a,j){return a+(j[mode]||0);},0);
 }
 function finCost(mode,path,all){
@@ -152,7 +152,7 @@ function scenTotals(sc){
 function shiftsFor(who,from){
   return S.fin.shifts.filter(function(s){
     var j=S.fin.jobs.filter(function(x){return x.id===s.jobId;})[0];
-    if(who&&j&&j.who!==who&&j.who!=='Both')return false;
+    if(who&&j&&j.who!==who&&j.who!==EVERYONE)return false;
     if(from&&s.date<from)return false; return true;});
 }
 /* What actually lands per dollar earned, measured off real shifts instead of
@@ -285,7 +285,7 @@ function vFinancial(sub){
       pct:(cost&&anyOn)?Math.round(byS[k]/cost*100)+'%':'-',
       ctrl:finSw('secttog',k,anyOn,k,true)};
   }));
-  var incomePeople=['Jaron','Aaliyah','Both'].filter(function(w){
+  var incomePeople=whoTokens().filter(function(w){
     return S.fin.jobs.some(function(j){return j.who===w;});});
   var incLegend=chartLegend(incomePeople.map(function(w,i){
     var v=S.fin.jobs.filter(function(j){return j.who===w&&finLive(j);})
@@ -293,16 +293,16 @@ function vFinancial(sub){
     var all=S.fin.jobs.filter(function(j){return j.who===w;})
       .reduce(function(a,j){return a+(j[mode]||0);},0);
     var anyOn=S.fin.jobs.some(function(j){return j.who===w&&finLive(j);});
-    return {label:w==='Both'?'Shared / gig':WHO(w),cls:chTone(i+1),off:!anyOn,
+    return {label:w===EVERYONE?'Shared / gig':WHO(w),cls:chTone(i+1),off:!anyOn,
       value:M(anyOn?v:all),pct:(inc&&anyOn)?Math.round(v/inc*100)+'%':'-',
-      ctrl:finSw('whotog',w,anyOn,w==='Both'?'shared income':WHO(w),true)};
+      ctrl:finSw('whotog',w,anyOn,w===EVERYONE?'shared income':WHO(w),true)};
   }));
-  var costPeople=['Jaron','Aaliyah','Both'].filter(function(w){
+  var costPeople=whoTokens().filter(function(w){
     return S.fin.costs.some(function(c){return c.who===w&&costInPath(c,path);});});
   var whoCost='<div class="ckey">'+costPeople.map(function(w,i){
     var v=S.fin.costs.filter(function(c){return c.who===w&&finLive(c)&&costInPath(c,path);})
       .reduce(function(a,c){return a+(c[mode]||0);},0);
-    return '<span><i class="'+chTone(i+3)+'"></i>'+E(w==='Both'?'Shared':WHO(w))+' '+M(v)+'</span>';
+    return '<span><i class="'+chTone(i+3)+'"></i>'+E(w===EVERYONE?'Shared':WHO(w))+' '+M(v)+'</span>';
   }).join('')+'</div>';
 
   var split='<div class="sec"><h2>Where the money goes</h2>'+
@@ -317,7 +317,7 @@ function vFinancial(sub){
    chartDonut(incomePeople.map(function(w,i){
      return {v:S.fin.jobs.filter(function(j){return j.who===w&&finLive(j);})
        .reduce(function(a,j){return a+(j[mode]||0);},0),
-       label:(w==='Both'?'Shared':WHO(w)),cls:chTone(i+1)};}),M(inc),'Live income / mo')+
+       label:(w===EVERYONE?'Shared':WHO(w)),cls:chTone(i+1)};}),M(inc),'Live income / mo')+
    incLegend+
    '<h3 class="ctitle" style="margin-top:20px">Costs carried by</h3>'+whoCost+
    '<div class="row" style="margin-top:14px"><button class="b o s" id="jobAdd">Add income</button>'+
@@ -543,9 +543,15 @@ function vActual(){
   var f=from.getFullYear()+'-'+p2(from.getMonth()+1)+'-'+p2(from.getDate());
   var sh=S.fin.shifts.slice().sort(function(a,b){return b.date<a.date?-1:1;});
   function tot(who,field){return shiftsFor(who,f).reduce(function(a,s){return a+(s[field]||0);},0);}
-  var jH=tot('Jaron','hours'),aH=tot('Aaliyah','hours');
-  var jG=tot('Jaron','gross'),aG=tot('Aaliyah','gross');
-  var jN=tot('Jaron','net'),aN=tot('Aaliyah','net');
+  /* One card per member instead of two fixed ones. Somebody with nothing
+     logged still gets a card, because an empty card is how you notice. */
+  var perMember=MEMS().map(function(m){
+    return {id:m.id,name:m.name,
+            hours:tot(m.id,'hours'),gross:tot(m.id,'gross'),net:tot(m.id,'net')};});
+  var jH=perMember.reduce(function(a,x){return a+x.hours;},0);
+  var aH=0;
+  var jN=perMember.reduce(function(a,x){return a+x.net;},0);
+  var aN=0;
   var eff=function(g,h){return h>0?g/h:0;};
   var months=Math.max(1,90/30.4);
   var mons=shiftMonths(6), plan=finIncome('both','real');
@@ -562,9 +568,9 @@ function vActual(){
    '<button class="b o" id="shCsv">Export shifts</button>'+
    '<button class="b o" data-nav="financial">&larr; Plan</button></div>'+
    '<div class="sec"><h2>Last 90 days</h2><div class="grid g2">'+
-   ['Jaron','Aaliyah'].map(function(w){
-     var h=w==='Jaron'?jH:aH,g=w==='Jaron'?jG:aG,n=w==='Jaron'?jN:aN;
-     return '<div class="card pad"><h3 class="ctitle">'+E(WHO(w))+'</h3>'+
+   perMember.map(function(x){
+     var h=x.hours,g=x.gross,n=x.net;
+     return '<div class="card pad"><h3 class="ctitle">'+E(x.name)+'</h3>'+
      '<div class="stats"><div class="stat acc"><b>'+M(n/months)+'</b><span>Net / mo</span></div>'+
      '<div class="stat"><b>'+h.toFixed(0)+'</b><span>Hours</span></div>'+
      '<div class="stat"><b>'+$$$(eff(g,h))+'</b><span>Gross / hr</span></div>'+
@@ -774,7 +780,7 @@ function tl(ds){
   return '<ul class="tl">'+items.map(function(x){
     return '<li><div class="tm">'+(x.t?E(t12(x.t)):'&mdash;')+'</div>'+
     '<span class="pip '+x.kind+'"></span><div class="bd">'+
-    '<div class="ti">'+E(x.title)+' <span class="chip">'+E(WHO(x.who)||'Both of us')+'</span>'+
+    '<div class="ti">'+E(x.title)+' <span class="chip">'+E(WHO(x.who)||WHO(EVERYONE))+'</span>'+
     (x.tmpl?' <span class="chip t" title="From a running template">'+E(x.tmpl)+'</span>':'')+'</div>'+
     (x.sub?'<div class="ts">'+E(x.sub)+'</div>':'')+'</div>'+
     (x.rm!=null?'<button class="x" data-evd="'+x.rm+'">&times;</button>':'')+
@@ -840,15 +846,25 @@ function vSchedule(sub){
    '<span><b>Day total</b></span><b style="color:var(--brass)">'+$$$(got.cost+spend)+'</b></div>'+
    '</div></div></div></div>';
 }
+/* When is everybody free at once. Only worth drawing for a household of more
+   than one, and only counting people who actually have something booked, since
+   a member with an empty day is free by definition and would otherwise widen
+   every window to the whole day. */
 function freeSlots(d){
-  var busy={Jaron:[],Aaliyah:[]};
-  (d.sched||[]).forEach(function(e){ if(e.from&&e.to&&busy[e.who]) busy[e.who].push([e.from,e.to]); });
-  if(!busy.Jaron.length&&!busy.Aaliyah.length) return '';
+  if(!shared()) return '';
+  var busy={};
+  (d.sched||[]).forEach(function(e){
+    if(!e.from||!e.to) return;
+    var keys=(e.who===EVERYONE)?MEMS().map(function(m){return m.id;}):[e.who];
+    keys.forEach(function(k){ (busy[k]=busy[k]||[]).push([e.from,e.to]); });
+  });
+  var booked=Object.keys(busy);
+  if(!booked.length) return '';
   function mins(t){var p=String(t).split(':');return (+p[0])*60+(+(p[1]||0));}
   var free=[],start=8*60,end=22*60,step=30;
   for(var m=start;m<end;m+=step){
     var clash=false;
-    ['Jaron','Aaliyah'].forEach(function(w){busy[w].forEach(function(b){
+    booked.forEach(function(w){busy[w].forEach(function(b){
       if(m>=mins(b[0])&&m<mins(b[1]))clash=true;});});
     if(!clash)free.push(m);
   }
@@ -857,8 +873,10 @@ function freeSlots(d){
   for(var i=1;i<free.length;i++){ if(free[i]===cur[1])cur[1]=free[i]+step; else {blocks.push(cur);cur=[free[i],free[i]+step];} }
   blocks.push(cur);
   var fmt=t12m;
-  return '<div class="note" style="margin-top:12px"><b>Both free.</b> '+
-    blocks.filter(function(b){return b[1]-b[0]>=60;}).map(function(b){return fmt(b[0])+' to '+fmt(b[1]);}).join(', ')+'</div>';
+  var win=blocks.filter(function(b){return b[1]-b[0]>=60;});
+  if(!win.length) return '';
+  return '<div class="note" style="margin-top:12px"><b>Everyone free.</b> '+
+    win.map(function(b){return fmt(b[0])+' to '+fmt(b[1]);}).join(', ')+'</div>';
 }
 function repeatLabel(c){
   var r=(REPEATS.filter(function(x){return x[0]===(c.repeat||'weekly');})[0]||REPEATS[0]);

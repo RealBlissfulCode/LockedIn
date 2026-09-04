@@ -21,19 +21,19 @@ signin(){ # $1 cookiejar  $2 token
 rm -f /tmp/c1 /tmp/c2 /tmp/c3
 
 echo "--- token verification ---"
-T=$(php /tmp/mkjwt.php '{}')
+T=$(php tools/fakegoogle.php '{}')
 ckhas "valid token signs in"        "$(signin /tmp/c1 "$T")" '"ok":true'
-BAD=$(php /tmp/mkjwt.php '{"__breaksig":true}')
+BAD=$(php tools/fakegoogle.php '{"__breaksig":true}')
 ckhas "tampered signature refused"  "$(signin /tmp/cx "$BAD")" 'bad_token'
-BAD=$(php /tmp/mkjwt.php '{"aud":"someone-elses-app.apps.googleusercontent.com"}')
+BAD=$(php tools/fakegoogle.php '{"aud":"someone-elses-app.apps.googleusercontent.com"}')
 ckhas "wrong audience refused"      "$(signin /tmp/cx "$BAD")" 'bad_token'
-BAD=$(php /tmp/mkjwt.php '{"exp":1000000000,"iat":999999000}')
+BAD=$(php tools/fakegoogle.php '{"exp":1000000000,"iat":999999000}')
 ckhas "expired token refused"       "$(signin /tmp/cx "$BAD")" 'bad_token'
-BAD=$(php /tmp/mkjwt.php '{"email_verified":false,"sub":"22","email":"x@y.com"}')
+BAD=$(php tools/fakegoogle.php '{"email_verified":false,"sub":"22","email":"x@y.com"}')
 ckhas "unverified email refused"    "$(signin /tmp/cx "$BAD")" 'bad_token'
-BAD=$(php /tmp/mkjwt.php '{"iss":"https://evil.example","sub":"33","email":"z@y.com"}')
+BAD=$(php tools/fakegoogle.php '{"iss":"https://evil.example","sub":"33","email":"z@y.com"}')
 ckhas "wrong issuer refused"        "$(signin /tmp/cx "$BAD")" 'bad_token'
-BAD=$(php /tmp/mkjwt.php '{"__kid":"unknown-kid","sub":"44","email":"q@y.com"}')
+BAD=$(php tools/fakegoogle.php '{"__kid":"unknown-kid","sub":"44","email":"q@y.com"}')
 ckhas "unknown key id refused"      "$(signin /tmp/cx "$BAD")" 'bad_token'
 
 echo "--- csrf and method guards ---"
@@ -70,7 +70,7 @@ ck   "invite code is 8 chars"       "${#CODE}" "8"
 ckhas "peek names the household"    "$(curl -s "$B/household.php?do=peek&code=$CODE")" '"valid":true'
 ckhas "peek on junk is invalid"     "$(curl -s "$B/household.php?do=peek&code=ZZZZZZZZ")" '"valid":false'
 
-T2=$(php /tmp/mkjwt.php '{"sub":"220000000000000000002","email":"partner@example.com","name":"Aaliyah"}')
+T2=$(php tools/fakegoogle.php '{"sub":"220000000000000000002","email":"partner@example.com","name":"Aaliyah"}')
 ckhas "second account signs in"     "$(signin /tmp/c2 "$T2")" '"ok":true'
 ckhas "joining with the code works" "$(curl -s -b /tmp/c2 $J -X POST "$B/household.php?do=join" -d "{\"code\":\"$CODE\"}")" '"ok":true'
 ckhas "code cannot be reused"       "$(curl -s "$B/household.php?do=peek&code=$CODE")" '"valid":false'
