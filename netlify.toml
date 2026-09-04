@@ -3,6 +3,15 @@
   publish = "."
   command = ""
 
+# The API has to 404 rather than fall through to the app, otherwise a missing
+# endpoint answers with index.html and a 200 and the browser gets HTML where it
+# wanted JSON. Netlify serves no PHP at all, so this is also the honest answer
+# there: the API only exists on a host that runs it.
+[[redirects]]
+  from = "/api/*"
+  to = "/api/:splat"
+  status = 404
+
 # Hash routing means deep paths are never requested from the server,
 # but this covers anyone typing one in.
 [[redirects]]

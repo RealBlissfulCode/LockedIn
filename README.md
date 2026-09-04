@@ -300,9 +300,22 @@ Once the first account exists that page stops answering unless you are signed
 in, so it is a setup aid rather than something left open on a live site. It
 prints no password, no database name and no host, and the client id is masked.
 
+### Scopes: there is nothing to do
+
+Google Identity Services asks for `openid`, `email` and `profile` on its own.
+They are the default set for a sign in button and they are not something you add
+anywhere. The Scopes screen on the consent screen is for asking for **more** than
+those, which this app never does. If you go looking for a place to add them you
+will not find one, because there is not one.
+
+The consent screen still needs a name, a support email and a developer contact,
+and it needs publishing. That is all.
+
 ### When sign in fails
 
-The error on the sign in screen names which half broke. `Google would not
+The error on the sign in screen names which half broke. `The server sent back
+the app instead of running the API` means `api/` has not reached the server, or
+the host is not running PHP. `Google would not
 confirm that sign in` means the token was refused, and nine times out of ten
 that is this site missing from Authorized JavaScript origins on the OAuth
 client. Anything mentioning the database means Google was happy and the server
