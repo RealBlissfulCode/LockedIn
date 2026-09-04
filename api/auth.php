@@ -40,7 +40,15 @@ if ($do === 'google') {
     $name  = trim((string) ($claims['name'] ?? ''));
     $pic   = (string) ($claims['picture'] ?? '');
 
-    $acct = one('SELECT * FROM accounts WHERE google_sub = ?', [$sub]);
+    /* Past this point the token is good, so anything that fails now is our end
+       and not Google's. Saying which is the difference between "try again",
+       which will not help, and "go and look at the setup check". */
+    try {
+        $acct = one('SELECT * FROM accounts WHERE google_sub = ?', [$sub]);
+    } catch (Throwable $e) {
+        error_log('signin lookup failed: ' . $e->getMessage());
+        fail(500, 'db_not_ready');
+    }
     if ($acct === null) {
         /* Same person, new Google subject id, is not a thing that happens. An
            email match with a different sub means somebody re-registered the
@@ -49,9 +57,14 @@ if ($do === 'google') {
         $clash = one('SELECT id FROM accounts WHERE email = ?', [$email]);
         if ($clash !== null) fail(409, 'email_in_use');
 
-        q('INSERT INTO accounts (google_sub, email, name, avatar, created_at, last_seen_at)
-           VALUES (?, ?, ?, ?, ?, ?)', [$sub, $email, $name, $pic, now(), now()]);
-        $acct = one('SELECT * FROM accounts WHERE google_sub = ?', [$sub]);
+        try {
+            q('INSERT INTO accounts (google_sub, email, name, avatar, created_at, last_seen_at)
+               VALUES (?, ?, ?, ?, ?, ?)', [$sub, $email, $name, $pic, now(), now()]);
+            $acct = one('SELECT * FROM accounts WHERE google_sub = ?', [$sub]);
+        } catch (Throwable $e) {
+            error_log('account create failed: ' . $e->getMessage());
+            fail(500, 'db_not_ready');
+        }
         $fresh = true;
     } else {
         /* Keep the display bits current, leave everything else alone. */
@@ -63,11 +76,15 @@ if ($do === 'google') {
         $fresh = false;
     }
 
-    if (my_household((int) $acct['id']) === null) {
-        create_household($acct);
+    try {
+        if (my_household((int) $acct['id']) === null) {
+            create_household($acct);
+        }
+        start_session((int) $acct['id']);
+    } catch (Throwable $e) {
+        error_log('household or session failed: ' . $e->getMessage());
+        fail(500, 'db_not_ready');
     }
-
-    start_session((int) $acct['id']);
     sweep_expired();
     ok(['fresh' => $fresh, 'onboarded' => (bool) $acct['onboarded']]);
 }

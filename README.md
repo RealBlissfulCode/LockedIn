@@ -242,6 +242,7 @@ it needs PHP 8 and MySQL, both of which Hostinger has.
 | `api/auth.php` | Sign in, sign out, who am I. |
 | `api/household.php` | Members, invites, joining, leaving, handing over. |
 | `api/doc.php` | Read and write documents, with versions. |
+| `api/check.php` | Setup check. Open it in a browser after deploying. |
 
 ### Why there is no client secret anywhere
 
@@ -289,8 +290,30 @@ the household down with them.
    Google client id.
 3. `php api/migrate.php` over SSH. No SSH: put a random string in
    `api/.migrate-key`, hit `/api/migrate.php?key=thatstring`, delete the file.
-4. Check `/api/config.php` returns 403 or 404 in a browser. `api/.htaccess`
-   should see to it, but check.
+4. Open `/api/check.php` in a browser. It walks the whole list: PHP version,
+   extensions, config file, client id, database connection, every table,
+   whether the server can reach Google's signing keys, https, and whether
+   `config.php` is being served as readable text. Anything failing says what to
+   do about it.
+
+Once the first account exists that page stops answering unless you are signed
+in, so it is a setup aid rather than something left open on a live site. It
+prints no password, no database name and no host, and the client id is masked.
+
+### When sign in fails
+
+The error on the sign in screen names which half broke. `Google would not
+confirm that sign in` means the token was refused, and nine times out of ten
+that is this site missing from Authorized JavaScript origins on the OAuth
+client. Anything mentioning the database means Google was happy and the server
+could not store the result, which is `/api/check.php` territory: usually the
+migration has not been run, or `db_user` and `db_pass` are not what hPanel
+actually created.
+
+Errors never print to the response either. Shared hosting often ships with
+`display_errors` on, and one notice ahead of the JSON is enough to make the
+browser give up on parsing the reply, which used to surface as a meaningless
+"sign in failed".
 
 ### Running the tests
 
