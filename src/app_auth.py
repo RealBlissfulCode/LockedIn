@@ -218,8 +218,19 @@ function boot(){
       applyTheme();
       chrome();
       if(!ACCOUNT.onboarded||!MEMS().length){ startOnboarding(); return; }
-      route();
       syncStart();
+      /* An account with nothing in it, on a domain that used to run the old
+         version, is almost always somebody who has data waiting. Ask once
+         rather than leaving them to find it in Settings. */
+      if(looksEmpty()&&!sessionStorage.getItem('li_import_asked')){
+        sessionStorage.setItem('li_import_asked','1');
+        return api('import.php?do=peek').then(function(r){
+          var local=legacyLocal();
+          if((r.ok&&r.found)||local){ location.hash='#/import'; }
+          route();
+        });
+      }
+      route();
     });
   });
 }

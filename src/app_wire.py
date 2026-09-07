@@ -68,6 +68,7 @@ function route(){
       : v==='lists'?vRecipeLists()
       : v==='household'?vHousehold()
       : v==='mealplan'?vMealPlan()
+      : v==='import'?'<div class="page"><div class="phead"><h1>Bring your old data across</h1></div></div>'
       : v==='schedule'?vSchedule(sub) : vMeals();
   }catch(e){ html=errPanel(v.charAt(0).toUpperCase()+v.slice(1),e);
     if(window.console&&console.error)console.error(e); }
@@ -134,6 +135,7 @@ function bind(){
   }
   if(v==='household') bindHousehold();
   if(v==='mealplan') bindMealPlan();
+  if(v==='import') importScreen();
   if(v==='financial') bindFin(h[1]);
   if(v==='planning') bindPlan(h[1]);
   if(v==='schedule') bindSched(h[1]);
@@ -894,7 +896,8 @@ document.addEventListener('click',function(e){
       save();nav('schedule/templates');}
     return;}
   if(t.closest('#syncPill')){
-    if(syncOn){syncFlush();syncPull();toast('Syncing');} else settingsModal(); return;}
+    if(syncState==='off'){ settingsModal(); return; }
+    pushState(); pullState(); toast('Saving'); return;}
   if(t.closest('#settings')){settingsModal();return;}
   }catch(err){ if(window.console&&console.error)console.error('click',err);
     toast('Something went wrong: '+(err.message||err)); }
@@ -919,7 +922,8 @@ function settingsModal(){
    '<div class="stat"><b>'+Math.round(size/1024)+'k</b><span>Stored</span></div></div>'+
    '<div class="row" style="margin-bottom:18px">'+
    '<button class="b" id="stSave">Save to a file</button>'+
-   '<button class="b o" id="stLoad">Load a file</button></div>'+
+   '<button class="b o" id="stLoad">Load a file</button>'+
+   '<button class="b o" data-nav="import">Bring old data across</button></div>'+
    '<p class="xs muted">Last saved: '+E(when)+'</p>'+
    '<div class="hr"></div>'+
    '<h4 class="lbl">Household</h4>'+
@@ -938,30 +942,32 @@ function settingsModal(){
    '<button class="b o s" id="stFin">Budget CSV</button>'+
    '<button class="b o s" id="stPlan">Plans CSV</button></div>'+
    '<div class="hr"></div>'+
-   '<h4 class="lbl">Sync</h4>'+
+   '<h4 class="lbl">Saving</h4>'+
    '<p class="sm muted" style="margin:8px 0 12px">'+
-   (syncOn
-     ? 'Shared with every device that knows the code. Changes push a moment after you '+
-       'make them and pull when a device comes back to the front.'
-     : 'Not syncing right now. Everything still saves on this device.')+
+   (syncState!=='off'
+     ? 'Everything is on your account, so it is on every device you sign in on and on '+
+       'everyone else&#39;s in the household. Changes go up a moment after you make them.'
+     : 'Not saving to your account right now. Everything still saves on this device.')+
    (syncMsg?' <b>'+E(syncMsg)+'</b>':'')+'</p>'+
    '<div class="stats gap-b">'+
    '<div class="stat"><b>'+E({off:'Local',idle:'On',pull:'On',push:'On',
       offline:'Offline',error:'Error'}[syncState]||syncState)+'</b><span>State</span></div>'+
-   '<div class="stat"><b>'+(S.__v||0)+'</b><span>Version</span></div>'+
+   '<div class="stat"><b>'+docVer+'</b><span>Version</span></div>'+
    '<div class="stat"><b>'+E(syncAt?new Date(syncAt).toLocaleTimeString():'never')+'</b>'+
-   '<span>Last synced</span></div></div>'+
-   '<div class="row"><button class="b o" id="stSync">Sync now</button></div>'+
+   '<span>Last saved</span></div></div>'+
+   '<div class="row"><button class="b o" id="stSync">Save now</button></div>'+
    '<div class="hr"></div>'+
-   '<h4 class="lbl">Lock</h4>'+
-   '<p class="sm muted" style="margin:8px 0 12px">This device remembers the code so it does not '+
-   'ask every time. Locking forgets it. Your data is not touched either way.</p>'+
-   '<button class="b o" id="stLock">Lock this device</button>'+
+   '<h4 class="lbl">Account</h4>'+
+   '<p class="sm muted" style="margin:8px 0 12px">Signed in as '+
+   E(ACCOUNT?ACCOUNT.email:'')+'.</p>'+
+   '<div class="row"><button class="b o" data-nav="household">Household and invites</button>'+
+   '<button class="b o" id="stOut">Sign out</button></div>'+
    '<div class="hr"></div>'+
    '<h4 class="lbl">Danger</h4>'+
-   '<p class="sm muted" style="margin:8px 0 12px">This wipes everything on this device. '+
-   'Save a file first.</p>'+
-   '<button class="b dz" id="stReset">Erase all data</button>';
+   '<p class="sm muted" style="margin:8px 0 12px">This wipes the copy held on this device. '+
+   'Your account keeps what is already saved to it, so signing in again brings it back. '+
+   'Save a file first if you want one.</p>'+
+   '<button class="b dz" id="stReset">Erase this device</button>';
   var m=modal('Settings',body,'<button class="b o" data-close>Close</button>');
   $$('[data-theme]',m).forEach(function(b){b.onclick=function(){
     S.theme=b.dataset.theme; save(); applyTheme();
@@ -1008,10 +1014,9 @@ function settingsModal(){
         rows.push([c.name,s.name,i.text,i.done?'yes':'',i.note||'']);});});});
     dl('plans-'+today()+'.csv',toCSV(rows),'text/csv');};
   var sy=$('#stSync',m); if(sy) sy.onclick=function(){
-    if(!syncOn){toast('Sync is not available on this host');return;}
-    syncFlush(); syncPull(); toast('Syncing');};
-  $('#stLock',m).onclick=function(){
-    if(confirm('Ask for the code again next time this device opens the Handbook?')) lock();};
+    if(syncState==='off'){toast('Not signed in');return;}
+    pushState(); pullState(); toast('Saving');};
+  var so=$('#stOut',m); if(so) so.onclick=signOut;
   $('#stReset',m).onclick=function(){
     if(!confirm('Erase every list, log, edit and photo on this device?'))return;
     if(!confirm('Really sure? This cannot be undone without a saved file.'))return;

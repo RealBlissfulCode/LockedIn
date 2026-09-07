@@ -40,7 +40,11 @@ function buildCostSkeleton(who){
 /* Hard filters come from what somebody cannot or will not eat. Soft ones rank
    what is left. Mixing the two is how you end up recommending steak to a
    vegetarian because it scored well on protein. */
+/* Gluten free is on the list even though every recipe in the book already is.
+   Leaving it off makes people who need it assume it was not considered, and it
+   is the one thing this recipe set was actually built around. */
 var DIET_Q=[
+ ['glutenfree','Gluten free','Every recipe here already is'],
  ['vegetarian','Vegetarian','No meat or fish'],
  ['vegan','Vegan','No animal products at all'],
  ['dairyfree','Dairy free','No milk, cheese, yogurt or whey'],
@@ -87,10 +91,10 @@ var EQUIP_Q=[
 ];
 
 /* ============================ the wizard ============================ */
-var setupStep=0, setupAns=null;
+var setupStep=0, setupAns=null, setupDrawn=-1;
 
 function startOnboarding(){
-  setupStep=0;
+  setupStep=0; setupDrawn=-1;
   setupAns={name:(ACCOUNT&&ACCOUNT.name)||'',sex:'m',w:'',h:'',age:'',
             house:'',others:[],diet:[],goals:[],
             train:{goal:'gen',days:3,eq:['Bodyweight'],exp:'new'},
@@ -113,7 +117,10 @@ function setupShell(title,sub,body,foot,step,total){
     '<h1>'+E(title)+'</h1><p>'+E(sub)+'</p></div>'+
     '<div class="setupbody">'+body+'</div>'+
     '<div class="setupfoot">'+foot+'</div></div>';
-  window.scrollTo(0,0);
+  /* Ticking a box redraws the step, and redrawing is not arriving at it. Only
+     move the page when the step number actually changed, otherwise every
+     answer throws you back to the heading. */
+  if(step!==setupDrawn){ setupDrawn=step; window.scrollTo(0,0); }
 }
 
 function pickList(items,chosen,attr){
@@ -412,6 +419,148 @@ function applyMealPlan(plan,replace){
   });
   save();
   return n;
+}
+"""
+
+APP_IMPORT = r"""
+/* ============================ bringing the old data across ============================
+   Two possible sources. The state.json the old sync endpoint left on the
+   server, which is the copy that was never tied to one browser, and this
+   browser's own localStorage under the old key. The server one wins when both
+   are there, because it is the one both phones were writing to.
+
+   Whatever comes back goes through migrateToMembers, the same code path that
+   upgrades a local save, so the two profiles become members and every row that
+   held a person gets remapped. Then it replaces the account wholesale and
+   pushes, because a merge between an empty new account and a full old one has
+   nothing to decide. */
+var LEGACY_KEY='handbook.v5';
+
+function legacyLocal(){
+  try{
+    var raw=localStorage.getItem(LEGACY_KEY);
+    if(!raw) return null;
+    var o=JSON.parse(raw);
+    return (o&&o.fin)?o:null;
+  }catch(e){ return null; }
+}
+
+function importCounts(st){
+  return {costs:((st.fin||{}).costs||[]).length,
+          jobs:((st.fin||{}).jobs||[]).length,
+          days:Object.keys(st.days||{}).length,
+          plans:((st.plan||{}).cols||[]).length,
+          schedules:((st.sched||{}).cols||[]).length};
+}
+function countLine(c){
+  var bits=[];
+  if(c.costs) bits.push(c.costs+' cost lines');
+  if(c.jobs) bits.push(c.jobs+' income lines');
+  if(c.days) bits.push(c.days+' logged days');
+  if(c.plans) bits.push(c.plans+' plan collections');
+  if(c.schedules) bits.push(c.schedules+' schedule collections');
+  return bits.length?bits.join(', '):'not much in it';
+}
+
+/* Is this account still basically empty. Only used to decide whether to warn
+   before an import, never to decide whether one is allowed.
+
+   A day counts for nothing unless something was actually put in it. Opening
+   the meals page calls dayLog for today, which creates the entry whether or
+   not you touch anything, so counting keys here would mean a brand new account
+   is never empty and everybody gets warned about losing data they do not have. */
+function dayUsed(d){
+  if(!d) return false;
+  return ((d.meals||[]).length>0)||((d.sched||[]).length>0)||((d.spend||[]).length>0)
+      || !!d.notes || !!d.w || (d.workout&&d.workout!=='rest');
+}
+function looksEmpty(){
+  var days=S.days||{};
+  var anyDay=Object.keys(days).some(function(k){return dayUsed(days[k]);});
+  return !(S.fin.costs||[]).some(function(c){return c.real||c.low||c.high;})
+      && !(S.fin.jobs||[]).length
+      && !anyDay
+      && !((S.plan||{}).cols||[]).length
+      && !(((S.sched||{}).cols)||[]).length;
+}
+
+function applyLegacy(st){
+  var keepTheme=S.theme;
+  var o=JSON.parse(JSON.stringify(st));
+  var d=DEF();
+  for(var k in d) if(!(k in o)) o[k]=d[k];
+  for(var f in d.fin) if(!(f in o.fin)) o.fin[f]=d.fin[f];
+  o=migrateToMembers(o);
+  o.theme=keepTheme;
+  o.onboarded=true;
+  o.household=S.household;
+  /* Everything is newly authored as far as the server is concerned, otherwise
+     the merge treats the arriving data as older and undoes it on next push. */
+  var nowT=Date.now();
+  o.__t={}; BRANCHES.forEach(function(b){o.__t[b]=nowT;});
+  o.__td={}; Object.keys(o.days||{}).forEach(function(x){o.__td[x]=nowT;});
+  for(var kk in o) S[kk]=o[kk];
+  save();
+  _snap={}; _snapDays={};
+  syncPending=true;
+  pushState();
+}
+
+function importScreen(){
+  var box=$('#view');
+  box.innerHTML='<div class="page"><div class="phead"><h1>Bring your old data across</h1>'+
+   '<p>Everything from before accounts existed. Looking for it now.</p></div>'+
+   '<div id="impBody"><div class="empty">Checking</div></div></div>';
+  var localSt=legacyLocal();
+  api('import.php?do=peek').then(function(r){
+    var out=$('#impBody'); if(!out) return;
+    var opts='';
+    if(r.ok&&r.found){
+      opts+='<div class="card pad gap-b"><h3 class="ctitle">On the server</h3>'+
+        '<p class="sm muted">Last written '+E(String(r.updatedAt||'').slice(0,10))+
+        '. Contains '+E(countLine(r.counts))+'.</p>'+
+        '<p class="sm muted">This is the copy every device was writing to, so it is '+
+        'almost always the one you want.</p>'+
+        '<button class="b" id="impServer" style="margin-top:10px">Bring this one across</button></div>';
+    }
+    if(localSt){
+      opts+='<div class="card pad gap-b"><h3 class="ctitle">On this device</h3>'+
+        '<p class="sm muted">Contains '+E(countLine(importCounts(localSt)))+'.</p>'+
+        '<p class="sm muted">Only what this browser had. Use it if the server copy is '+
+        'missing or older than what you remember.</p>'+
+        '<button class="b o" id="impLocal" style="margin-top:10px">Bring this one across</button></div>';
+    }
+    if(!opts){
+      out.innerHTML='<div class="empty"><p>Nothing found to import.</p>'+
+        '<p class="sm">The old data is either on a different device, or the state.json '+
+        'the old version wrote is no longer on the server.</p></div>'+
+        '<div class="row"><button class="b o" data-nav="meals">Back to the app</button></div>';
+      return;
+    }
+    out.innerHTML=
+      (looksEmpty()?'':'<div class="note warn"><b>This account already has things in it.</b> '+
+        'Importing replaces all of it. Save a file from Settings first if you want a copy.</div>')+
+      opts+
+      '<div class="row"><button class="b o" data-nav="meals">Not now</button></div>';
+    var sv=$('#impServer');
+    if(sv) sv.onclick=function(){
+      if(!looksEmpty()&&!confirm('Replace everything in this account with the old data?'))return;
+      this.disabled=true; this.textContent='Bringing it across';
+      api('import.php?do=fetch',{body:{}}).then(function(f){
+        if(!f.ok){toast('Could not read it');route();return;}
+        applyLegacy(f.state);
+        toast('Your data is back');
+        location.hash='#/financial'; route();
+      });
+    };
+    var lc=$('#impLocal');
+    if(lc) lc.onclick=function(){
+      if(!looksEmpty()&&!confirm('Replace everything in this account with the old data?'))return;
+      applyLegacy(localSt);
+      toast('Your data is back');
+      location.hash='#/financial'; route();
+    };
+  });
 }
 """
 

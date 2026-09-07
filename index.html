@@ -925,8 +925,7 @@ var S=(function(){
 function save(){ S.savedAt=Date.now();
   try{syncTouch();}catch(e){}
   try{localStorage.setItem(KEY,JSON.stringify(S));}
-  catch(e){toast('Storage full. Save to file, then remove some photos.');}
-  try{syncSchedule();}catch(e){}}
+  catch(e){toast('Storage full. Save to a file, then remove some photos.');}}
 
 /* The old build shipped one household's costs, jobs, purchase lists and plans
    baked into the page and dropped them into the first browser that opened it.
@@ -1230,12 +1229,6 @@ function estDayCost(t,mode){
 }
 
 /* ---------------- file persistence ---------------- */
-/* Forget the passcode on this device. The data itself is untouched; the next
-   load just asks for the code again. */
-function lock(){
-  try{localStorage.removeItem('handbook.unlocked');}catch(e){}
-  location.reload();
-}
 function exportAll(){
   var blob={app:'handbook',version:6,exported:new Date().toISOString(),state:S};
   dl('handbook-data-'+today()+'.json',JSON.stringify(blob,null,1),'application/json');
@@ -1251,10 +1244,13 @@ function importAll(file,cb){
       var d=DEF(); for(var k in d) if(!(k in st)) st[k]=d[k];
       var keepV=S.__v;
       S=st; S.__v=keepV;
-      /* A restored file replaces everything on purpose, so it claims every
-         branch. Otherwise the merge would treat it as older than the server
-         and quietly undo the restore on the next sync. */
-      try{syncClaimAll();}catch(e){}
+      /* A restored file replaces everything on purpose, so every branch is
+         stamped now. Otherwise the merge treats it as older than the server
+         and quietly undoes the restore on the next push. */
+      var nowT=Date.now();
+      S.__t=S.__t||{}; BRANCHES.forEach(function(b){S.__t[b]=nowT;});
+      S.__td=S.__td||{};
+      Object.keys(S.days||{}).forEach(function(d){S.__td[d]=nowT;});
       save(); cb&&cb(true);
     }catch(e){ alert('That did not read as a handbook file.\n\n'+e.message); cb&&cb(false); }
   };
@@ -1683,8 +1679,19 @@ function boot(){
       applyTheme();
       chrome();
       if(!ACCOUNT.onboarded||!MEMS().length){ startOnboarding(); return; }
-      route();
       syncStart();
+      /* An account with nothing in it, on a domain that used to run the old
+         version, is almost always somebody who has data waiting. Ask once
+         rather than leaving them to find it in Settings. */
+      if(looksEmpty()&&!sessionStorage.getItem('li_import_asked')){
+        sessionStorage.setItem('li_import_asked','1');
+        return api('import.php?do=peek').then(function(r){
+          var local=legacyLocal();
+          if((r.ok&&r.found)||local){ location.hash='#/import'; }
+          route();
+        });
+      }
+      route();
     });
   });
 }
@@ -1884,7 +1891,11 @@ function buildCostSkeleton(who){
 /* Hard filters come from what somebody cannot or will not eat. Soft ones rank
    what is left. Mixing the two is how you end up recommending steak to a
    vegetarian because it scored well on protein. */
+/* Gluten free is on the list even though every recipe in the book already is.
+   Leaving it off makes people who need it assume it was not considered, and it
+   is the one thing this recipe set was actually built around. */
 var DIET_Q=[
+ ['glutenfree','Gluten free','Every recipe here already is'],
  ['vegetarian','Vegetarian','No meat or fish'],
  ['vegan','Vegan','No animal products at all'],
  ['dairyfree','Dairy free','No milk, cheese, yogurt or whey'],
@@ -1931,10 +1942,10 @@ var EQUIP_Q=[
 ];
 
 /* ============================ the wizard ============================ */
-var setupStep=0, setupAns=null;
+var setupStep=0, setupAns=null, setupDrawn=-1;
 
 function startOnboarding(){
-  setupStep=0;
+  setupStep=0; setupDrawn=-1;
   setupAns={name:(ACCOUNT&&ACCOUNT.name)||'',sex:'m',w:'',h:'',age:'',
             house:'',others:[],diet:[],goals:[],
             train:{goal:'gen',days:3,eq:['Bodyweight'],exp:'new'},
@@ -1957,7 +1968,10 @@ function setupShell(title,sub,body,foot,step,total){
     '<h1>'+E(title)+'</h1><p>'+E(sub)+'</p></div>'+
     '<div class="setupbody">'+body+'</div>'+
     '<div class="setupfoot">'+foot+'</div></div>';
-  window.scrollTo(0,0);
+  /* Ticking a box redraws the step, and redrawing is not arriving at it. Only
+     move the page when the step number actually changed, otherwise every
+     answer throws you back to the heading. */
+  if(step!==setupDrawn){ setupDrawn=step; window.scrollTo(0,0); }
 }
 
 function pickList(items,chosen,attr){
@@ -2256,6 +2270,146 @@ function applyMealPlan(plan,replace){
   });
   save();
   return n;
+}
+
+/* ============================ bringing the old data across ============================
+   Two possible sources. The state.json the old sync endpoint left on the
+   server, which is the copy that was never tied to one browser, and this
+   browser's own localStorage under the old key. The server one wins when both
+   are there, because it is the one both phones were writing to.
+
+   Whatever comes back goes through migrateToMembers, the same code path that
+   upgrades a local save, so the two profiles become members and every row that
+   held a person gets remapped. Then it replaces the account wholesale and
+   pushes, because a merge between an empty new account and a full old one has
+   nothing to decide. */
+var LEGACY_KEY='handbook.v5';
+
+function legacyLocal(){
+  try{
+    var raw=localStorage.getItem(LEGACY_KEY);
+    if(!raw) return null;
+    var o=JSON.parse(raw);
+    return (o&&o.fin)?o:null;
+  }catch(e){ return null; }
+}
+
+function importCounts(st){
+  return {costs:((st.fin||{}).costs||[]).length,
+          jobs:((st.fin||{}).jobs||[]).length,
+          days:Object.keys(st.days||{}).length,
+          plans:((st.plan||{}).cols||[]).length,
+          schedules:((st.sched||{}).cols||[]).length};
+}
+function countLine(c){
+  var bits=[];
+  if(c.costs) bits.push(c.costs+' cost lines');
+  if(c.jobs) bits.push(c.jobs+' income lines');
+  if(c.days) bits.push(c.days+' logged days');
+  if(c.plans) bits.push(c.plans+' plan collections');
+  if(c.schedules) bits.push(c.schedules+' schedule collections');
+  return bits.length?bits.join(', '):'not much in it';
+}
+
+/* Is this account still basically empty. Only used to decide whether to warn
+   before an import, never to decide whether one is allowed.
+
+   A day counts for nothing unless something was actually put in it. Opening
+   the meals page calls dayLog for today, which creates the entry whether or
+   not you touch anything, so counting keys here would mean a brand new account
+   is never empty and everybody gets warned about losing data they do not have. */
+function dayUsed(d){
+  if(!d) return false;
+  return ((d.meals||[]).length>0)||((d.sched||[]).length>0)||((d.spend||[]).length>0)
+      || !!d.notes || !!d.w || (d.workout&&d.workout!=='rest');
+}
+function looksEmpty(){
+  var days=S.days||{};
+  var anyDay=Object.keys(days).some(function(k){return dayUsed(days[k]);});
+  return !(S.fin.costs||[]).some(function(c){return c.real||c.low||c.high;})
+      && !(S.fin.jobs||[]).length
+      && !anyDay
+      && !((S.plan||{}).cols||[]).length
+      && !(((S.sched||{}).cols)||[]).length;
+}
+
+function applyLegacy(st){
+  var keepTheme=S.theme;
+  var o=JSON.parse(JSON.stringify(st));
+  var d=DEF();
+  for(var k in d) if(!(k in o)) o[k]=d[k];
+  for(var f in d.fin) if(!(f in o.fin)) o.fin[f]=d.fin[f];
+  o=migrateToMembers(o);
+  o.theme=keepTheme;
+  o.onboarded=true;
+  o.household=S.household;
+  /* Everything is newly authored as far as the server is concerned, otherwise
+     the merge treats the arriving data as older and undoes it on next push. */
+  var nowT=Date.now();
+  o.__t={}; BRANCHES.forEach(function(b){o.__t[b]=nowT;});
+  o.__td={}; Object.keys(o.days||{}).forEach(function(x){o.__td[x]=nowT;});
+  for(var kk in o) S[kk]=o[kk];
+  save();
+  _snap={}; _snapDays={};
+  syncPending=true;
+  pushState();
+}
+
+function importScreen(){
+  var box=$('#view');
+  box.innerHTML='<div class="page"><div class="phead"><h1>Bring your old data across</h1>'+
+   '<p>Everything from before accounts existed. Looking for it now.</p></div>'+
+   '<div id="impBody"><div class="empty">Checking</div></div></div>';
+  var localSt=legacyLocal();
+  api('import.php?do=peek').then(function(r){
+    var out=$('#impBody'); if(!out) return;
+    var opts='';
+    if(r.ok&&r.found){
+      opts+='<div class="card pad gap-b"><h3 class="ctitle">On the server</h3>'+
+        '<p class="sm muted">Last written '+E(String(r.updatedAt||'').slice(0,10))+
+        '. Contains '+E(countLine(r.counts))+'.</p>'+
+        '<p class="sm muted">This is the copy every device was writing to, so it is '+
+        'almost always the one you want.</p>'+
+        '<button class="b" id="impServer" style="margin-top:10px">Bring this one across</button></div>';
+    }
+    if(localSt){
+      opts+='<div class="card pad gap-b"><h3 class="ctitle">On this device</h3>'+
+        '<p class="sm muted">Contains '+E(countLine(importCounts(localSt)))+'.</p>'+
+        '<p class="sm muted">Only what this browser had. Use it if the server copy is '+
+        'missing or older than what you remember.</p>'+
+        '<button class="b o" id="impLocal" style="margin-top:10px">Bring this one across</button></div>';
+    }
+    if(!opts){
+      out.innerHTML='<div class="empty"><p>Nothing found to import.</p>'+
+        '<p class="sm">The old data is either on a different device, or the state.json '+
+        'the old version wrote is no longer on the server.</p></div>'+
+        '<div class="row"><button class="b o" data-nav="meals">Back to the app</button></div>';
+      return;
+    }
+    out.innerHTML=
+      (looksEmpty()?'':'<div class="note warn"><b>This account already has things in it.</b> '+
+        'Importing replaces all of it. Save a file from Settings first if you want a copy.</div>')+
+      opts+
+      '<div class="row"><button class="b o" data-nav="meals">Not now</button></div>';
+    var sv=$('#impServer');
+    if(sv) sv.onclick=function(){
+      if(!looksEmpty()&&!confirm('Replace everything in this account with the old data?'))return;
+      this.disabled=true; this.textContent='Bringing it across';
+      api('import.php?do=fetch',{body:{}}).then(function(f){
+        if(!f.ok){toast('Could not read it');route();return;}
+        applyLegacy(f.state);
+        toast('Your data is back');
+        location.hash='#/financial'; route();
+      });
+    };
+    var lc=$('#impLocal');
+    if(lc) lc.onclick=function(){
+      if(!looksEmpty()&&!confirm('Replace everything in this account with the old data?'))return;
+      applyLegacy(localSt);
+      toast('Your data is back');
+      location.hash='#/financial'; route();
+    };
+  });
 }
 
 /* ============================ the meal plan screen ============================
@@ -4025,6 +4179,7 @@ function route(){
       : v==='lists'?vRecipeLists()
       : v==='household'?vHousehold()
       : v==='mealplan'?vMealPlan()
+      : v==='import'?'<div class="page"><div class="phead"><h1>Bring your old data across</h1></div></div>'
       : v==='schedule'?vSchedule(sub) : vMeals();
   }catch(e){ html=errPanel(v.charAt(0).toUpperCase()+v.slice(1),e);
     if(window.console&&console.error)console.error(e); }
@@ -4091,6 +4246,7 @@ function bind(){
   }
   if(v==='household') bindHousehold();
   if(v==='mealplan') bindMealPlan();
+  if(v==='import') importScreen();
   if(v==='financial') bindFin(h[1]);
   if(v==='planning') bindPlan(h[1]);
   if(v==='schedule') bindSched(h[1]);
@@ -4851,7 +5007,8 @@ document.addEventListener('click',function(e){
       save();nav('schedule/templates');}
     return;}
   if(t.closest('#syncPill')){
-    if(syncOn){syncFlush();syncPull();toast('Syncing');} else settingsModal(); return;}
+    if(syncState==='off'){ settingsModal(); return; }
+    pushState(); pullState(); toast('Saving'); return;}
   if(t.closest('#settings')){settingsModal();return;}
   }catch(err){ if(window.console&&console.error)console.error('click',err);
     toast('Something went wrong: '+(err.message||err)); }
@@ -4876,7 +5033,8 @@ function settingsModal(){
    '<div class="stat"><b>'+Math.round(size/1024)+'k</b><span>Stored</span></div></div>'+
    '<div class="row" style="margin-bottom:18px">'+
    '<button class="b" id="stSave">Save to a file</button>'+
-   '<button class="b o" id="stLoad">Load a file</button></div>'+
+   '<button class="b o" id="stLoad">Load a file</button>'+
+   '<button class="b o" data-nav="import">Bring old data across</button></div>'+
    '<p class="xs muted">Last saved: '+E(when)+'</p>'+
    '<div class="hr"></div>'+
    '<h4 class="lbl">Household</h4>'+
@@ -4895,30 +5053,32 @@ function settingsModal(){
    '<button class="b o s" id="stFin">Budget CSV</button>'+
    '<button class="b o s" id="stPlan">Plans CSV</button></div>'+
    '<div class="hr"></div>'+
-   '<h4 class="lbl">Sync</h4>'+
+   '<h4 class="lbl">Saving</h4>'+
    '<p class="sm muted" style="margin:8px 0 12px">'+
-   (syncOn
-     ? 'Shared with every device that knows the code. Changes push a moment after you '+
-       'make them and pull when a device comes back to the front.'
-     : 'Not syncing right now. Everything still saves on this device.')+
+   (syncState!=='off'
+     ? 'Everything is on your account, so it is on every device you sign in on and on '+
+       'everyone else&#39;s in the household. Changes go up a moment after you make them.'
+     : 'Not saving to your account right now. Everything still saves on this device.')+
    (syncMsg?' <b>'+E(syncMsg)+'</b>':'')+'</p>'+
    '<div class="stats gap-b">'+
    '<div class="stat"><b>'+E({off:'Local',idle:'On',pull:'On',push:'On',
       offline:'Offline',error:'Error'}[syncState]||syncState)+'</b><span>State</span></div>'+
-   '<div class="stat"><b>'+(S.__v||0)+'</b><span>Version</span></div>'+
+   '<div class="stat"><b>'+docVer+'</b><span>Version</span></div>'+
    '<div class="stat"><b>'+E(syncAt?new Date(syncAt).toLocaleTimeString():'never')+'</b>'+
-   '<span>Last synced</span></div></div>'+
-   '<div class="row"><button class="b o" id="stSync">Sync now</button></div>'+
+   '<span>Last saved</span></div></div>'+
+   '<div class="row"><button class="b o" id="stSync">Save now</button></div>'+
    '<div class="hr"></div>'+
-   '<h4 class="lbl">Lock</h4>'+
-   '<p class="sm muted" style="margin:8px 0 12px">This device remembers the code so it does not '+
-   'ask every time. Locking forgets it. Your data is not touched either way.</p>'+
-   '<button class="b o" id="stLock">Lock this device</button>'+
+   '<h4 class="lbl">Account</h4>'+
+   '<p class="sm muted" style="margin:8px 0 12px">Signed in as '+
+   E(ACCOUNT?ACCOUNT.email:'')+'.</p>'+
+   '<div class="row"><button class="b o" data-nav="household">Household and invites</button>'+
+   '<button class="b o" id="stOut">Sign out</button></div>'+
    '<div class="hr"></div>'+
    '<h4 class="lbl">Danger</h4>'+
-   '<p class="sm muted" style="margin:8px 0 12px">This wipes everything on this device. '+
-   'Save a file first.</p>'+
-   '<button class="b dz" id="stReset">Erase all data</button>';
+   '<p class="sm muted" style="margin:8px 0 12px">This wipes the copy held on this device. '+
+   'Your account keeps what is already saved to it, so signing in again brings it back. '+
+   'Save a file first if you want one.</p>'+
+   '<button class="b dz" id="stReset">Erase this device</button>';
   var m=modal('Settings',body,'<button class="b o" data-close>Close</button>');
   $$('[data-theme]',m).forEach(function(b){b.onclick=function(){
     S.theme=b.dataset.theme; save(); applyTheme();
@@ -4965,10 +5125,9 @@ function settingsModal(){
         rows.push([c.name,s.name,i.text,i.done?'yes':'',i.note||'']);});});});
     dl('plans-'+today()+'.csv',toCSV(rows),'text/csv');};
   var sy=$('#stSync',m); if(sy) sy.onclick=function(){
-    if(!syncOn){toast('Sync is not available on this host');return;}
-    syncFlush(); syncPull(); toast('Syncing');};
-  $('#stLock',m).onclick=function(){
-    if(confirm('Ask for the code again next time this device opens the Handbook?')) lock();};
+    if(syncState==='off'){toast('Not signed in');return;}
+    pushState(); pullState(); toast('Saving');};
+  var so=$('#stOut',m); if(so) so.onclick=signOut;
   $('#stReset',m).onclick=function(){
     if(!confirm('Erase every list, log, edit and photo on this device?'))return;
     if(!confirm('Really sure? This cannot be undone without a saved file.'))return;

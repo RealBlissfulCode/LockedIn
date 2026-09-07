@@ -97,8 +97,7 @@ var S=(function(){
 function save(){ S.savedAt=Date.now();
   try{syncTouch();}catch(e){}
   try{localStorage.setItem(KEY,JSON.stringify(S));}
-  catch(e){toast('Storage full. Save to file, then remove some photos.');}
-  try{syncSchedule();}catch(e){}}
+  catch(e){toast('Storage full. Save to a file, then remove some photos.');}}
 
 /* The old build shipped one household's costs, jobs, purchase lists and plans
    baked into the page and dropped them into the first browser that opened it.
@@ -402,12 +401,6 @@ function estDayCost(t,mode){
 }
 
 /* ---------------- file persistence ---------------- */
-/* Forget the passcode on this device. The data itself is untouched; the next
-   load just asks for the code again. */
-function lock(){
-  try{localStorage.removeItem('handbook.unlocked');}catch(e){}
-  location.reload();
-}
 function exportAll(){
   var blob={app:'handbook',version:6,exported:new Date().toISOString(),state:S};
   dl('handbook-data-'+today()+'.json',JSON.stringify(blob,null,1),'application/json');
@@ -423,10 +416,13 @@ function importAll(file,cb){
       var d=DEF(); for(var k in d) if(!(k in st)) st[k]=d[k];
       var keepV=S.__v;
       S=st; S.__v=keepV;
-      /* A restored file replaces everything on purpose, so it claims every
-         branch. Otherwise the merge would treat it as older than the server
-         and quietly undo the restore on the next sync. */
-      try{syncClaimAll();}catch(e){}
+      /* A restored file replaces everything on purpose, so every branch is
+         stamped now. Otherwise the merge treats it as older than the server
+         and quietly undoes the restore on the next push. */
+      var nowT=Date.now();
+      S.__t=S.__t||{}; BRANCHES.forEach(function(b){S.__t[b]=nowT;});
+      S.__td=S.__td||{};
+      Object.keys(S.days||{}).forEach(function(d){S.__td[d]=nowT;});
       save(); cb&&cb(true);
     }catch(e){ alert('That did not read as a handbook file.\n\n'+e.message); cb&&cb(false); }
   };
