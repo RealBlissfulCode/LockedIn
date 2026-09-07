@@ -782,6 +782,13 @@ background:var(--panel-2);margin-top:12px}
 .gfound b{display:block;font-size:15px}
 .gfound span{display:block;font-size:12px;color:var(--ink-3);margin-top:3px}
 
+.steps{margin:0;padding-left:20px;color:var(--ink-2);font-size:14px;line-height:1.75}
+.steps li{margin-bottom:9px}
+.steps b{color:var(--ink)}
+.addr{font-family:var(--f-mono);font-size:13px;padding:14px;border-radius:var(--r);
+background:var(--panel-2);border:1px solid var(--line);color:var(--brass);
+word-break:break-all;margin-bottom:12px}
+
 /* Who you are, in the top bar. Not a control for becoming anybody else. */
 .mechip{background:var(--panel);border:1px solid var(--line);color:var(--ink-2);
 border-radius:999px;padding:6px 14px;font:600 13px/1 var(--f-body);cursor:pointer;
@@ -940,6 +947,73 @@ var EX=_D.exercises, SESS=_D.sessions;
    matters; this is what makes the app usable on a plane. */
 var KEY='lockedin.v7';
 
+/* ---------------- cost sections ----------------
+   The old list had a Living bucket holding groceries, fuel, car insurance,
+   haircuts and clothing, which is four unrelated things in a drawer and tells
+   you nothing when it turns out to be your biggest number after rent.
+
+   These split on the question people actually ask, which is what could I
+   change. Fixed things you signed a contract for sit apart from food, from
+   getting about, from what you chose to spend on yourself, and from money that
+   is still yours once it moves. Getting around is its own section because for
+   most people it is second only to home and it hides inside Living otherwise.
+
+   Home stays split by renting and buying because a scenario switches between
+   them, and only one side is ever counted at a time. */
+var SECTIONS=[
+ ['Home (renting)','Rent, renters insurance, anything tied to renting'],
+ ['Home (buying)','Mortgage, property tax, home insurance, repairs'],
+ ['Utilities','Power, water, gas, trash, internet, phone'],
+ ['Food','Groceries and eating out'],
+ ['Getting around','Fuel, car payment and insurance, repairs, transit'],
+ ['Health','Insurance, appointments, prescriptions, the gym'],
+ ['Personal','Clothes, haircuts, subscriptions, things for the house'],
+ ['Fun','Going out, hobbies, travel, presents'],
+ ['People and pets','Childcare, pets, helping family'],
+ ['Debt','Cards, student loans, anything being paid down'],
+ ['Saving','Emergency fund, retirement, saving up for something']
+];
+function sectionOpts(){
+  return SECTIONS.map(function(x){return [x[0],x[0]];});
+}
+/* Sections that never count against each other. Only one home is real at a
+   time, which is what the housing path switch picks between. */
+var RENT_SECTION='Home (renting)', BUY_SECTION='Home (buying)';
+
+/* Rows written before the sections were reworked. Living was the junk drawer,
+   so it splits by what the line actually was rather than moving wholesale. */
+var OLD_SECTIONS={'Housing (rent)':RENT_SECTION,'Housing (buy)':BUY_SECTION,
+                  'Savings':'Saving','Living':'Personal'};
+var LIVING_HINTS=[
+ [/groceries|food|eating out|restaurant|takeaway|takeout|coffee/i,'Food'],
+ [/fuel|gas for|petrol|car|vehicle|transit|bus|train|parking|registration|insurance \(car\)/i,'Getting around'],
+ [/gym|doctor|dental|medical|prescription|therapy/i,'Health'],
+ [/pet|dog|cat|child|daycare|nursery/i,'People and pets'],
+ [/social|fun|hobby|travel|holiday|vacation|gift|birthday|night out/i,'Fun']
+];
+function migrateSections(o){
+  if(o.__sections7) return o;
+  ((o.fin||{}).costs||[]).forEach(function(c){ c.section=newSection(c.section,c.name); });
+  Object.keys((o.fin||{}).scenarios||{}).forEach(function(n){
+    ((o.fin.scenarios[n]||{}).costs||[]).forEach(function(c){
+      c.section=newSection(c.section,c.name); });
+  });
+  o.__sections7=true;
+  o.__migrated=true;
+  return o;
+}
+function newSection(sec,name){
+  if(!sec) return 'Personal';
+  var known=SECTIONS.some(function(x){return x[0]===sec;});
+  if(known) return sec;
+  if(sec==='Living'){
+    for(var i=0;i<LIVING_HINTS.length;i++)
+      if(LIVING_HINTS[i][0].test(name||'')) return LIVING_HINTS[i][1];
+    return 'Personal';
+  }
+  return OLD_SECTIONS[sec]||'Personal';
+}
+
 /* ---------------- state ---------------- */
 /* A fresh account is one person and nothing else. No second profile waiting to
    be renamed, no seeded shopping list, no costs already filled in. Everything
@@ -1011,17 +1085,55 @@ function migrateToMembers(o){
   });
   delete o.prof;
   o.v=7;
+  o.__migrated=true;
   return o;
 }
+/* Set when the saved state could not be brought forward. Nothing is allowed to
+   go up to the server while this is true, because the alternative is what
+   already happened once: a migration threw, the catch handed back an empty
+   account, and the empty account overwrote a real one. Losing a session is
+   recoverable. Overwriting the server is not. */
+var LOAD_BROKE='';
+
 var S=(function(){
-  try{var raw=localStorage.getItem(KEY);
-    if(raw){var o=JSON.parse(raw),d=DEF();
-      for(var k in d) if(!(k in o)) o[k]=d[k];
-      for(var f in d.fin) if(!(f in o.fin)) o.fin[f]=d.fin[f];
-      return migrateSections(migrateToMembers(o));}
-  }catch(e){}
-  return DEF();
+  var raw=null;
+  try{ raw=localStorage.getItem(KEY); }catch(e){}
+  if(!raw) return DEF();
+
+  var o;
+  try{ o=JSON.parse(raw); }
+  catch(e){
+    /* Unreadable is different from absent, and guessing which is which by
+       returning defaults is how data gets destroyed. */
+    LOAD_BROKE='The copy saved on this device could not be read.';
+    return DEF();
+  }
+  if(!o||typeof o!=='object'){ LOAD_BROKE='The copy saved on this device was not usable.'; return DEF(); }
+
+  var d=DEF();
+  for(var k in d) if(!(k in o)) o[k]=d[k];
+  if(!o.fin||typeof o.fin!=='object') o.fin=d.fin;
+  for(var f in d.fin) if(!(f in o.fin)) o.fin[f]=d.fin[f];
+
+  /* A migration that throws leaves the data exactly as it was found rather
+     than replacing it. Half migrated and readable beats blank and clean. */
+  try{ o=migrateToMembers(o); }
+  catch(e){ LOAD_BROKE='Could not bring this account forward: '+(e.message||e); }
+  try{ o=migrateSections(o); }
+  catch(e){ LOAD_BROKE='Could not bring this account forward: '+(e.message||e); }
+  return o;
 })();
+
+/* A migration that only lives in memory gets redone on every load and never
+   reaches the account. Write it down now, and stamp what it touched so the
+   next push carries it instead of the server keeping the old shape forever. */
+if(S.__migrated&&!LOAD_BROKE){
+  delete S.__migrated;
+  var _mt=Date.now();
+  S.__t=S.__t||{};
+  ['members','fin','days','sched','plan'].forEach(function(b){ S.__t[b]=_mt; });
+  try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}
+}
 function save(){ S.savedAt=Date.now();
   try{syncTouch();}catch(e){}
   try{localStorage.setItem(KEY,JSON.stringify(S));}
@@ -1125,72 +1237,6 @@ function applyCollection(id,scope){
   }
   if(n) save();
   return n;
-}
-
-/* ---------------- cost sections ----------------
-   The old list had a Living bucket holding groceries, fuel, car insurance,
-   haircuts and clothing, which is four unrelated things in a drawer and tells
-   you nothing when it turns out to be your biggest number after rent.
-
-   These split on the question people actually ask, which is what could I
-   change. Fixed things you signed a contract for sit apart from food, from
-   getting about, from what you chose to spend on yourself, and from money that
-   is still yours once it moves. Getting around is its own section because for
-   most people it is second only to home and it hides inside Living otherwise.
-
-   Home stays split by renting and buying because a scenario switches between
-   them, and only one side is ever counted at a time. */
-var SECTIONS=[
- ['Home (renting)','Rent, renters insurance, anything tied to renting'],
- ['Home (buying)','Mortgage, property tax, home insurance, repairs'],
- ['Utilities','Power, water, gas, trash, internet, phone'],
- ['Food','Groceries and eating out'],
- ['Getting around','Fuel, car payment and insurance, repairs, transit'],
- ['Health','Insurance, appointments, prescriptions, the gym'],
- ['Personal','Clothes, haircuts, subscriptions, things for the house'],
- ['Fun','Going out, hobbies, travel, presents'],
- ['People and pets','Childcare, pets, helping family'],
- ['Debt','Cards, student loans, anything being paid down'],
- ['Saving','Emergency fund, retirement, saving up for something']
-];
-function sectionOpts(){
-  return SECTIONS.map(function(x){return [x[0],x[0]];});
-}
-/* Sections that never count against each other. Only one home is real at a
-   time, which is what the housing path switch picks between. */
-var RENT_SECTION='Home (renting)', BUY_SECTION='Home (buying)';
-
-/* Rows written before the sections were reworked. Living was the junk drawer,
-   so it splits by what the line actually was rather than moving wholesale. */
-var OLD_SECTIONS={'Housing (rent)':RENT_SECTION,'Housing (buy)':BUY_SECTION,
-                  'Savings':'Saving','Living':'Personal'};
-var LIVING_HINTS=[
- [/groceries|food|eating out|restaurant|takeaway|takeout|coffee/i,'Food'],
- [/fuel|gas for|petrol|car|vehicle|transit|bus|train|parking|registration|insurance \(car\)/i,'Getting around'],
- [/gym|doctor|dental|medical|prescription|therapy/i,'Health'],
- [/pet|dog|cat|child|daycare|nursery/i,'People and pets'],
- [/social|fun|hobby|travel|holiday|vacation|gift|birthday|night out/i,'Fun']
-];
-function migrateSections(o){
-  if(o.__sections7) return o;
-  ((o.fin||{}).costs||[]).forEach(function(c){ c.section=newSection(c.section,c.name); });
-  Object.keys((o.fin||{}).scenarios||{}).forEach(function(n){
-    ((o.fin.scenarios[n]||{}).costs||[]).forEach(function(c){
-      c.section=newSection(c.section,c.name); });
-  });
-  o.__sections7=true;
-  return o;
-}
-function newSection(sec,name){
-  if(!sec) return 'Personal';
-  var known=SECTIONS.some(function(x){return x[0]===sec;});
-  if(known) return sec;
-  if(sec==='Living'){
-    for(var i=0;i<LIVING_HINTS.length;i++)
-      if(LIVING_HINTS[i][0].test(name||'')) return LIVING_HINTS[i][1];
-    return 'Personal';
-  }
-  return OLD_SECTIONS[sec]||'Personal';
 }
 
 /* ---------------- who is who ----------------
@@ -1849,6 +1895,24 @@ function boot(){
       document.body.classList.add('unlocked');
       applyTheme();
       chrome();
+      /* If the saved copy could not be read, say so loudly and do not treat the
+         empty result as a fresh account, because that is how one gets
+         overwritten. Nothing is pushed while this is set. */
+      if(LOAD_BROKE){
+        document.getElementById('view').innerHTML=
+          '<div class="page"><div class="phead"><h1>Something is wrong with this device&#39;s copy</h1>'+
+          '<p>'+E(LOAD_BROKE)+'</p></div>'+
+          '<div class="note warn"><b>Nothing is being saved from this device right now</b>, on '+
+          'purpose, so it cannot overwrite what is on your account.</div>'+
+          '<div class="row"><button class="b" id="lbReload">Clear this device and pull the account down</button>'+
+          '<button class="b o" data-nav="restore">Earlier versions</button></div></div>';
+        var rb=document.getElementById('lbReload');
+        if(rb) rb.onclick=function(){
+          try{localStorage.removeItem(KEY);}catch(e){}
+          location.reload();
+        };
+        return;
+      }
       if(!ACCOUNT.onboarded||!MEMS().length){ startOnboarding(); return; }
       syncStart();
       /* An account with nothing in it, on a domain that used to run the old
@@ -1960,6 +2024,7 @@ function pullState(){
     }
     docVer=r.shared.version||0;
     privVer=r.private.version||0;
+    serverWeight=stateWeight(r.shared.body);
     var changed=false;
     if(r.shared.body) changed=mergeIn(r.shared.body)||changed;
     if(r.private.body){ PRIVATE.forEach(function(k){
@@ -1980,8 +2045,37 @@ function queuePush(){
   syncTimer=setTimeout(pushState,1200);
 }
 
+/* A rough size for a document, used only to notice a cliff. Counting the
+   things people actually make means a state that lost its content registers
+   even if it still has plenty of keys on it. */
+function stateWeight(o){
+  if(!o) return 0;
+  var f=o.fin||{};
+  return (f.costs||[]).length+(f.jobs||[]).length+(f.actuals||[]).length
+       + Object.keys(f.scenarios||{}).length+Object.keys(f.purchases||{}).length
+       + Object.keys(f.strategies||{}).length
+       + Object.keys(o.days||{}).length+((o.plan||{}).cols||[]).length
+       + (((o.sched||{}).cols)||[]).length+Object.keys(o.lists||{}).length
+       + (o.members||[]).length+(o.fav||[]).length;
+}
+var serverWeight=0;
+
 function pushState(){
   if(syncBusy||!syncPending||syncState==='off') return;
+  /* Nothing goes up from a session that could not read its own saved state. */
+  if(LOAD_BROKE){ syncSet('error','Not saving: '+LOAD_BROKE); return; }
+  /* And nothing goes up that would empty an account. A drop this size is a bug
+     in here, not a decision somebody made, and the server copy is the only one
+     left once this overwrites it. */
+  var w=stateWeight(S);
+  if(serverWeight>=12&&w<=Math.max(2,serverWeight*0.25)){
+    syncSet('error','Not saving: this would wipe most of the account');
+    if(!window.__wipeWarned){
+      window.__wipeWarned=1;
+      toast('Saving paused. This device is holding almost nothing and the account has data.');
+    }
+    return;
+  }
   syncBusy=true; syncPending=false;
   syncSet('push');
   var payload=stripLocal(S);
@@ -1989,6 +2083,7 @@ function pushState(){
   api('doc.php?scope=shared',{body:{version:docVer,body:payload}}).then(function(r){
     if(r.ok){
       docVer=r.version; syncAt=Date.now(); syncFails=0; syncSet('idle');
+      serverWeight=stateWeight(S);
       return pushPrivate();
     }
     if(r.__status===409){
@@ -2528,6 +2623,123 @@ function applyLegacy(st){
   _snap={}; _snapDays={};
   syncPending=true;
   pushState();
+}
+
+/* ============================ putting it on a phone ============================
+   Chrome hands over an install prompt if you catch the event and hold on to
+   it, so on Android this is one button. Safari never offers one, so iOS gets
+   told exactly which menu to open instead of a button that does nothing. */
+var installEvent=null;
+window.addEventListener('beforeinstallprompt',function(e){
+  e.preventDefault();
+  installEvent=e;
+  var b=document.getElementById('instBtn');
+  if(b) b.hidden=false;
+});
+window.addEventListener('appinstalled',function(){ installEvent=null; });
+
+function isStandalone(){
+  try{
+    return window.matchMedia('(display-mode: standalone)').matches
+        || window.navigator.standalone===true;
+  }catch(e){ return false; }
+}
+function devicePlatform(){
+  var ua=navigator.userAgent||'';
+  if(/iPhone|iPad|iPod/i.test(ua)) return 'ios';
+  if(/Android/i.test(ua)) return 'android';
+  return 'desktop';
+}
+
+function vInstall(){
+  var p=devicePlatform();
+  var here=location.origin+location.pathname;
+  var steps=
+    p==='ios'
+      ? '<ol class="steps"><li>Open this page in <b>Safari</b>. It has to be Safari, '+
+        'Chrome on an iPhone cannot install it.</li>'+
+        '<li>Tap the <b>Share</b> button, the square with the arrow coming out of it, '+
+        'at the bottom of the screen.</li>'+
+        '<li>Scroll down the list and tap <b>Add to Home Screen</b>.</li>'+
+        '<li>Tap <b>Add</b>. It is on your home screen like any other app.</li></ol>'
+    : p==='android'
+      ? '<ol class="steps"><li>Tap <b>Install</b> above. If it is not there, use the '+
+        '<b>three dots</b> at the top right of Chrome.</li>'+
+        '<li>Tap <b>Install app</b>, or <b>Add to Home screen</b> on older versions.</li>'+
+        '<li>Confirm. It lands in your app drawer and on your home screen.</li></ol>'
+      : '<ol class="steps"><li>Look for the <b>install icon</b> in the address bar, a screen '+
+        'with a downward arrow, at the right hand end.</li>'+
+        '<li>Or open the browser menu and choose <b>Install LockedIn</b>.</li>'+
+        '<li>It opens in its own window from then on, with no browser chrome.</li></ol>';
+
+  return '<div class="page"><div class="phead"><h1>Put it on your phone</h1>'+
+   '<p>It installs straight from the browser. There is no app store, no download, and no '+
+   'update to ever install again: it is the same page, just without the browser around it.</p></div>'+
+   (isStandalone()
+     ? '<div class="note good"><b>Already installed.</b> You are looking at the installed '+
+       'copy right now.</div>'
+     : '<div class="row toolbar">'+
+       '<button class="b" id="instBtn"'+(installEvent?'':' hidden')+'>Install</button>'+
+       '<button class="b o" id="instCopy">Copy the link</button></div>')+
+   '<div class="sec"><h2>'+(p==='ios'?'On an iPhone or iPad':p==='android'?'On Android':'On a computer')+'</h2>'+
+   steps+'</div>'+
+   '<div class="sec"><h2>The address</h2>'+
+   '<p class="sub">Whatever device you are setting up, this is the only thing you need. '+
+   'Sign in with the same Google account and everything is already there.</p>'+
+   '<div class="addr">'+E(here)+'</div>'+
+   '<div class="row"><button class="b o" id="instCopy2">Copy the link</button></div></div>'+
+   '<div class="sec"><h2>If you deleted it</h2>'+
+   '<p class="sub">Nothing was lost. Deleting the installed copy removes the icon and this '+
+   'device&#39;s cache, and none of that is where your account lives. Open the address above, '+
+   'sign in, and install it again.</p></div>'+
+   '</div>';
+}
+
+function bindInstall(){
+  function doCopy(){
+    var t=location.origin+location.pathname;
+    try{ navigator.clipboard.writeText(t); toast('Link copied'); }
+    catch(e){ toast(t); }
+  }
+  on('#instCopy','click',doCopy);
+  on('#instCopy2','click',doCopy);
+  on('#instBtn','click',function(){
+    if(!installEvent){ toast('Use the browser menu, the steps below say where'); return; }
+    installEvent.prompt();
+    installEvent.userChoice.then(function(r){
+      if(r&&r.outcome==='accepted'){ installEvent=null; toast('Installed'); route(); }
+    });
+  });
+}
+
+/* Earlier versions of the household document, and a way back to one. */
+function restoreScreen(){
+  var box=$('#view');
+  box.innerHTML='<div class="page"><div class="phead"><h1>Earlier versions</h1>'+
+   '<p>Every time this account is saved, the copy it replaced is kept for a month. '+
+   'If something went wrong you can put one of them back.</p></div>'+
+   '<div id="rsBody"><div class="empty">Looking</div></div></div>';
+  api('doc.php?do=history&scope=shared').then(function(r){
+    var out=$('#rsBody'); if(!out) return;
+    if(!r.ok||!r.versions.length){
+      out.innerHTML='<div class="empty"><p>No earlier versions yet.</p>'+
+        '<p class="sm">They start being kept from the next save onwards.</p></div>'+
+        '<div class="row"><button class="b o" data-nav="meals">Back</button></div>';
+      return;
+    }
+    out.innerHTML='<div class="tw cards"><table><thead><tr><th>Version</th><th>Saved</th>'+
+      '<th class="num">Size</th><th></th></tr></thead><tbody>'+
+      r.versions.map(function(v){
+        return '<tr><td class="hd"><b>Version '+v.version+'</b></td>'+
+        '<td data-l="Saved" class="sm muted">'+E(String(v.saved_at).replace('T',' ').slice(0,16))+'</td>'+
+        '<td data-l="Things in it" class="num">'+v.weight+'</td>'+
+        '<td class="act"><button class="b o s" data-rsv="'+v.version+'">Put this back</button></td></tr>';
+      }).join('')+'</tbody></table></div>'+
+      '<p class="sub" style="margin-top:12px">Size is a rough count of the lines, days and '+
+      'lists in that copy. A version far smaller than the ones around it is usually the '+
+      'one that went wrong.</p>'+
+      '<div class="row"><button class="b o" data-nav="meals">Back</button></div>';
+  });
 }
 
 function importScreen(){
@@ -4635,6 +4847,8 @@ function route(){
       : v==='household'?vHousehold()
       : v==='mealplan'?vMealPlan()
       : v==='import'?'<div class="page"><div class="phead"><h1>Bring your old data across</h1></div></div>'
+      : v==='restore'?'<div class="page"><div class="phead"><h1>Earlier versions</h1></div></div>'
+      : v==='install'?vInstall()
       : v==='schedule'?vSchedule(sub) : vMeals();
   }catch(e){ html=errPanel(v.charAt(0).toUpperCase()+v.slice(1),e);
     if(window.console&&console.error)console.error(e); }
@@ -4702,6 +4916,8 @@ function bind(){
   if(v==='household') bindHousehold();
   if(v==='mealplan') bindMealPlan();
   if(v==='import') importScreen();
+  if(v==='restore') restoreScreen();
+  if(v==='install') bindInstall();
   if(v==='financial') bindFin(h[1]);
   if(v==='planning') bindPlan(h[1]);
   if(v==='schedule') bindSched(h[1]);
@@ -5278,6 +5494,16 @@ document.addEventListener('click',function(e){
   /* Kept so a stale button left in an open page cannot throw, but it no longer
      changes who you are. Correcting that is a deliberate act in Settings. */
   if((el=t.closest('[data-w]'))){return;}
+  if((el=t.closest('[data-rsv]'))){
+    var vv=el.dataset.rsv;
+    if(!confirm('Put version '+vv+' back? What is there now is kept as another version, '+
+      'so this can be undone.'))return;
+    api('doc.php?do=restore&scope=shared',{body:{version:+vv}}).then(function(r){
+      if(!r.ok){toast('Could not restore that one');return;}
+      try{localStorage.removeItem(KEY);}catch(e){}
+      location.reload();
+    });
+    return;}
   if((el=t.closest('[data-acttab]'))){actTab=el.dataset.acttab;route();return;}
   if((el=t.closest('[data-actline]'))){lineEntries(el.dataset.actline);return;}
   if((el=t.closest('[data-actadd]'))){
@@ -5507,7 +5733,13 @@ function settingsModal(){
    '<div class="row" style="margin-bottom:18px">'+
    '<button class="b" id="stSave">Save to a file</button>'+
    '<button class="b o" id="stLoad">Load a file</button>'+
-   '<button class="b o" data-nav="import">Bring old data across</button></div>'+
+   '<button class="b o" data-nav="import">Bring old data across</button>'+
+   '<button class="b o" data-nav="restore">Earlier versions</button></div>'+
+   '<div class="hr"></div>'+
+   '<h4 class="lbl">On your phone</h4>'+
+   '<p class="sm muted" style="margin:8px 0 12px">Install it and it behaves like any other '+
+   'app, with its own icon and no browser around it.</p>'+
+   '<button class="b o" data-nav="install">How to install it</button>'+
    '<p class="xs muted">Last saved: '+E(when)+'</p>'+
    '<div class="hr"></div>'+
    '<h4 class="lbl">Household</h4>'+

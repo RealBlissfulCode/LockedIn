@@ -124,6 +124,32 @@ function read_doc(int $houseId, string $scope): array {
 /* Optimistic write. Send the version you last read; if the row moved on since,
    this refuses and hands back what is there now so the client can merge. Two
    phones editing at once is the normal case, not the exception. */
+/* A rough count of the things a person made. Only used to decide whether a
+   write is worth keeping a copy of and whether it looks like a wipe. */
+function doc_weight(array $b): int {
+    $f = is_array($b['fin'] ?? null) ? $b['fin'] : [];
+    $n = 0;
+    foreach (['costs', 'jobs', 'actuals'] as $k) $n += is_array($f[$k] ?? null) ? count($f[$k]) : 0;
+    foreach (['scenarios', 'purchases', 'strategies'] as $k) $n += is_array($f[$k] ?? null) ? count($f[$k]) : 0;
+    $n += is_array($b['days'] ?? null) ? count($b['days']) : 0;
+    $n += is_array($b['lists'] ?? null) ? count($b['lists']) : 0;
+    $n += is_array($b['members'] ?? null) ? count($b['members']) : 0;
+    $n += is_array($b['plan']['cols'] ?? null) ? count($b['plan']['cols']) : 0;
+    $n += is_array($b['sched']['cols'] ?? null) ? count($b['sched']['cols']) : 0;
+    return $n;
+}
+
+/* Keep what is being replaced, and drop anything older than a month. Twenty
+   versions back is plenty to undo a bad client and small enough not to matter. */
+function keep_history(int $houseId, string $scope, string $json, int $version, int $weight): void {
+    q('INSERT INTO doc_history (household_id, scope, body, version, weight, saved_at)
+       VALUES (?, ?, ?, ?, ?, ?)', [$houseId, $scope, $json, $version, $weight, now()]);
+    if (random_int(1, 20) === 1) {
+        q('DELETE FROM doc_history WHERE household_id = ? AND scope = ? AND saved_at < ?',
+          [$houseId, $scope, in_days(-30)]);
+    }
+}
+
 function write_doc(int $houseId, string $scope, array $body, int $base, int $byAccount): array {
     $json = json_encode($body, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     if ($json === false) fail(400, 'unencodable');
@@ -139,6 +165,24 @@ function write_doc(int $houseId, string $scope, array $body, int $base, int $byA
     if ((int) $cur['version'] !== $base) {
         return ['conflict' => true] + read_doc($houseId, $scope);
     }
+    /* Hold on to what is about to be replaced before replacing it. */
+    $prev = one('SELECT body, version FROM docs WHERE household_id = ? AND scope = ?',
+                [$houseId, $scope]);
+    if ($prev !== null) {
+        $prevBody = json_decode((string) $prev['body'], true);
+        $prevWeight = is_array($prevBody) ? doc_weight($prevBody) : 0;
+        $newWeight = doc_weight($body);
+        keep_history($houseId, $scope, (string) $prev['body'], (int) $prev['version'], $prevWeight);
+        /* A write that throws away most of an account is a bug in whatever sent
+           it, not something a person did on purpose. Refuse it and say so; the
+           client can retry with confirm set once a human has actually chosen. */
+        if ($prevWeight >= 12 && $newWeight <= max(2, (int) floor($prevWeight * 0.25))
+            && empty($body['__confirmWipe'])) {
+            return ['conflict' => false, 'refused' => true,
+                    'was' => $prevWeight, 'now' => $newWeight, 'version' => (int) $prev['version']];
+        }
+    }
+
     $next = $base + 1;
     q('UPDATE docs SET body = ?, version = ?, updated_by = ?, updated_at = ?
         WHERE household_id = ? AND scope = ? AND version = ?',

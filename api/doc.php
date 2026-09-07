@@ -25,6 +25,28 @@ if ($do === 'all' && method() === 'GET') {
 $scope = (string) ($_GET['scope'] ?? 'shared');
 if (!scope_allowed($scope, $me)) fail(403, 'bad_scope');
 
+/* Reading a previous version back. This exists because a client once sent an
+   empty document over a real one, and without history that was the end of it. */
+if ($do === 'history' && method() === 'GET') {
+    ok(['versions' => all('SELECT version, weight, saved_at FROM doc_history
+                            WHERE household_id = ? AND scope = ?
+                         ORDER BY version DESC LIMIT 40', [$houseId, $scope])]);
+}
+if ($do === 'restore') {
+    need_post(); need_xhr();
+    $v = (int) (body()['version'] ?? 0);
+    $row = one('SELECT body FROM doc_history WHERE household_id = ? AND scope = ? AND version = ?',
+               [$houseId, $scope, $v]);
+    if ($row === null) fail(404, 'no_such_version');
+    $b = json_decode((string) $row['body'], true);
+    if (!is_array($b)) fail(422, 'unreadable');
+    $b['__confirmWipe'] = true;
+    $cur = read_doc($houseId, $scope);
+    $res = write_doc($houseId, $scope, $b, (int) $cur['version'], $me);
+    ok(['version' => $res['version'] ?? 0, 'restored' => $v]);
+}
+
+
 if (method() === 'GET') {
     ok(read_doc($houseId, $scope));
 }
@@ -36,6 +58,10 @@ if (!isset($in['body']) || !is_array($in['body'])) fail(400, 'no_body');
 $base = (int) ($in['version'] ?? 0);
 
 $res = write_doc($houseId, $scope, $in['body'], $base, $me);
+if (!empty($res['refused'])) {
+    send(409, ['ok' => false, 'error' => 'would_wipe',
+               'was' => $res['was'], 'now' => $res['now'], 'version' => $res['version']]);
+}
 if (!empty($res['conflict'])) {
     /* 409 carries the current copy, so the client merges rather than guessing
        or clobbering. */

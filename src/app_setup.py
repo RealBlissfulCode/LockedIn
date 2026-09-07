@@ -510,6 +510,123 @@ function applyLegacy(st){
   pushState();
 }
 
+/* ============================ putting it on a phone ============================
+   Chrome hands over an install prompt if you catch the event and hold on to
+   it, so on Android this is one button. Safari never offers one, so iOS gets
+   told exactly which menu to open instead of a button that does nothing. */
+var installEvent=null;
+window.addEventListener('beforeinstallprompt',function(e){
+  e.preventDefault();
+  installEvent=e;
+  var b=document.getElementById('instBtn');
+  if(b) b.hidden=false;
+});
+window.addEventListener('appinstalled',function(){ installEvent=null; });
+
+function isStandalone(){
+  try{
+    return window.matchMedia('(display-mode: standalone)').matches
+        || window.navigator.standalone===true;
+  }catch(e){ return false; }
+}
+function devicePlatform(){
+  var ua=navigator.userAgent||'';
+  if(/iPhone|iPad|iPod/i.test(ua)) return 'ios';
+  if(/Android/i.test(ua)) return 'android';
+  return 'desktop';
+}
+
+function vInstall(){
+  var p=devicePlatform();
+  var here=location.origin+location.pathname;
+  var steps=
+    p==='ios'
+      ? '<ol class="steps"><li>Open this page in <b>Safari</b>. It has to be Safari, '+
+        'Chrome on an iPhone cannot install it.</li>'+
+        '<li>Tap the <b>Share</b> button, the square with the arrow coming out of it, '+
+        'at the bottom of the screen.</li>'+
+        '<li>Scroll down the list and tap <b>Add to Home Screen</b>.</li>'+
+        '<li>Tap <b>Add</b>. It is on your home screen like any other app.</li></ol>'
+    : p==='android'
+      ? '<ol class="steps"><li>Tap <b>Install</b> above. If it is not there, use the '+
+        '<b>three dots</b> at the top right of Chrome.</li>'+
+        '<li>Tap <b>Install app</b>, or <b>Add to Home screen</b> on older versions.</li>'+
+        '<li>Confirm. It lands in your app drawer and on your home screen.</li></ol>'
+      : '<ol class="steps"><li>Look for the <b>install icon</b> in the address bar, a screen '+
+        'with a downward arrow, at the right hand end.</li>'+
+        '<li>Or open the browser menu and choose <b>Install LockedIn</b>.</li>'+
+        '<li>It opens in its own window from then on, with no browser chrome.</li></ol>';
+
+  return '<div class="page"><div class="phead"><h1>Put it on your phone</h1>'+
+   '<p>It installs straight from the browser. There is no app store, no download, and no '+
+   'update to ever install again: it is the same page, just without the browser around it.</p></div>'+
+   (isStandalone()
+     ? '<div class="note good"><b>Already installed.</b> You are looking at the installed '+
+       'copy right now.</div>'
+     : '<div class="row toolbar">'+
+       '<button class="b" id="instBtn"'+(installEvent?'':' hidden')+'>Install</button>'+
+       '<button class="b o" id="instCopy">Copy the link</button></div>')+
+   '<div class="sec"><h2>'+(p==='ios'?'On an iPhone or iPad':p==='android'?'On Android':'On a computer')+'</h2>'+
+   steps+'</div>'+
+   '<div class="sec"><h2>The address</h2>'+
+   '<p class="sub">Whatever device you are setting up, this is the only thing you need. '+
+   'Sign in with the same Google account and everything is already there.</p>'+
+   '<div class="addr">'+E(here)+'</div>'+
+   '<div class="row"><button class="b o" id="instCopy2">Copy the link</button></div></div>'+
+   '<div class="sec"><h2>If you deleted it</h2>'+
+   '<p class="sub">Nothing was lost. Deleting the installed copy removes the icon and this '+
+   'device&#39;s cache, and none of that is where your account lives. Open the address above, '+
+   'sign in, and install it again.</p></div>'+
+   '</div>';
+}
+
+function bindInstall(){
+  function doCopy(){
+    var t=location.origin+location.pathname;
+    try{ navigator.clipboard.writeText(t); toast('Link copied'); }
+    catch(e){ toast(t); }
+  }
+  on('#instCopy','click',doCopy);
+  on('#instCopy2','click',doCopy);
+  on('#instBtn','click',function(){
+    if(!installEvent){ toast('Use the browser menu, the steps below say where'); return; }
+    installEvent.prompt();
+    installEvent.userChoice.then(function(r){
+      if(r&&r.outcome==='accepted'){ installEvent=null; toast('Installed'); route(); }
+    });
+  });
+}
+
+/* Earlier versions of the household document, and a way back to one. */
+function restoreScreen(){
+  var box=$('#view');
+  box.innerHTML='<div class="page"><div class="phead"><h1>Earlier versions</h1>'+
+   '<p>Every time this account is saved, the copy it replaced is kept for a month. '+
+   'If something went wrong you can put one of them back.</p></div>'+
+   '<div id="rsBody"><div class="empty">Looking</div></div></div>';
+  api('doc.php?do=history&scope=shared').then(function(r){
+    var out=$('#rsBody'); if(!out) return;
+    if(!r.ok||!r.versions.length){
+      out.innerHTML='<div class="empty"><p>No earlier versions yet.</p>'+
+        '<p class="sm">They start being kept from the next save onwards.</p></div>'+
+        '<div class="row"><button class="b o" data-nav="meals">Back</button></div>';
+      return;
+    }
+    out.innerHTML='<div class="tw cards"><table><thead><tr><th>Version</th><th>Saved</th>'+
+      '<th class="num">Size</th><th></th></tr></thead><tbody>'+
+      r.versions.map(function(v){
+        return '<tr><td class="hd"><b>Version '+v.version+'</b></td>'+
+        '<td data-l="Saved" class="sm muted">'+E(String(v.saved_at).replace('T',' ').slice(0,16))+'</td>'+
+        '<td data-l="Things in it" class="num">'+v.weight+'</td>'+
+        '<td class="act"><button class="b o s" data-rsv="'+v.version+'">Put this back</button></td></tr>';
+      }).join('')+'</tbody></table></div>'+
+      '<p class="sub" style="margin-top:12px">Size is a rough count of the lines, days and '+
+      'lists in that copy. A version far smaller than the ones around it is usually the '+
+      'one that went wrong.</p>'+
+      '<div class="row"><button class="b o" data-nav="meals">Back</button></div>';
+  });
+}
+
 function importScreen(){
   var box=$('#view');
   box.innerHTML='<div class="page"><div class="phead"><h1>Bring your old data across</h1>'+

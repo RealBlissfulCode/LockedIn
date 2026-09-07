@@ -217,6 +217,24 @@ function boot(){
       document.body.classList.add('unlocked');
       applyTheme();
       chrome();
+      /* If the saved copy could not be read, say so loudly and do not treat the
+         empty result as a fresh account, because that is how one gets
+         overwritten. Nothing is pushed while this is set. */
+      if(LOAD_BROKE){
+        document.getElementById('view').innerHTML=
+          '<div class="page"><div class="phead"><h1>Something is wrong with this device&#39;s copy</h1>'+
+          '<p>'+E(LOAD_BROKE)+'</p></div>'+
+          '<div class="note warn"><b>Nothing is being saved from this device right now</b>, on '+
+          'purpose, so it cannot overwrite what is on your account.</div>'+
+          '<div class="row"><button class="b" id="lbReload">Clear this device and pull the account down</button>'+
+          '<button class="b o" data-nav="restore">Earlier versions</button></div></div>';
+        var rb=document.getElementById('lbReload');
+        if(rb) rb.onclick=function(){
+          try{localStorage.removeItem(KEY);}catch(e){}
+          location.reload();
+        };
+        return;
+      }
       if(!ACCOUNT.onboarded||!MEMS().length){ startOnboarding(); return; }
       syncStart();
       /* An account with nothing in it, on a domain that used to run the old

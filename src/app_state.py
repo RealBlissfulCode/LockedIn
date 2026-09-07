@@ -98,6 +98,7 @@ function pullState(){
     }
     docVer=r.shared.version||0;
     privVer=r.private.version||0;
+    serverWeight=stateWeight(r.shared.body);
     var changed=false;
     if(r.shared.body) changed=mergeIn(r.shared.body)||changed;
     if(r.private.body){ PRIVATE.forEach(function(k){
@@ -118,8 +119,37 @@ function queuePush(){
   syncTimer=setTimeout(pushState,1200);
 }
 
+/* A rough size for a document, used only to notice a cliff. Counting the
+   things people actually make means a state that lost its content registers
+   even if it still has plenty of keys on it. */
+function stateWeight(o){
+  if(!o) return 0;
+  var f=o.fin||{};
+  return (f.costs||[]).length+(f.jobs||[]).length+(f.actuals||[]).length
+       + Object.keys(f.scenarios||{}).length+Object.keys(f.purchases||{}).length
+       + Object.keys(f.strategies||{}).length
+       + Object.keys(o.days||{}).length+((o.plan||{}).cols||[]).length
+       + (((o.sched||{}).cols)||[]).length+Object.keys(o.lists||{}).length
+       + (o.members||[]).length+(o.fav||[]).length;
+}
+var serverWeight=0;
+
 function pushState(){
   if(syncBusy||!syncPending||syncState==='off') return;
+  /* Nothing goes up from a session that could not read its own saved state. */
+  if(LOAD_BROKE){ syncSet('error','Not saving: '+LOAD_BROKE); return; }
+  /* And nothing goes up that would empty an account. A drop this size is a bug
+     in here, not a decision somebody made, and the server copy is the only one
+     left once this overwrites it. */
+  var w=stateWeight(S);
+  if(serverWeight>=12&&w<=Math.max(2,serverWeight*0.25)){
+    syncSet('error','Not saving: this would wipe most of the account');
+    if(!window.__wipeWarned){
+      window.__wipeWarned=1;
+      toast('Saving paused. This device is holding almost nothing and the account has data.');
+    }
+    return;
+  }
   syncBusy=true; syncPending=false;
   syncSet('push');
   var payload=stripLocal(S);
@@ -127,6 +157,7 @@ function pushState(){
   api('doc.php?scope=shared',{body:{version:docVer,body:payload}}).then(function(r){
     if(r.ok){
       docVer=r.version; syncAt=Date.now(); syncFails=0; syncSet('idle');
+      serverWeight=stateWeight(S);
       return pushPrivate();
     }
     if(r.__status===409){

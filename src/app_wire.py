@@ -79,6 +79,8 @@ function route(){
       : v==='household'?vHousehold()
       : v==='mealplan'?vMealPlan()
       : v==='import'?'<div class="page"><div class="phead"><h1>Bring your old data across</h1></div></div>'
+      : v==='restore'?'<div class="page"><div class="phead"><h1>Earlier versions</h1></div></div>'
+      : v==='install'?vInstall()
       : v==='schedule'?vSchedule(sub) : vMeals();
   }catch(e){ html=errPanel(v.charAt(0).toUpperCase()+v.slice(1),e);
     if(window.console&&console.error)console.error(e); }
@@ -146,6 +148,8 @@ function bind(){
   if(v==='household') bindHousehold();
   if(v==='mealplan') bindMealPlan();
   if(v==='import') importScreen();
+  if(v==='restore') restoreScreen();
+  if(v==='install') bindInstall();
   if(v==='financial') bindFin(h[1]);
   if(v==='planning') bindPlan(h[1]);
   if(v==='schedule') bindSched(h[1]);
@@ -722,6 +726,16 @@ document.addEventListener('click',function(e){
   /* Kept so a stale button left in an open page cannot throw, but it no longer
      changes who you are. Correcting that is a deliberate act in Settings. */
   if((el=t.closest('[data-w]'))){return;}
+  if((el=t.closest('[data-rsv]'))){
+    var vv=el.dataset.rsv;
+    if(!confirm('Put version '+vv+' back? What is there now is kept as another version, '+
+      'so this can be undone.'))return;
+    api('doc.php?do=restore&scope=shared',{body:{version:+vv}}).then(function(r){
+      if(!r.ok){toast('Could not restore that one');return;}
+      try{localStorage.removeItem(KEY);}catch(e){}
+      location.reload();
+    });
+    return;}
   if((el=t.closest('[data-acttab]'))){actTab=el.dataset.acttab;route();return;}
   if((el=t.closest('[data-actline]'))){lineEntries(el.dataset.actline);return;}
   if((el=t.closest('[data-actadd]'))){
@@ -951,7 +965,13 @@ function settingsModal(){
    '<div class="row" style="margin-bottom:18px">'+
    '<button class="b" id="stSave">Save to a file</button>'+
    '<button class="b o" id="stLoad">Load a file</button>'+
-   '<button class="b o" data-nav="import">Bring old data across</button></div>'+
+   '<button class="b o" data-nav="import">Bring old data across</button>'+
+   '<button class="b o" data-nav="restore">Earlier versions</button></div>'+
+   '<div class="hr"></div>'+
+   '<h4 class="lbl">On your phone</h4>'+
+   '<p class="sm muted" style="margin:8px 0 12px">Install it and it behaves like any other '+
+   'app, with its own icon and no browser around it.</p>'+
+   '<button class="b o" data-nav="install">How to install it</button>'+
    '<p class="xs muted">Last saved: '+E(when)+'</p>'+
    '<div class="hr"></div>'+
    '<h4 class="lbl">Household</h4>'+

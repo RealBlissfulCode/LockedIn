@@ -101,3 +101,20 @@ CREATE TABLE IF NOT EXISTS sessions (
   KEY ix_expires (expires_at),
   CONSTRAINT fk_sess_account FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Every version of a document that gets replaced, kept for a while. The docs
+-- table holds one row per scope and a write replaces it, which is fine right
+-- up until a client sends something wrong and the only good copy is gone.
+-- Cheap insurance: one insert per write, and a way back.
+CREATE TABLE IF NOT EXISTS doc_history (
+  id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  household_id  BIGINT UNSIGNED NOT NULL,
+  scope         VARCHAR(48)     NOT NULL,
+  body          LONGTEXT        NOT NULL,
+  version       BIGINT UNSIGNED NOT NULL,
+  weight        INT             NOT NULL DEFAULT 0,
+  saved_at      DATETIME        NOT NULL,
+  PRIMARY KEY (id),
+  KEY ix_scope (household_id, scope, version),
+  CONSTRAINT fk_hist_house FOREIGN KEY (household_id) REFERENCES households (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

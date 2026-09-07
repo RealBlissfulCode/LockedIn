@@ -783,6 +783,13 @@ background:var(--panel-2);margin-top:12px}
 .gfound b{display:block;font-size:15px}
 .gfound span{display:block;font-size:12px;color:var(--ink-3);margin-top:3px}
 
+.steps{margin:0;padding-left:20px;color:var(--ink-2);font-size:14px;line-height:1.75}
+.steps li{margin-bottom:9px}
+.steps b{color:var(--ink)}
+.addr{font-family:var(--f-mono);font-size:13px;padding:14px;border-radius:var(--r);
+background:var(--panel-2);border:1px solid var(--line);color:var(--brass);
+word-break:break-all;margin-bottom:12px}
+
 /* Who you are, in the top bar. Not a control for becoming anybody else. */
 .mechip{background:var(--panel);border:1px solid var(--line);color:var(--ink-2);
 border-radius:999px;padding:6px 14px;font:600 13px/1 var(--f-body);cursor:pointer;
