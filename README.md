@@ -288,9 +288,10 @@ the household down with them.
    privileges. Note the four values.
 2. Copy `api/config.sample.php` to `api/config.php` and fill them in, plus the
    Google client id.
-3. `php api/migrate.php` over SSH. No SSH: put a random string in
-   `api/.migrate-key`, hit `/api/migrate.php?key=thatstring`, delete the file.
-4. Open `/api/check.php` in a browser. It walks the whole list: PHP version,
+3. Open `/api/check.php` in a browser. Once the database connects it offers a
+   button to create the tables, so there is nothing to run by hand. If you would
+   rather: `php api/migrate.php` over SSH, or put a random string in
+   `api/.migrate-key`, hit `/api/migrate.php?key=thatstring`, and delete it. It walks the whole list: PHP version,
    extensions, config file, client id, database connection, every table,
    whether the server can reach Google's signing keys, https, and whether
    `config.php` is being served as readable text. Anything failing says what to

@@ -93,17 +93,19 @@ if ($cfgOk) {
 check('Database connects', $pdo !== null, $dbErr, $dbFix);
 
 /* Only worth saying when the connection actually failed, and it is the single
-   most common reason it does. Neither value is printed, only its shape. */
+   most common reason it does. Neither value is printed, only which of the two
+   is missing its prefix. */
 if ($cfgOk && $pdo === null) {
-    $u = (string) ($c['db_user'] ?? '');
-    $n = (string) ($c['db_name'] ?? '');
-    $looksPrefixed = (bool) preg_match('/^u\d+_/', $u) && (bool) preg_match('/^u\d+_/', $n);
-    check('Username and database look prefixed', $looksPrefixed,
-          $looksPrefixed
-            ? 'Both start with an account prefix'
-            : 'One of them has no u..._ prefix on it',
-          'Shared hosting almost always prefixes both, so the real values look like '
-          . 'u123456789_lockedin. Using the short name you typed when creating them is '
+    $uOk = (bool) preg_match('/^u\d+_/', (string) ($c['db_user'] ?? ''));
+    $nOk = (bool) preg_match('/^u\d+_/', (string) ($c['db_name'] ?? ''));
+    $which = !$uOk && !$nOk ? 'Neither db_user nor db_name has one'
+           : (!$uOk ? 'db_user has no prefix. db_name does.'
+           : (!$nOk ? 'db_name has no prefix. db_user does.'
+           : 'Both start with an account prefix'));
+    check('Username and database look prefixed', $uOk && $nOk, $which,
+          'Shared hosting prefixes both, so the real values look like u123456789_lockedin '
+          . 'rather than lockedin. Copy them out of hPanel, Databases, Management exactly '
+          . 'as they appear there. Using the short name you typed when you created them is '
           . 'the usual cause of access denied.');
 }
 
@@ -197,7 +199,44 @@ if ($selfCheckable && function_exists('curl_init') && ($_SERVER['HTTP_HOST'] ?? 
           . 'above the web root and point the require at it.');
 }
 
+/* Creating the tables from here, because the alternative is SSH or writing a
+   key file and deleting it afterwards, and this page is already only open
+   before the first account exists. The schema is CREATE TABLE IF NOT EXISTS
+   throughout, so pressing it twice does nothing the first press did not. */
+$ranMigration = '';
+if ($pdo !== null && ($_POST['migrate'] ?? '') === 'yes') {
+    try {
+        $sql = (string) file_get_contents(__DIR__ . '/schema.sql');
+        $lines = [];
+        foreach (explode("\n", $sql) as $line) {
+            if (str_starts_with(ltrim($line), '--')) continue;
+            $lines[] = $line;
+        }
+        $made = [];
+        foreach (array_filter(array_map('trim', explode(';', implode("\n", $lines)))) as $stmt) {
+            if ($stmt === '') continue;
+            $pdo->exec($stmt);
+            if (preg_match('/CREATE TABLE IF NOT EXISTS\s+`?(\w+)`?/i', $stmt, $m)) $made[] = $m[1];
+        }
+        $ranMigration = 'Created ' . count($made) . ' tables: ' . implode(', ', $made)
+                      . '. Go back to the app and sign in.';
+        $have = $pdo->query('SHOW TABLES')->fetchAll(PDO::FETCH_COLUMN);
+        foreach ($rows as $i => $r) {
+            if ($r['name'] === 'Tables created') {
+                $rows[$i]['pass'] = !array_diff($want, $have);
+                $rows[$i]['detail'] = count($want) . ' tables present';
+            }
+        }
+    } catch (Throwable $e) {
+        error_log('migrate from check failed: ' . $e->getMessage());
+        $ranMigration = 'Could not create the tables. The user probably has no rights on '
+                      . 'this database. Check that in hPanel, Databases, Management.';
+    }
+}
+
 $failed = array_values(array_filter($rows, fn($r) => !$r['pass']));
+$canMigrate = $pdo !== null && !$anyAccount
+           && (bool) array_filter($rows, fn($r) => $r['name'] === 'Tables created' && !$r['pass']);
 
 if (($_GET['json'] ?? '') === '1') {
     send($failed ? 500 : 200, ['ok' => !$failed, 'checks' => $rows]);
@@ -226,10 +265,24 @@ border:1px solid #26262F;border-left:2px solid #A855F7;background:#131318}
 .banner.bad{border-left-color:#F87171}
 .banner.good{border-left-color:#4ADE80}
 code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;color:#C084FC}
+button{font:600 14px/1 inherit;padding:11px 18px;border-radius:999px;border:0;
+background:#A855F7;color:#0A0A0C;cursor:pointer}
+button:hover{background:#C084FC}
 </style>
 <main>
 <h1>Setup check</h1>
 <p class="sub">Everything the server needs before anybody can sign in.</p>
+<?php if ($ranMigration): ?>
+  <div class="banner good"><b>Done.</b> <?= htmlspecialchars($ranMigration) ?></div>
+<?php endif; ?>
+<?php if ($canMigrate): ?>
+  <div class="banner"><b>The tables are not there yet.</b> The database connects, so this
+  page can create them for you.
+  <form method="post" style="margin-top:12px">
+    <input type="hidden" name="migrate" value="yes">
+    <button type="submit">Create the tables</button>
+  </form></div>
+<?php endif; ?>
 <?php if ($failed): ?>
   <div class="banner bad"><b><?= count($failed) ?> thing<?= count($failed) === 1 ? '' : 's' ?>
   to fix.</b> Sign in will keep failing until <?= count($failed) === 1 ? 'it is' : 'they are' ?>
