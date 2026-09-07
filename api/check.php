@@ -40,6 +40,20 @@ $cfgOk = is_array($c);
 check('config.php returns settings', $cfgOk, '',
       'The file has to end with a return [ ... ]; and nothing may print before it.');
 
+/* The single most likely state for a fresh install: config.sample.php copied
+   into place and never edited. Worth naming, because "access denied" sends you
+   hunting for a password problem when there is no password yet. */
+if ($cfgOk) {
+    $untouched = ((string) ($c['db_pass'] ?? '')) === ''
+              && in_array((string) ($c['db_name'] ?? ''), ['lockedin', ''], true)
+              && in_array((string) ($c['db_user'] ?? ''), ['lockedin', ''], true);
+    check('config.php has been filled in', !$untouched,
+          $untouched ? 'It is still the sample, with no database details in it' : '',
+          'Open api/config.php on the server and replace db_name, db_user and db_pass '
+          . 'with the real ones from hPanel, Databases, Management. If there is no '
+          . 'database for this site yet, make one there first.');
+}
+
 $clientId = $cfgOk ? (string) ($c['google_client_id'] ?? '') : '';
 check('Google client id set', $clientId !== '',
       $clientId === '' ? 'Empty' : 'Ends ' . substr($clientId, -14),
