@@ -783,6 +783,12 @@ background:var(--panel-2);margin-top:12px}
 .gfound b{display:block;font-size:15px}
 .gfound span{display:block;font-size:12px;color:var(--ink-3);margin-top:3px}
 
+/* Who you are, in the top bar. Not a control for becoming anybody else. */
+.mechip{background:var(--panel);border:1px solid var(--line);color:var(--ink-2);
+border-radius:999px;padding:6px 14px;font:600 13px/1 var(--f-body);cursor:pointer;
+transition:.18s var(--ez)}
+.mechip:hover{border-color:var(--brass);color:var(--brass)}
+
 /* Measured against planned. Over is not automatically bad and under is not
    automatically good, so these only carry direction, not judgement. */
 .up{color:var(--amber)}
@@ -826,6 +832,94 @@ background:var(--panel);cursor:pointer;transition:.18s var(--ez);color:var(--ink
 @media (max-width:560px){
 .setuphead h1{font-size:23px}
 .picks{grid-template-columns:1fr}
+}
+
+
+/* ================= phones =================
+   The desk layout was the only one that had been designed. On a 390px screen a
+   nine column table shows three of its columns, the stats take three screens to
+   read, and every button is thumb sized whether it matters or not. None of that
+   is fixed by shrinking things a bit, so this is a real second layout.
+
+   The big move is turning tables into cards. A row with nine columns cannot be
+   read sideways on a phone, and horizontal scrolling inside a vertical page is
+   the worst of both. Each row becomes a card, each cell becomes a labelled
+   line, and the label comes from the column header via data-l so the markup
+   stays one table. */
+@media (max-width:700px){
+.tw.cards{border:0;background:transparent;overflow:visible;-webkit-overflow-scrolling:auto}
+.tw.cards table{min-width:0;width:100%;font-size:13.5px}
+.tw.cards thead{display:none}
+.tw.cards tbody,.tw.cards tr,.tw.cards td{display:block;width:auto}
+.tw.cards tr{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
+padding:12px 14px;margin-bottom:9px}
+.tw.cards tr[style]{background:var(--panel-2)!important}
+.tw.cards td{display:flex;align-items:baseline;justify-content:space-between;gap:14px;
+padding:4px 0;border:0;text-align:right}
+.tw.cards td:before{content:attr(data-l);flex:none;color:var(--ink-4);
+font:700 9px/1.5 var(--f-body);letter-spacing:.16em;text-transform:uppercase;text-align:left}
+.tw.cards td:not([data-l]):before{content:none}
+/* The name leads the card, full width and unlabelled. The switch rides with it
+   so the thing you tap and the thing it belongs to are on the same line. */
+.tw.cards td.hd{display:flex;justify-content:flex-start;align-items:center;gap:10px;
+text-align:left;font-size:15px;padding:0 0 9px;margin-bottom:5px;
+border-bottom:1px solid var(--line)}
+.tw.cards td.hd:before{content:none}
+.tw.cards td.act{justify-content:flex-start;gap:8px;padding-top:10px}
+.tw.cards td.act:before{content:none}
+.tw.cards td:empty{display:none}
+.tw.cards .xs.muted{display:inline}
+}
+
+@media (max-width:620px){
+/* Type and padding both come down. Numbers stay the biggest thing on screen
+   because they are what you came to look at. */
+.wrap{padding:16px 14px 0}
+.phead{margin-bottom:20px;padding-bottom:16px}
+.phead h1{font-size:22px}
+.phead p{font-size:13.5px}
+.sec{margin:26px 0}
+.sec>h2{font-size:17px}
+.sec>h2,.sec>.spread{margin-bottom:13px}
+.sec>.sub{font-size:12.5px}
+.pad{padding:14px 15px}
+
+.stats{grid-template-columns:repeat(2,1fr)}
+.stat{padding:11px 12px}
+.stat b{font-size:19px}
+.stat.acc b{font-size:21px}
+.stat span{font-size:8px;letter-spacing:.14em;margin-top:5px}
+
+.b{padding:8px 14px;font-size:12.5px}
+.b.s{padding:6px 11px;font-size:11.5px}
+.pill{padding:6px 12px;font-size:12.5px}
+.row{gap:7px}
+.toolbar{margin-bottom:18px}
+.note{padding:12px 13px;font-size:13px}
+.f>span{font-size:8.5px}
+.f input,.f select,.f textarea{padding:9px 11px;font-size:15px}
+.ctitle{font-size:14px}
+
+/* Two across beats one down for short number fields. A budget line has seven
+   of them and one per row turns an edit into a scroll. */
+.fr{grid-template-columns:repeat(2,1fr)}
+.fr>*{flex:1 1 46%}
+.modal{max-height:88vh}
+
+/* The top bar was taking a fifth of the screen before anything else drew. */
+.topin{gap:8px;padding:8px 12px}
+.brand span{font-size:15px}
+.whoswitch button{padding:6px 12px;font-size:12.5px}
+.iconbtn{width:32px;height:32px}
+.syncpill{padding:5px 9px;font-size:10.5px}
+}
+
+@media (max-width:420px){
+.stats{grid-template-columns:1fr 1fr}
+.stat b{font-size:17.5px}
+.fr{grid-template-columns:1fr}
+.fr>*{flex:1 1 100%}
+.phead h1{font-size:20px}
 }
 
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}

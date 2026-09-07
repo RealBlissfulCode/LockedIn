@@ -160,15 +160,16 @@ function vActuals(){
     var planned=l[mode]||0;
     var diff=e.n>=1?e.monthly-planned:0;
     return '<tr'+(finLive(l)?'':' class="offrow"')+'>'+
-      '<td><b>'+E(l.name)+'</b>'+
-        (actTab==='out'?'<div class="xs muted">'+E(l.section)+'</div>':
-          (l.employer?'<div class="xs muted">'+E(l.employer)+'</div>':''))+'</td>'+
-      '<td class="num sm muted">'+M(planned)+'</td>'+
-      '<td class="num">'+(e.n?'<b>'+M(e.monthly)+'</b>':'<span class="muted">-</span>')+'</td>'+
-      '<td class="num sm '+(e.n?(diff>0?'up':'down'):'muted')+'">'+
+      '<td class="hd"><b>'+E(l.name)+'</b>'+
+        '<span class="xs muted">'+E(actTab==='out'?l.section:(l.employer||''))+'</span></td>'+
+      '<td data-l="Planned" class="num sm muted">'+M(planned)+'</td>'+
+      '<td data-l="Measured" class="num">'+
+        (e.n?'<b>'+M(e.monthly)+'</b>':'<span class="muted">-</span>')+'</td>'+
+      '<td data-l="Difference" class="num sm '+(e.n?(diff>0?'up':'down'):'muted')+'">'+
         (e.n?(diff>0?'+':'')+M(diff):'-')+'</td>'+
-      '<td class="sm">'+(e.n?e.n+' '+confChip(e.confidence):'<span class="muted">none</span>')+'</td>'+
-      '<td><button class="b o s" data-actline="'+E(l.id)+'">'+
+      '<td data-l="Entries" class="sm">'+
+        (e.n?e.n+' '+confChip(e.confidence):'<span class="muted">none</span>')+'</td>'+
+      '<td class="act"><button class="b o s" data-actline="'+E(l.id)+'">'+
         (e.n?'Entries':'Add')+'</button></td></tr>';
   }).join('');
 
@@ -198,7 +199,7 @@ function vActuals(){
    '<div class="row"><button class="pill'+(actTab==='out'?' on':'')+'" data-acttab="out">Costs</button>'+
    '<button class="pill'+(actTab==='in'?' on':'')+'" data-acttab="in">Income</button></div></div>'+
    '<p class="sub">'+covered+' of '+totalLines+' lines have enough logged to be measured.</p>'+
-   (lines.length?'<div class="tw wide"><table><thead><tr><th>Line</th>'+
+   (lines.length?'<div class="tw wide cards"><table><thead><tr><th>Line</th>'+
      '<th class="num">Planned</th><th class="num">Measured</th><th class="num">Difference</th>'+
      '<th>Entries</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
     :'<div class="empty">No '+(actTab==='in'?'income':'cost')+' lines yet.</div>')+
@@ -252,16 +253,16 @@ function recentEntries(){
   if(!all.length) return '<div class="sec"><h2>Recent</h2>'+
     '<div class="empty"><p>Nothing logged yet.</p>'+
     '<p class="sm">Press Log an amount, or open any line above.</p></div></div>';
-  return '<div class="sec"><h2>Recent</h2><div class="tw"><table>'+
-    '<thead><tr><th>Date</th><th>Line</th><th class="num">Amount</th><th>Note</th><th></th></tr></thead>'+
+  return '<div class="sec"><h2>Recent</h2><div class="tw cards"><table>'+
+    '<thead><tr><th>Line</th><th>Date</th><th class="num">Amount</th><th>Note</th><th></th></tr></thead>'+
     '<tbody>'+all.map(function(a){
       var l=lineById(a.lineId);
-      return '<tr><td class="sm">'+E(shortD(a.date))+'</td>'+
-        '<td><b>'+E(l?l.line.name:'(deleted line)')+'</b>'+
-          '<span class="chip" style="margin-left:6px">'+(a.kind==='in'?'in':'out')+'</span></td>'+
-        '<td class="num">'+M(a.amount)+'</td>'+
-        '<td class="sm muted">'+E(a.note||'')+'</td>'+
-        '<td><button class="b o s" data-acte="'+E(a.id)+'">Edit</button></td></tr>';
+      return '<tr><td class="hd"><b>'+E(l?l.line.name:'(deleted line)')+'</b>'+
+          '<span class="chip">'+(a.kind==='in'?'in':'out')+'</span></td>'+
+        '<td data-l="Date" class="sm">'+E(shortD(a.date))+'</td>'+
+        '<td data-l="Amount" class="num">'+M(a.amount)+'</td>'+
+        '<td data-l="Note" class="sm muted">'+E(a.note||'')+'</td>'+
+        '<td class="act"><button class="b o s" data-acte="'+E(a.id)+'">Edit</button></td></tr>';
     }).join('')+'</tbody></table></div></div>';
 }
 
@@ -276,13 +277,13 @@ function lineEntries(lineId){
     '<div class="stat"><b>'+M(l[S.fin.costMode||'real']||0)+'</b><span>Planned</span></div>'+
     '<div class="stat"><b>'+e.n+'</b><span>Entries</span></div></div>'+
     '<p class="sm muted">'+E(methodWords(e))+'.</p>'+
-    (rows.length?'<div class="tw" style="margin-top:12px"><table>'+
+    (rows.length?'<div class="tw cards" style="margin-top:12px"><table>'+
       '<thead><tr><th>Date</th><th class="num">Amount</th><th>Note</th><th></th></tr></thead><tbody>'+
       rows.map(function(a){
-        return '<tr><td class="sm">'+E(shortD(a.date))+'</td>'+
-        '<td class="num">'+M(a.amount)+'</td>'+
-        '<td class="sm muted">'+E(a.note||'')+'</td>'+
-        '<td><button class="b o s" data-acte="'+E(a.id)+'">Edit</button> '+
+        return '<tr><td data-l="Date" class="sm">'+E(shortD(a.date))+'</td>'+
+        '<td data-l="Amount" class="num">'+M(a.amount)+'</td>'+
+        '<td data-l="Note" class="sm muted">'+E(a.note||'')+'</td>'+
+        '<td class="act"><button class="b o s" data-acte="'+E(a.id)+'">Edit</button> '+
         '<button class="x" data-actd="'+E(a.id)+'">&times;</button></td></tr>';
       }).join('')+'</tbody></table></div>'
      :'<div class="empty sm" style="margin-top:12px">Nothing logged against this line yet.</div>');

@@ -125,8 +125,8 @@ function sessModal(i){
    honours the flag, so the charts cannot drift away from the tables. */
 function finLive(x){return !x.off;}
 function costInPath(c,path){
-  if(c.section==='Housing (rent)') return path!=='buy';
-  if(c.section==='Housing (buy)') return path==='buy';
+  if(c.section===RENT_SECTION||c.section==='Housing (rent)') return path!=='buy';
+  if(c.section===BUY_SECTION||c.section==='Housing (buy)') return path==='buy';
   return true;
 }
 /* Pass all=true and the switched off lines count as well. That is how the
@@ -205,7 +205,7 @@ function vFinancial(sub){
 
   /* ---- derived numbers ---- */
   var saveRate=inc>0?gap/inc*100:0;
-  var toSavings=byS['Savings']||0;               /* money into savings is not spent */
+  var toSavings=byS['Saving']||0;               /* money moved into savings was never spent */
   var toDebt=byS['Debt']||0;
   var building=gap+toSavings;                    /* what the month actually adds */
   var burn=cost-toSavings;                       /* what leaving the house costs */
@@ -266,7 +266,7 @@ function vFinancial(sub){
   wfCols.push({label:gap>=0?'Left over':'Short by',sub:M(Math.abs(gap)),subCls:gap>=0?'good':'bad',
     bars:[{v:Math.abs(gap),base:0,cls:gap>=0?'ctg':'ctb',
       tip:(gap>=0?'Left over: ':'Short by: ')+M(Math.abs(gap))}]});
-  var waterfall='<div class="sec"><h2>From income to what is left</h2>'+
+  var waterfall=(inc<=0&&cost<=0)?'':'<div class="sec"><h2>From income to what is left</h2>'+
     '<p class="sub">The first bar is everything coming in. Each one after it is a live cost '+
     'section taken off the running balance, biggest first, on the '+modeLabel(mode).toLowerCase()+
     ' column while '+(path==='buy'?'buying':'renting')+'. The last bar is what survives.</p>'+
@@ -336,7 +336,7 @@ function vFinancial(sub){
   var bandMax=Math.max.apply(null,bandVals.map(function(b){return Math.max(b.inc,b.cost);}).concat([1]));
   var best=bandVals.slice().sort(function(a,b){return b.gap-a.gap;})[0];
   var worst=bandVals.slice().sort(function(a,b){return a.gap-b.gap;})[0];
-  var band='<div class="sec"><h2>The same month, read '+
+  var band=(inc<=0&&cost<=0)?'':'<div class="sec"><h2>The same month, read '+
    (['','one way','two ways','three ways','four ways'][bandVals.length]||'every way')+'</h2>'+
    '<p class="sub">Identical lines, identical switches. Only the estimate column changes. '+
    'The spread between the ends is what the plan actually rests on.</p>'+
@@ -423,27 +423,28 @@ function vFinancial(sub){
    '<div class="row"><span class="chip p">'+jobsOn+' of '+S.fin.jobs.length+' on</span>'+
    '<button class="b o s" data-alltog="jobs|1">All on</button>'+
    '<button class="b o s" data-alltog="jobs|0">All off</button>'+
-   '<button class="b o s" id="jobAdd2">Add</button></div></div><div class="tw wide"><table>'+
-   '<thead><tr><th>On</th><th>Who</th><th>Name</th><th>Employer</th><th class="num">Low</th>'+
+   '<button class="b o s" id="jobAdd2">Add</button></div></div><div class="tw wide cards"><table>'+
+   '<thead><tr><th>Name</th><th>Who</th><th>Rate</th><th>Employer</th><th class="num">Low</th>'+
    '<th class="num">Realistic</th><th class="num">High</th><th class="num">Actual</th><th></th></tr></thead><tbody>'+
    (S.fin.jobs.length?S.fin.jobs.map(function(j){
      var on=finLive(j);
      return '<tr'+(on?'':' class="offrow"')+'>'+
-     '<td>'+finSw('jobtog',j.id,on,j.name||'this income line')+'</td>'+
-     '<td><span class="chip">'+E(WHO(j.who))+'</span></td><td><b>'+E(j.name)+'</b>'+
-     (on?'':'<span class="offtag">off</span>')+
-     (j.rate?'<div class="xs muted">'+$$$(j.rate)+'/hr</div>':'')+'</td>'+
-     '<td class="sm muted">'+E(j.employer||'')+'</td>'+
-     '<td class="num">'+M(j.low)+'</td><td class="num"><b>'+M(j.real)+'</b></td>'+
-     '<td class="num">'+M(j.high)+'</td>'+
-     '<td class="num">'+(j.actual?M(j.actual):'<span class="muted">-</span>')+'</td>'+
-     '<td><button class="b o s" data-jobe="'+j.id+'">Edit</button></td></tr>';}).join('')
+     '<td class="hd">'+finSw('jobtog',j.id,on,j.name||'this income line')+
+       '<b>'+E(j.name)+'</b>'+(on?'':'<span class="offtag">off</span>')+'</td>'+
+     '<td data-l="Who"><span class="chip">'+E(WHO(j.who))+'</span></td>'+
+     '<td data-l="Rate" class="sm muted">'+(j.rate?$$$(j.rate)+'/hr':'')+'</td>'+
+     '<td data-l="Employer" class="sm muted">'+E(j.employer||'')+'</td>'+
+     '<td data-l="Low" class="num">'+M(j.low)+'</td>'+
+     '<td data-l="Realistic" class="num"><b>'+M(j.real)+'</b></td>'+
+     '<td data-l="High" class="num">'+M(j.high)+'</td>'+
+     '<td data-l="Actual" class="num">'+(j.actual?M(j.actual):'<span class="muted">-</span>')+'</td>'+
+     '<td class="act"><button class="b o s" data-jobe="'+j.id+'">Edit</button></td></tr>';}).join('')
     :'<tr><td colspan="9" class="sm muted" style="text-align:center;padding:22px">No income lines yet.</td></tr>')+
-   '<tr style="background:var(--panel-2)"><td colspan="4"><b>Counted total</b></td>'+
-   '<td class="num"><b>'+M(finIncome('both','low'))+'</b></td>'+
-   '<td class="num"><b>'+M(finIncome('both','real'))+'</b></td>'+
-   '<td class="num"><b>'+M(finIncome('both','high'))+'</b></td>'+
-   '<td class="num"><b>'+M(finIncome('both','actual'))+'</b></td><td></td></tr>'+
+   '<tr style="background:var(--panel-2)"><td class="hd" colspan="4"><b>Counted total</b></td>'+
+   '<td data-l="Low" class="num"><b>'+M(finIncome('both','low'))+'</b></td>'+
+   '<td data-l="Realistic" class="num"><b>'+M(finIncome('both','real'))+'</b></td>'+
+   '<td data-l="High" class="num"><b>'+M(finIncome('both','high'))+'</b></td>'+
+   '<td data-l="Actual" class="num"><b>'+M(finIncome('both','actual'))+'</b></td><td></td></tr>'+
    (offJobs.length?'<tr><td colspan="4" class="sm muted">Switched off</td>'+
      '<td class="num sm muted">'+M(finIncome('both','low',true)-finIncome('both','low'))+'</td>'+
      '<td class="num sm muted">'+M(finIncome('both','real',true)-finIncome('both','real'))+'</td>'+
@@ -456,27 +457,28 @@ function vFinancial(sub){
    '<div class="row"><span class="chip p">'+costsOn+' of '+costsInPath+' on</span>'+
    '<button class="b o s" data-alltog="costs|1">All on</button>'+
    '<button class="b o s" data-alltog="costs|0">All off</button>'+
-   '<button class="b o s" id="costAdd">Add</button></div></div><div class="tw wide"><table>'+
-   '<thead><tr><th>On</th><th>Section</th><th>Cost</th><th>Who</th><th class="num">Low</th>'+
+   '<button class="b o s" id="costAdd">Add</button></div></div><div class="tw wide cards"><table>'+
+   '<thead><tr><th>Cost</th><th>Section</th><th>Who</th><th class="num">Low</th>'+
    '<th class="num">Realistic</th><th class="num">High</th><th class="num">Actual</th><th></th></tr></thead><tbody>'+
    (S.fin.costs.length?S.fin.costs.map(function(c){
      var on=finLive(c), inPath=costInPath(c,path);
      return '<tr'+(on&&inPath?'':' class="offrow"')+'>'+
-     '<td>'+finSw('costtog',c.id,on,c.name||'this cost line')+'</td>'+
-     '<td class="sm muted">'+E(c.section)+'</td>'+
-     '<td><b>'+E(c.name)+'</b>'+(on?(inPath?'':'<span class="offtag">other path</span>')
+     '<td class="hd">'+finSw('costtog',c.id,on,c.name||'this cost line')+
+       '<b>'+E(c.name)+'</b>'+(on?(inPath?'':'<span class="offtag">other path</span>')
        :'<span class="offtag">off</span>')+'</td>'+
-     '<td><span class="chip">'+E(WHO(c.who))+'</span></td>'+
-     '<td class="num">'+M(c.low)+'</td><td class="num"><b>'+M(c.real)+'</b></td>'+
-     '<td class="num">'+M(c.high)+'</td>'+
-     '<td class="num">'+(c.actual?M(c.actual):'<span class="muted">-</span>')+'</td>'+
-     '<td><button class="b o s" data-coste="'+c.id+'">Edit</button></td></tr>';}).join('')
+     '<td data-l="Section" class="sm muted">'+E(c.section)+'</td>'+
+     '<td data-l="Who"><span class="chip">'+E(WHO(c.who))+'</span></td>'+
+     '<td data-l="Low" class="num">'+M(c.low)+'</td>'+
+     '<td data-l="Realistic" class="num"><b>'+M(c.real)+'</b></td>'+
+     '<td data-l="High" class="num">'+M(c.high)+'</td>'+
+     '<td data-l="Actual" class="num">'+(c.actual?M(c.actual):'<span class="muted">-</span>')+'</td>'+
+     '<td class="act"><button class="b o s" data-coste="'+c.id+'">Edit</button></td></tr>';}).join('')
     :'<tr><td colspan="9" class="sm muted" style="text-align:center;padding:22px">No cost lines yet.</td></tr>')+
-   '<tr style="background:var(--panel-2)"><td colspan="4"><b>Counted total</b></td>'+
-   '<td class="num"><b>'+M(finCost('low',path))+'</b></td>'+
-   '<td class="num"><b>'+M(finCost('real',path))+'</b></td>'+
-   '<td class="num"><b>'+M(finCost('high',path))+'</b></td>'+
-   '<td class="num"><b>'+M(finCost('actual',path))+'</b></td><td></td></tr>'+
+   '<tr style="background:var(--panel-2)"><td class="hd" colspan="3"><b>Counted total</b></td>'+
+   '<td data-l="Low" class="num"><b>'+M(finCost('low',path))+'</b></td>'+
+   '<td data-l="Realistic" class="num"><b>'+M(finCost('real',path))+'</b></td>'+
+   '<td data-l="High" class="num"><b>'+M(finCost('high',path))+'</b></td>'+
+   '<td data-l="Actual" class="num"><b>'+M(finCost('actual',path))+'</b></td><td></td></tr>'+
    (offCosts.length?'<tr><td colspan="4" class="sm muted">Switched off</td>'+
      '<td class="num sm muted">'+M(finCost('low',path,true)-finCost('low',path))+'</td>'+
      '<td class="num sm muted">'+M(finCost('real',path,true)-finCost('real',path))+'</td>'+

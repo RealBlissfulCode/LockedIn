@@ -38,6 +38,11 @@ function chTone(i){return 'ct'+(i%6+1);}
    the bar before it finished. */
 function chartCols(spec){
   var cols=spec.cols||[]; if(!cols.length) return chEmpty(spec.empty||'Nothing to draw yet.');
+  /* Every bar at zero is not a chart, it is a tall empty box. Say so instead,
+     which matters most on a phone where that box is the whole screen. */
+  var anyValue=cols.some(function(c){
+    return (c.bars||[]).some(function(b){return Math.abs(b.v||0)>0;});});
+  if(!anyValue) return chEmpty(spec.empty||'Nothing to draw yet.');
   var max=spec.max||0, h=spec.h||150, k=0;
   var n0=cols.length;
   var pad=n0<=2?26:n0<=3?20:n0<=4?15:n0<=6?9:n0<=9?5:3;

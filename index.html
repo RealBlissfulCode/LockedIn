@@ -782,6 +782,12 @@ background:var(--panel-2);margin-top:12px}
 .gfound b{display:block;font-size:15px}
 .gfound span{display:block;font-size:12px;color:var(--ink-3);margin-top:3px}
 
+/* Who you are, in the top bar. Not a control for becoming anybody else. */
+.mechip{background:var(--panel);border:1px solid var(--line);color:var(--ink-2);
+border-radius:999px;padding:6px 14px;font:600 13px/1 var(--f-body);cursor:pointer;
+transition:.18s var(--ez)}
+.mechip:hover{border-color:var(--brass);color:var(--brass)}
+
 /* Measured against planned. Over is not automatically bad and under is not
    automatically good, so these only carry direction, not judgement. */
 .up{color:var(--amber)}
@@ -825,6 +831,94 @@ background:var(--panel);cursor:pointer;transition:.18s var(--ez);color:var(--ink
 @media (max-width:560px){
 .setuphead h1{font-size:23px}
 .picks{grid-template-columns:1fr}
+}
+
+
+/* ================= phones =================
+   The desk layout was the only one that had been designed. On a 390px screen a
+   nine column table shows three of its columns, the stats take three screens to
+   read, and every button is thumb sized whether it matters or not. None of that
+   is fixed by shrinking things a bit, so this is a real second layout.
+
+   The big move is turning tables into cards. A row with nine columns cannot be
+   read sideways on a phone, and horizontal scrolling inside a vertical page is
+   the worst of both. Each row becomes a card, each cell becomes a labelled
+   line, and the label comes from the column header via data-l so the markup
+   stays one table. */
+@media (max-width:700px){
+.tw.cards{border:0;background:transparent;overflow:visible;-webkit-overflow-scrolling:auto}
+.tw.cards table{min-width:0;width:100%;font-size:13.5px}
+.tw.cards thead{display:none}
+.tw.cards tbody,.tw.cards tr,.tw.cards td{display:block;width:auto}
+.tw.cards tr{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
+padding:12px 14px;margin-bottom:9px}
+.tw.cards tr[style]{background:var(--panel-2)!important}
+.tw.cards td{display:flex;align-items:baseline;justify-content:space-between;gap:14px;
+padding:4px 0;border:0;text-align:right}
+.tw.cards td:before{content:attr(data-l);flex:none;color:var(--ink-4);
+font:700 9px/1.5 var(--f-body);letter-spacing:.16em;text-transform:uppercase;text-align:left}
+.tw.cards td:not([data-l]):before{content:none}
+/* The name leads the card, full width and unlabelled. The switch rides with it
+   so the thing you tap and the thing it belongs to are on the same line. */
+.tw.cards td.hd{display:flex;justify-content:flex-start;align-items:center;gap:10px;
+text-align:left;font-size:15px;padding:0 0 9px;margin-bottom:5px;
+border-bottom:1px solid var(--line)}
+.tw.cards td.hd:before{content:none}
+.tw.cards td.act{justify-content:flex-start;gap:8px;padding-top:10px}
+.tw.cards td.act:before{content:none}
+.tw.cards td:empty{display:none}
+.tw.cards .xs.muted{display:inline}
+}
+
+@media (max-width:620px){
+/* Type and padding both come down. Numbers stay the biggest thing on screen
+   because they are what you came to look at. */
+.wrap{padding:16px 14px 0}
+.phead{margin-bottom:20px;padding-bottom:16px}
+.phead h1{font-size:22px}
+.phead p{font-size:13.5px}
+.sec{margin:26px 0}
+.sec>h2{font-size:17px}
+.sec>h2,.sec>.spread{margin-bottom:13px}
+.sec>.sub{font-size:12.5px}
+.pad{padding:14px 15px}
+
+.stats{grid-template-columns:repeat(2,1fr)}
+.stat{padding:11px 12px}
+.stat b{font-size:19px}
+.stat.acc b{font-size:21px}
+.stat span{font-size:8px;letter-spacing:.14em;margin-top:5px}
+
+.b{padding:8px 14px;font-size:12.5px}
+.b.s{padding:6px 11px;font-size:11.5px}
+.pill{padding:6px 12px;font-size:12.5px}
+.row{gap:7px}
+.toolbar{margin-bottom:18px}
+.note{padding:12px 13px;font-size:13px}
+.f>span{font-size:8.5px}
+.f input,.f select,.f textarea{padding:9px 11px;font-size:15px}
+.ctitle{font-size:14px}
+
+/* Two across beats one down for short number fields. A budget line has seven
+   of them and one per row turns an edit into a scroll. */
+.fr{grid-template-columns:repeat(2,1fr)}
+.fr>*{flex:1 1 46%}
+.modal{max-height:88vh}
+
+/* The top bar was taking a fifth of the screen before anything else drew. */
+.topin{gap:8px;padding:8px 12px}
+.brand span{font-size:15px}
+.whoswitch button{padding:6px 12px;font-size:12.5px}
+.iconbtn{width:32px;height:32px}
+.syncpill{padding:5px 9px;font-size:10.5px}
+}
+
+@media (max-width:420px){
+.stats{grid-template-columns:1fr 1fr}
+.stat b{font-size:17.5px}
+.fr{grid-template-columns:1fr}
+.fr>*{flex:1 1 100%}
+.phead h1{font-size:20px}
 }
 
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
@@ -924,7 +1018,7 @@ var S=(function(){
     if(raw){var o=JSON.parse(raw),d=DEF();
       for(var k in d) if(!(k in o)) o[k]=d[k];
       for(var f in d.fin) if(!(f in o.fin)) o.fin[f]=d.fin[f];
-      return migrateToMembers(o);}
+      return migrateSections(migrateToMembers(o));}
   }catch(e){}
   return DEF();
 })();
@@ -1031,6 +1125,72 @@ function applyCollection(id,scope){
   }
   if(n) save();
   return n;
+}
+
+/* ---------------- cost sections ----------------
+   The old list had a Living bucket holding groceries, fuel, car insurance,
+   haircuts and clothing, which is four unrelated things in a drawer and tells
+   you nothing when it turns out to be your biggest number after rent.
+
+   These split on the question people actually ask, which is what could I
+   change. Fixed things you signed a contract for sit apart from food, from
+   getting about, from what you chose to spend on yourself, and from money that
+   is still yours once it moves. Getting around is its own section because for
+   most people it is second only to home and it hides inside Living otherwise.
+
+   Home stays split by renting and buying because a scenario switches between
+   them, and only one side is ever counted at a time. */
+var SECTIONS=[
+ ['Home (renting)','Rent, renters insurance, anything tied to renting'],
+ ['Home (buying)','Mortgage, property tax, home insurance, repairs'],
+ ['Utilities','Power, water, gas, trash, internet, phone'],
+ ['Food','Groceries and eating out'],
+ ['Getting around','Fuel, car payment and insurance, repairs, transit'],
+ ['Health','Insurance, appointments, prescriptions, the gym'],
+ ['Personal','Clothes, haircuts, subscriptions, things for the house'],
+ ['Fun','Going out, hobbies, travel, presents'],
+ ['People and pets','Childcare, pets, helping family'],
+ ['Debt','Cards, student loans, anything being paid down'],
+ ['Saving','Emergency fund, retirement, saving up for something']
+];
+function sectionOpts(){
+  return SECTIONS.map(function(x){return [x[0],x[0]];});
+}
+/* Sections that never count against each other. Only one home is real at a
+   time, which is what the housing path switch picks between. */
+var RENT_SECTION='Home (renting)', BUY_SECTION='Home (buying)';
+
+/* Rows written before the sections were reworked. Living was the junk drawer,
+   so it splits by what the line actually was rather than moving wholesale. */
+var OLD_SECTIONS={'Housing (rent)':RENT_SECTION,'Housing (buy)':BUY_SECTION,
+                  'Savings':'Saving','Living':'Personal'};
+var LIVING_HINTS=[
+ [/groceries|food|eating out|restaurant|takeaway|takeout|coffee/i,'Food'],
+ [/fuel|gas for|petrol|car|vehicle|transit|bus|train|parking|registration|insurance \(car\)/i,'Getting around'],
+ [/gym|doctor|dental|medical|prescription|therapy/i,'Health'],
+ [/pet|dog|cat|child|daycare|nursery/i,'People and pets'],
+ [/social|fun|hobby|travel|holiday|vacation|gift|birthday|night out/i,'Fun']
+];
+function migrateSections(o){
+  if(o.__sections7) return o;
+  ((o.fin||{}).costs||[]).forEach(function(c){ c.section=newSection(c.section,c.name); });
+  Object.keys((o.fin||{}).scenarios||{}).forEach(function(n){
+    ((o.fin.scenarios[n]||{}).costs||[]).forEach(function(c){
+      c.section=newSection(c.section,c.name); });
+  });
+  o.__sections7=true;
+  return o;
+}
+function newSection(sec,name){
+  if(!sec) return 'Personal';
+  var known=SECTIONS.some(function(x){return x[0]===sec;});
+  if(known) return sec;
+  if(sec==='Living'){
+    for(var i=0;i<LIVING_HINTS.length;i++)
+      if(LIVING_HINTS[i][0].test(name||'')) return LIVING_HINTS[i][1];
+    return 'Personal';
+  }
+  return OLD_SECTIONS[sec]||'Personal';
 }
 
 /* ---------------- who is who ----------------
@@ -1350,6 +1510,11 @@ function chTone(i){return 'ct'+(i%6+1);}
    the bar before it finished. */
 function chartCols(spec){
   var cols=spec.cols||[]; if(!cols.length) return chEmpty(spec.empty||'Nothing to draw yet.');
+  /* Every bar at zero is not a chart, it is a tall empty box. Say so instead,
+     which matters most on a phone where that box is the whole screen. */
+  var anyValue=cols.some(function(c){
+    return (c.bars||[]).some(function(b){return Math.abs(b.v||0)>0;});});
+  if(!anyValue) return chEmpty(spec.empty||'Nothing to draw yet.');
   var max=spec.max||0, h=spec.h||150, k=0;
   var n0=cols.length;
   var pad=n0<=2?26:n0<=3?20:n0<=4?15:n0<=6?9:n0<=9?5:3;
@@ -1872,19 +2037,23 @@ function syncStart(){
    numbers in them. Seeing the row is the useful part. Filling it in is the
    user's job and guessing on their behalf would be worse than blank. */
 var COST_SKELETON=[
- ['Housing (rent)','Rent'],['Housing (rent)','Renters insurance'],
- ['Housing (buy)','Mortgage'],['Housing (buy)','Property tax'],
- ['Housing (buy)','Home insurance'],['Housing (buy)','Repairs and upkeep'],
+ ['Home (renting)','Rent'],['Home (renting)','Renters insurance'],
+ ['Home (buying)','Mortgage'],['Home (buying)','Property tax'],
+ ['Home (buying)','Home insurance'],['Home (buying)','Repairs and upkeep'],
  ['Utilities','Electric'],['Utilities','Gas'],['Utilities','Water and sewer'],
  ['Utilities','Trash'],['Utilities','Internet'],['Utilities','Phone'],
- ['Living','Groceries'],['Living','Eating out'],['Living','Fuel'],
- ['Living','Car insurance'],['Living','Car registration'],['Living','Car maintenance'],
- ['Living','Household supplies'],['Living','Clothing'],['Living','Haircuts'],
- ['Living','Subscriptions'],['Living','Gifts and birthdays'],['Living','Pets'],
- ['Health','Health insurance'],['Health','Doctor and copays'],['Health','Dental'],
- ['Health','Prescriptions'],['Health','Gym'],
- ['Debt','Credit cards'],['Debt','Student loans'],['Debt','Car payment'],
- ['Savings','Emergency fund'],['Savings','Retirement'],['Savings','Sinking fund']
+ ['Food','Groceries'],['Food','Eating out'],['Food','Coffee'],
+ ['Getting around','Car payment'],['Getting around','Car insurance'],
+ ['Getting around','Fuel'],['Getting around','Maintenance and repairs'],
+ ['Getting around','Registration and tags'],['Getting around','Parking and transit'],
+ ['Health','Health insurance'],['Health','Appointments and copays'],
+ ['Health','Dental and eye'],['Health','Prescriptions'],['Health','Gym'],
+ ['Personal','Clothes and shoes'],['Personal','Haircuts and grooming'],
+ ['Personal','Subscriptions'],['Personal','Things for the house'],
+ ['Fun','Going out'],['Fun','Hobbies'],['Fun','Travel'],['Fun','Presents and birthdays'],
+ ['People and pets','Pets'],['People and pets','Childcare'],['People and pets','Helping family'],
+ ['Debt','Credit cards'],['Debt','Student loans'],['Debt','Anything else being paid down'],
+ ['Saving','Emergency fund'],['Saving','Retirement'],['Saving','Saving up for something']
 ];
 
 function buildCostSkeleton(who){
@@ -2547,13 +2716,13 @@ function vHousehold(){
    '<div class="sec"><div class="spread"><h2>People</h2>'+
    (owner&&!full?'<div class="row"><button class="b o s" id="hAddSeat">Add a person</button>'+
      '<button class="b s" id="hInvite">Invite someone</button></div>':'')+'</div>'+
-   '<div class="tw"><table><thead><tr><th>Name</th><th>Account</th><th>Role</th><th></th></tr></thead>'+
+   '<div class="tw cards"><table><thead><tr><th>Name</th><th>Account</th><th>Role</th><th></th></tr></thead>'+
    '<tbody>'+HOUSE.members.map(function(m){
      var isMe=ACCOUNT&&m.account_id&&(+m.account_id===+ACCOUNT.id);
-     return '<tr><td><b>'+E(m.display_name)+'</b>'+(isMe?' <span class="chip t">you</span>':'')+'</td>'+
-     '<td class="sm muted">'+(m.email?E(m.email):'<span class="chip">no login yet</span>')+'</td>'+
-     '<td class="sm muted">'+E(m.role)+'</td>'+
-     '<td>'+((owner&&m.role!=='owner')
+     return '<tr><td class="hd"><b>'+E(m.display_name)+'</b>'+(isMe?'<span class="chip t">you</span>':'')+'</td>'+
+     '<td data-l="Account" class="sm muted">'+(m.email?E(m.email):'<span class="chip">no login yet</span>')+'</td>'+
+     '<td data-l="Role" class="sm muted">'+E(m.role)+'</td>'+
+     '<td class="act">'+((owner&&m.role!=='owner')
        ?'<button class="b o s" data-hover="'+m.id+'">Make owner</button> '+
         '<button class="b o s dz" data-hdrop="'+m.id+'">Remove</button>':'')+'</td></tr>';
    }).join('')+'</tbody></table></div></div>'+
@@ -2596,13 +2765,13 @@ function drawInvites(){
       box.innerHTML='<div class="empty sm">No open invites.</div>';
       return;
     }
-    box.innerHTML='<div class="tw"><table><thead><tr><th>Code</th><th>For</th>'+
+    box.innerHTML='<div class="tw cards"><table><thead><tr><th>Code</th><th>For</th>'+
       '<th>Expires</th><th></th></tr></thead><tbody>'+
       r.invites.map(function(i){
-        return '<tr><td><b class="invcode">'+E(i.code)+'</b></td>'+
-        '<td class="sm muted">'+E(i.display_name||'anyone')+'</td>'+
-        '<td class="sm muted">'+E(String(i.expires_at).slice(0,10))+'</td>'+
-        '<td><button class="b o s" data-hcopy="'+E(i.code)+'">Copy</button> '+
+        return '<tr><td class="hd"><b class="invcode">'+E(i.code)+'</b></td>'+
+        '<td data-l="For" class="sm muted">'+E(i.display_name||'anyone')+'</td>'+
+        '<td data-l="Expires" class="sm muted">'+E(String(i.expires_at).slice(0,10))+'</td>'+
+        '<td class="act"><button class="b o s" data-hcopy="'+E(i.code)+'">Copy</button> '+
         '<button class="x" data-hrevoke="'+E(i.code)+'">&times;</button></td></tr>';
       }).join('')+'</tbody></table></div>';
   });
@@ -2791,15 +2960,16 @@ function vActuals(){
     var planned=l[mode]||0;
     var diff=e.n>=1?e.monthly-planned:0;
     return '<tr'+(finLive(l)?'':' class="offrow"')+'>'+
-      '<td><b>'+E(l.name)+'</b>'+
-        (actTab==='out'?'<div class="xs muted">'+E(l.section)+'</div>':
-          (l.employer?'<div class="xs muted">'+E(l.employer)+'</div>':''))+'</td>'+
-      '<td class="num sm muted">'+M(planned)+'</td>'+
-      '<td class="num">'+(e.n?'<b>'+M(e.monthly)+'</b>':'<span class="muted">-</span>')+'</td>'+
-      '<td class="num sm '+(e.n?(diff>0?'up':'down'):'muted')+'">'+
+      '<td class="hd"><b>'+E(l.name)+'</b>'+
+        '<span class="xs muted">'+E(actTab==='out'?l.section:(l.employer||''))+'</span></td>'+
+      '<td data-l="Planned" class="num sm muted">'+M(planned)+'</td>'+
+      '<td data-l="Measured" class="num">'+
+        (e.n?'<b>'+M(e.monthly)+'</b>':'<span class="muted">-</span>')+'</td>'+
+      '<td data-l="Difference" class="num sm '+(e.n?(diff>0?'up':'down'):'muted')+'">'+
         (e.n?(diff>0?'+':'')+M(diff):'-')+'</td>'+
-      '<td class="sm">'+(e.n?e.n+' '+confChip(e.confidence):'<span class="muted">none</span>')+'</td>'+
-      '<td><button class="b o s" data-actline="'+E(l.id)+'">'+
+      '<td data-l="Entries" class="sm">'+
+        (e.n?e.n+' '+confChip(e.confidence):'<span class="muted">none</span>')+'</td>'+
+      '<td class="act"><button class="b o s" data-actline="'+E(l.id)+'">'+
         (e.n?'Entries':'Add')+'</button></td></tr>';
   }).join('');
 
@@ -2829,7 +2999,7 @@ function vActuals(){
    '<div class="row"><button class="pill'+(actTab==='out'?' on':'')+'" data-acttab="out">Costs</button>'+
    '<button class="pill'+(actTab==='in'?' on':'')+'" data-acttab="in">Income</button></div></div>'+
    '<p class="sub">'+covered+' of '+totalLines+' lines have enough logged to be measured.</p>'+
-   (lines.length?'<div class="tw wide"><table><thead><tr><th>Line</th>'+
+   (lines.length?'<div class="tw wide cards"><table><thead><tr><th>Line</th>'+
      '<th class="num">Planned</th><th class="num">Measured</th><th class="num">Difference</th>'+
      '<th>Entries</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
     :'<div class="empty">No '+(actTab==='in'?'income':'cost')+' lines yet.</div>')+
@@ -2883,16 +3053,16 @@ function recentEntries(){
   if(!all.length) return '<div class="sec"><h2>Recent</h2>'+
     '<div class="empty"><p>Nothing logged yet.</p>'+
     '<p class="sm">Press Log an amount, or open any line above.</p></div></div>';
-  return '<div class="sec"><h2>Recent</h2><div class="tw"><table>'+
-    '<thead><tr><th>Date</th><th>Line</th><th class="num">Amount</th><th>Note</th><th></th></tr></thead>'+
+  return '<div class="sec"><h2>Recent</h2><div class="tw cards"><table>'+
+    '<thead><tr><th>Line</th><th>Date</th><th class="num">Amount</th><th>Note</th><th></th></tr></thead>'+
     '<tbody>'+all.map(function(a){
       var l=lineById(a.lineId);
-      return '<tr><td class="sm">'+E(shortD(a.date))+'</td>'+
-        '<td><b>'+E(l?l.line.name:'(deleted line)')+'</b>'+
-          '<span class="chip" style="margin-left:6px">'+(a.kind==='in'?'in':'out')+'</span></td>'+
-        '<td class="num">'+M(a.amount)+'</td>'+
-        '<td class="sm muted">'+E(a.note||'')+'</td>'+
-        '<td><button class="b o s" data-acte="'+E(a.id)+'">Edit</button></td></tr>';
+      return '<tr><td class="hd"><b>'+E(l?l.line.name:'(deleted line)')+'</b>'+
+          '<span class="chip">'+(a.kind==='in'?'in':'out')+'</span></td>'+
+        '<td data-l="Date" class="sm">'+E(shortD(a.date))+'</td>'+
+        '<td data-l="Amount" class="num">'+M(a.amount)+'</td>'+
+        '<td data-l="Note" class="sm muted">'+E(a.note||'')+'</td>'+
+        '<td class="act"><button class="b o s" data-acte="'+E(a.id)+'">Edit</button></td></tr>';
     }).join('')+'</tbody></table></div></div>';
 }
 
@@ -2907,13 +3077,13 @@ function lineEntries(lineId){
     '<div class="stat"><b>'+M(l[S.fin.costMode||'real']||0)+'</b><span>Planned</span></div>'+
     '<div class="stat"><b>'+e.n+'</b><span>Entries</span></div></div>'+
     '<p class="sm muted">'+E(methodWords(e))+'.</p>'+
-    (rows.length?'<div class="tw" style="margin-top:12px"><table>'+
+    (rows.length?'<div class="tw cards" style="margin-top:12px"><table>'+
       '<thead><tr><th>Date</th><th class="num">Amount</th><th>Note</th><th></th></tr></thead><tbody>'+
       rows.map(function(a){
-        return '<tr><td class="sm">'+E(shortD(a.date))+'</td>'+
-        '<td class="num">'+M(a.amount)+'</td>'+
-        '<td class="sm muted">'+E(a.note||'')+'</td>'+
-        '<td><button class="b o s" data-acte="'+E(a.id)+'">Edit</button> '+
+        return '<tr><td data-l="Date" class="sm">'+E(shortD(a.date))+'</td>'+
+        '<td data-l="Amount" class="num">'+M(a.amount)+'</td>'+
+        '<td data-l="Note" class="sm muted">'+E(a.note||'')+'</td>'+
+        '<td class="act"><button class="b o s" data-acte="'+E(a.id)+'">Edit</button> '+
         '<button class="x" data-actd="'+E(a.id)+'">&times;</button></td></tr>';
       }).join('')+'</tbody></table></div>'
      :'<div class="empty sm" style="margin-top:12px">Nothing logged against this line yet.</div>');
@@ -3557,8 +3727,8 @@ function sessModal(i){
    honours the flag, so the charts cannot drift away from the tables. */
 function finLive(x){return !x.off;}
 function costInPath(c,path){
-  if(c.section==='Housing (rent)') return path!=='buy';
-  if(c.section==='Housing (buy)') return path==='buy';
+  if(c.section===RENT_SECTION||c.section==='Housing (rent)') return path!=='buy';
+  if(c.section===BUY_SECTION||c.section==='Housing (buy)') return path==='buy';
   return true;
 }
 /* Pass all=true and the switched off lines count as well. That is how the
@@ -3637,7 +3807,7 @@ function vFinancial(sub){
 
   /* ---- derived numbers ---- */
   var saveRate=inc>0?gap/inc*100:0;
-  var toSavings=byS['Savings']||0;               /* money into savings is not spent */
+  var toSavings=byS['Saving']||0;               /* money moved into savings was never spent */
   var toDebt=byS['Debt']||0;
   var building=gap+toSavings;                    /* what the month actually adds */
   var burn=cost-toSavings;                       /* what leaving the house costs */
@@ -3698,7 +3868,7 @@ function vFinancial(sub){
   wfCols.push({label:gap>=0?'Left over':'Short by',sub:M(Math.abs(gap)),subCls:gap>=0?'good':'bad',
     bars:[{v:Math.abs(gap),base:0,cls:gap>=0?'ctg':'ctb',
       tip:(gap>=0?'Left over: ':'Short by: ')+M(Math.abs(gap))}]});
-  var waterfall='<div class="sec"><h2>From income to what is left</h2>'+
+  var waterfall=(inc<=0&&cost<=0)?'':'<div class="sec"><h2>From income to what is left</h2>'+
     '<p class="sub">The first bar is everything coming in. Each one after it is a live cost '+
     'section taken off the running balance, biggest first, on the '+modeLabel(mode).toLowerCase()+
     ' column while '+(path==='buy'?'buying':'renting')+'. The last bar is what survives.</p>'+
@@ -3768,7 +3938,7 @@ function vFinancial(sub){
   var bandMax=Math.max.apply(null,bandVals.map(function(b){return Math.max(b.inc,b.cost);}).concat([1]));
   var best=bandVals.slice().sort(function(a,b){return b.gap-a.gap;})[0];
   var worst=bandVals.slice().sort(function(a,b){return a.gap-b.gap;})[0];
-  var band='<div class="sec"><h2>The same month, read '+
+  var band=(inc<=0&&cost<=0)?'':'<div class="sec"><h2>The same month, read '+
    (['','one way','two ways','three ways','four ways'][bandVals.length]||'every way')+'</h2>'+
    '<p class="sub">Identical lines, identical switches. Only the estimate column changes. '+
    'The spread between the ends is what the plan actually rests on.</p>'+
@@ -3855,27 +4025,28 @@ function vFinancial(sub){
    '<div class="row"><span class="chip p">'+jobsOn+' of '+S.fin.jobs.length+' on</span>'+
    '<button class="b o s" data-alltog="jobs|1">All on</button>'+
    '<button class="b o s" data-alltog="jobs|0">All off</button>'+
-   '<button class="b o s" id="jobAdd2">Add</button></div></div><div class="tw wide"><table>'+
-   '<thead><tr><th>On</th><th>Who</th><th>Name</th><th>Employer</th><th class="num">Low</th>'+
+   '<button class="b o s" id="jobAdd2">Add</button></div></div><div class="tw wide cards"><table>'+
+   '<thead><tr><th>Name</th><th>Who</th><th>Rate</th><th>Employer</th><th class="num">Low</th>'+
    '<th class="num">Realistic</th><th class="num">High</th><th class="num">Actual</th><th></th></tr></thead><tbody>'+
    (S.fin.jobs.length?S.fin.jobs.map(function(j){
      var on=finLive(j);
      return '<tr'+(on?'':' class="offrow"')+'>'+
-     '<td>'+finSw('jobtog',j.id,on,j.name||'this income line')+'</td>'+
-     '<td><span class="chip">'+E(WHO(j.who))+'</span></td><td><b>'+E(j.name)+'</b>'+
-     (on?'':'<span class="offtag">off</span>')+
-     (j.rate?'<div class="xs muted">'+$$$(j.rate)+'/hr</div>':'')+'</td>'+
-     '<td class="sm muted">'+E(j.employer||'')+'</td>'+
-     '<td class="num">'+M(j.low)+'</td><td class="num"><b>'+M(j.real)+'</b></td>'+
-     '<td class="num">'+M(j.high)+'</td>'+
-     '<td class="num">'+(j.actual?M(j.actual):'<span class="muted">-</span>')+'</td>'+
-     '<td><button class="b o s" data-jobe="'+j.id+'">Edit</button></td></tr>';}).join('')
+     '<td class="hd">'+finSw('jobtog',j.id,on,j.name||'this income line')+
+       '<b>'+E(j.name)+'</b>'+(on?'':'<span class="offtag">off</span>')+'</td>'+
+     '<td data-l="Who"><span class="chip">'+E(WHO(j.who))+'</span></td>'+
+     '<td data-l="Rate" class="sm muted">'+(j.rate?$$$(j.rate)+'/hr':'')+'</td>'+
+     '<td data-l="Employer" class="sm muted">'+E(j.employer||'')+'</td>'+
+     '<td data-l="Low" class="num">'+M(j.low)+'</td>'+
+     '<td data-l="Realistic" class="num"><b>'+M(j.real)+'</b></td>'+
+     '<td data-l="High" class="num">'+M(j.high)+'</td>'+
+     '<td data-l="Actual" class="num">'+(j.actual?M(j.actual):'<span class="muted">-</span>')+'</td>'+
+     '<td class="act"><button class="b o s" data-jobe="'+j.id+'">Edit</button></td></tr>';}).join('')
     :'<tr><td colspan="9" class="sm muted" style="text-align:center;padding:22px">No income lines yet.</td></tr>')+
-   '<tr style="background:var(--panel-2)"><td colspan="4"><b>Counted total</b></td>'+
-   '<td class="num"><b>'+M(finIncome('both','low'))+'</b></td>'+
-   '<td class="num"><b>'+M(finIncome('both','real'))+'</b></td>'+
-   '<td class="num"><b>'+M(finIncome('both','high'))+'</b></td>'+
-   '<td class="num"><b>'+M(finIncome('both','actual'))+'</b></td><td></td></tr>'+
+   '<tr style="background:var(--panel-2)"><td class="hd" colspan="4"><b>Counted total</b></td>'+
+   '<td data-l="Low" class="num"><b>'+M(finIncome('both','low'))+'</b></td>'+
+   '<td data-l="Realistic" class="num"><b>'+M(finIncome('both','real'))+'</b></td>'+
+   '<td data-l="High" class="num"><b>'+M(finIncome('both','high'))+'</b></td>'+
+   '<td data-l="Actual" class="num"><b>'+M(finIncome('both','actual'))+'</b></td><td></td></tr>'+
    (offJobs.length?'<tr><td colspan="4" class="sm muted">Switched off</td>'+
      '<td class="num sm muted">'+M(finIncome('both','low',true)-finIncome('both','low'))+'</td>'+
      '<td class="num sm muted">'+M(finIncome('both','real',true)-finIncome('both','real'))+'</td>'+
@@ -3888,27 +4059,28 @@ function vFinancial(sub){
    '<div class="row"><span class="chip p">'+costsOn+' of '+costsInPath+' on</span>'+
    '<button class="b o s" data-alltog="costs|1">All on</button>'+
    '<button class="b o s" data-alltog="costs|0">All off</button>'+
-   '<button class="b o s" id="costAdd">Add</button></div></div><div class="tw wide"><table>'+
-   '<thead><tr><th>On</th><th>Section</th><th>Cost</th><th>Who</th><th class="num">Low</th>'+
+   '<button class="b o s" id="costAdd">Add</button></div></div><div class="tw wide cards"><table>'+
+   '<thead><tr><th>Cost</th><th>Section</th><th>Who</th><th class="num">Low</th>'+
    '<th class="num">Realistic</th><th class="num">High</th><th class="num">Actual</th><th></th></tr></thead><tbody>'+
    (S.fin.costs.length?S.fin.costs.map(function(c){
      var on=finLive(c), inPath=costInPath(c,path);
      return '<tr'+(on&&inPath?'':' class="offrow"')+'>'+
-     '<td>'+finSw('costtog',c.id,on,c.name||'this cost line')+'</td>'+
-     '<td class="sm muted">'+E(c.section)+'</td>'+
-     '<td><b>'+E(c.name)+'</b>'+(on?(inPath?'':'<span class="offtag">other path</span>')
+     '<td class="hd">'+finSw('costtog',c.id,on,c.name||'this cost line')+
+       '<b>'+E(c.name)+'</b>'+(on?(inPath?'':'<span class="offtag">other path</span>')
        :'<span class="offtag">off</span>')+'</td>'+
-     '<td><span class="chip">'+E(WHO(c.who))+'</span></td>'+
-     '<td class="num">'+M(c.low)+'</td><td class="num"><b>'+M(c.real)+'</b></td>'+
-     '<td class="num">'+M(c.high)+'</td>'+
-     '<td class="num">'+(c.actual?M(c.actual):'<span class="muted">-</span>')+'</td>'+
-     '<td><button class="b o s" data-coste="'+c.id+'">Edit</button></td></tr>';}).join('')
+     '<td data-l="Section" class="sm muted">'+E(c.section)+'</td>'+
+     '<td data-l="Who"><span class="chip">'+E(WHO(c.who))+'</span></td>'+
+     '<td data-l="Low" class="num">'+M(c.low)+'</td>'+
+     '<td data-l="Realistic" class="num"><b>'+M(c.real)+'</b></td>'+
+     '<td data-l="High" class="num">'+M(c.high)+'</td>'+
+     '<td data-l="Actual" class="num">'+(c.actual?M(c.actual):'<span class="muted">-</span>')+'</td>'+
+     '<td class="act"><button class="b o s" data-coste="'+c.id+'">Edit</button></td></tr>';}).join('')
     :'<tr><td colspan="9" class="sm muted" style="text-align:center;padding:22px">No cost lines yet.</td></tr>')+
-   '<tr style="background:var(--panel-2)"><td colspan="4"><b>Counted total</b></td>'+
-   '<td class="num"><b>'+M(finCost('low',path))+'</b></td>'+
-   '<td class="num"><b>'+M(finCost('real',path))+'</b></td>'+
-   '<td class="num"><b>'+M(finCost('high',path))+'</b></td>'+
-   '<td class="num"><b>'+M(finCost('actual',path))+'</b></td><td></td></tr>'+
+   '<tr style="background:var(--panel-2)"><td class="hd" colspan="3"><b>Counted total</b></td>'+
+   '<td data-l="Low" class="num"><b>'+M(finCost('low',path))+'</b></td>'+
+   '<td data-l="Realistic" class="num"><b>'+M(finCost('real',path))+'</b></td>'+
+   '<td data-l="High" class="num"><b>'+M(finCost('high',path))+'</b></td>'+
+   '<td data-l="Actual" class="num"><b>'+M(finCost('actual',path))+'</b></td><td></td></tr>'+
    (offCosts.length?'<tr><td colspan="4" class="sm muted">Switched off</td>'+
      '<td class="num sm muted">'+M(finCost('low',path,true)-finCost('low',path))+'</td>'+
      '<td class="num sm muted">'+M(finCost('real',path,true)-finCost('real',path))+'</td>'+
@@ -4403,8 +4575,18 @@ function chrome(){
     ICO[t[0]]+'</svg><span>'+t[2]+'</span></button>';}).join('');
   /* One person means there is nobody to switch to, so the control does not
      appear at all rather than sitting there as a single dead button. */
-  $('#who').innerHTML=shared()?MEMS().map(function(m){return '<button data-w="'+E(m.id)+'"'+
-    (ME()===m.id?' class="on"':'')+'>'+E(m.name)+'</button>';}).join(''):'';
+  /* This was a row of names you could tap between, which reads as switching
+     accounts, and it never was. Nothing here logs you in as anybody. All it did
+     was say who new entries get filed under, and that is a per entry choice
+     that already lives on every editor.
+
+     So it shows who you are and stops. Everyone in the household is on the
+     household page, and being somebody else means signing in as them. */
+  var meM=MEM(ME());
+  $('#who').innerHTML=meM
+    ? '<button class="mechip" data-nav="household" title="Who is in this household">'+
+      E(meM.name)+'</button>'
+    : '';
   var sp=$('#syncSlot'); if(sp) sp.innerHTML=syncPill();
   var th=$('#themeBtn');
   if(th){var cur=S.theme||'dark';
@@ -4761,9 +4943,7 @@ function costEditor(id){
   var c=id?S.fin.costs.filter(function(x){return x.id===id;})[0]:{name:'',section:'Living',who:shared()?EVERYONE:ME(),low:'',real:'',high:'',actual:''};
   var m=modal(id?'Edit cost':'Add cost',
     form([{id:'cn',l:'Cost',v:c.name},
-      {id:'cs',l:'Section',t:'select',o:[['Living','Living'],['Utilities','Utilities'],
-        ['Health','Health'],['Housing (rent)','Housing (rent)'],['Housing (buy)','Housing (buy)'],
-        ['Debt','Debt'],['Savings','Savings']],v:c.section},
+      {id:'cs',l:'Section',t:'select',o:sectionOpts(),v:newSection(c.section,c.name)},
       {id:'cw',l:'Who',t:'select',o:whoOpts(),v:c.who},
       {id:'cl',l:'Low',t:'number',v:c.low},{id:'cr',l:'Realistic',t:'number',v:c.real},
       {id:'ch',l:'High',t:'number',v:c.high},{id:'ca',l:'Actual',t:'number',v:c.actual},
@@ -5095,7 +5275,9 @@ document.addEventListener('click',function(e){
   if(!t||!t.closest) return;
   try{
   if((el=t.closest('[data-nav]'))){nav(el.dataset.nav);return;}
-  if((el=t.closest('[data-w]'))){S.who=el.dataset.w;save();route();return;}
+  /* Kept so a stale button left in an open page cannot throw, but it no longer
+     changes who you are. Correcting that is a deliberate act in Settings. */
+  if((el=t.closest('[data-w]'))){return;}
   if((el=t.closest('[data-acttab]'))){actTab=el.dataset.acttab;route();return;}
   if((el=t.closest('[data-actline]'))){lineEntries(el.dataset.actline);return;}
   if((el=t.closest('[data-actadd]'))){
@@ -5331,6 +5513,10 @@ function settingsModal(){
    '<h4 class="lbl">Household</h4>'+
    '<label class="f" style="margin-top:10px"><span>Household name</span>'+
    '<input id="stHouse" value="'+E(S.household||'')+'" placeholder="My household"></label>'+
+   (shared()?'<label class="f" style="margin-top:12px"><span>Which of these is you</span>'+
+     '<select id="stMe">'+opt(MEMS().map(function(m){return [m.id,m.name];}),ME())+'</select></label>'+
+     '<p class="xs muted">Only changes which profile the app treats as yours. It does not '+
+     'sign you in as anybody, and everyone keeps their own account.</p>':'')+
    '<div id="stMembers"></div>'+
    '<div class="row" style="margin-top:10px"><button class="b o s" id="stAddMem">Add someone</button>'+
    '<button class="b o s" data-nav="household">Invites and sharing</button></div>'+
@@ -5381,6 +5567,8 @@ function settingsModal(){
     i.click();};
   var hn=$('#stHouse',m);
   if(hn) hn.onchange=function(){S.household=this.value.trim();save();};
+  var mePick=$('#stMe',m);
+  if(mePick) mePick.onchange=function(){S.who=this.value;save();chrome();route();};
   drawSettingsMembers(m);
   var am=$('#stAddMem',m);
   if(am) am.onclick=function(){

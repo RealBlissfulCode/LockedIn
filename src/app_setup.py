@@ -15,19 +15,23 @@ APP_SETUP = r"""
    numbers in them. Seeing the row is the useful part. Filling it in is the
    user's job and guessing on their behalf would be worse than blank. */
 var COST_SKELETON=[
- ['Housing (rent)','Rent'],['Housing (rent)','Renters insurance'],
- ['Housing (buy)','Mortgage'],['Housing (buy)','Property tax'],
- ['Housing (buy)','Home insurance'],['Housing (buy)','Repairs and upkeep'],
+ ['Home (renting)','Rent'],['Home (renting)','Renters insurance'],
+ ['Home (buying)','Mortgage'],['Home (buying)','Property tax'],
+ ['Home (buying)','Home insurance'],['Home (buying)','Repairs and upkeep'],
  ['Utilities','Electric'],['Utilities','Gas'],['Utilities','Water and sewer'],
  ['Utilities','Trash'],['Utilities','Internet'],['Utilities','Phone'],
- ['Living','Groceries'],['Living','Eating out'],['Living','Fuel'],
- ['Living','Car insurance'],['Living','Car registration'],['Living','Car maintenance'],
- ['Living','Household supplies'],['Living','Clothing'],['Living','Haircuts'],
- ['Living','Subscriptions'],['Living','Gifts and birthdays'],['Living','Pets'],
- ['Health','Health insurance'],['Health','Doctor and copays'],['Health','Dental'],
- ['Health','Prescriptions'],['Health','Gym'],
- ['Debt','Credit cards'],['Debt','Student loans'],['Debt','Car payment'],
- ['Savings','Emergency fund'],['Savings','Retirement'],['Savings','Sinking fund']
+ ['Food','Groceries'],['Food','Eating out'],['Food','Coffee'],
+ ['Getting around','Car payment'],['Getting around','Car insurance'],
+ ['Getting around','Fuel'],['Getting around','Maintenance and repairs'],
+ ['Getting around','Registration and tags'],['Getting around','Parking and transit'],
+ ['Health','Health insurance'],['Health','Appointments and copays'],
+ ['Health','Dental and eye'],['Health','Prescriptions'],['Health','Gym'],
+ ['Personal','Clothes and shoes'],['Personal','Haircuts and grooming'],
+ ['Personal','Subscriptions'],['Personal','Things for the house'],
+ ['Fun','Going out'],['Fun','Hobbies'],['Fun','Travel'],['Fun','Presents and birthdays'],
+ ['People and pets','Pets'],['People and pets','Childcare'],['People and pets','Helping family'],
+ ['Debt','Credit cards'],['Debt','Student loans'],['Debt','Anything else being paid down'],
+ ['Saving','Emergency fund'],['Saving','Retirement'],['Saving','Saving up for something']
 ];
 
 function buildCostSkeleton(who){
@@ -696,13 +700,13 @@ function vHousehold(){
    '<div class="sec"><div class="spread"><h2>People</h2>'+
    (owner&&!full?'<div class="row"><button class="b o s" id="hAddSeat">Add a person</button>'+
      '<button class="b s" id="hInvite">Invite someone</button></div>':'')+'</div>'+
-   '<div class="tw"><table><thead><tr><th>Name</th><th>Account</th><th>Role</th><th></th></tr></thead>'+
+   '<div class="tw cards"><table><thead><tr><th>Name</th><th>Account</th><th>Role</th><th></th></tr></thead>'+
    '<tbody>'+HOUSE.members.map(function(m){
      var isMe=ACCOUNT&&m.account_id&&(+m.account_id===+ACCOUNT.id);
-     return '<tr><td><b>'+E(m.display_name)+'</b>'+(isMe?' <span class="chip t">you</span>':'')+'</td>'+
-     '<td class="sm muted">'+(m.email?E(m.email):'<span class="chip">no login yet</span>')+'</td>'+
-     '<td class="sm muted">'+E(m.role)+'</td>'+
-     '<td>'+((owner&&m.role!=='owner')
+     return '<tr><td class="hd"><b>'+E(m.display_name)+'</b>'+(isMe?'<span class="chip t">you</span>':'')+'</td>'+
+     '<td data-l="Account" class="sm muted">'+(m.email?E(m.email):'<span class="chip">no login yet</span>')+'</td>'+
+     '<td data-l="Role" class="sm muted">'+E(m.role)+'</td>'+
+     '<td class="act">'+((owner&&m.role!=='owner')
        ?'<button class="b o s" data-hover="'+m.id+'">Make owner</button> '+
         '<button class="b o s dz" data-hdrop="'+m.id+'">Remove</button>':'')+'</td></tr>';
    }).join('')+'</tbody></table></div></div>'+
@@ -745,13 +749,13 @@ function drawInvites(){
       box.innerHTML='<div class="empty sm">No open invites.</div>';
       return;
     }
-    box.innerHTML='<div class="tw"><table><thead><tr><th>Code</th><th>For</th>'+
+    box.innerHTML='<div class="tw cards"><table><thead><tr><th>Code</th><th>For</th>'+
       '<th>Expires</th><th></th></tr></thead><tbody>'+
       r.invites.map(function(i){
-        return '<tr><td><b class="invcode">'+E(i.code)+'</b></td>'+
-        '<td class="sm muted">'+E(i.display_name||'anyone')+'</td>'+
-        '<td class="sm muted">'+E(String(i.expires_at).slice(0,10))+'</td>'+
-        '<td><button class="b o s" data-hcopy="'+E(i.code)+'">Copy</button> '+
+        return '<tr><td class="hd"><b class="invcode">'+E(i.code)+'</b></td>'+
+        '<td data-l="For" class="sm muted">'+E(i.display_name||'anyone')+'</td>'+
+        '<td data-l="Expires" class="sm muted">'+E(String(i.expires_at).slice(0,10))+'</td>'+
+        '<td class="act"><button class="b o s" data-hcopy="'+E(i.code)+'">Copy</button> '+
         '<button class="x" data-hrevoke="'+E(i.code)+'">&times;</button></td></tr>';
       }).join('')+'</tbody></table></div>';
   });

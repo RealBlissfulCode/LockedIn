@@ -19,8 +19,18 @@ function chrome(){
     ICO[t[0]]+'</svg><span>'+t[2]+'</span></button>';}).join('');
   /* One person means there is nobody to switch to, so the control does not
      appear at all rather than sitting there as a single dead button. */
-  $('#who').innerHTML=shared()?MEMS().map(function(m){return '<button data-w="'+E(m.id)+'"'+
-    (ME()===m.id?' class="on"':'')+'>'+E(m.name)+'</button>';}).join(''):'';
+  /* This was a row of names you could tap between, which reads as switching
+     accounts, and it never was. Nothing here logs you in as anybody. All it did
+     was say who new entries get filed under, and that is a per entry choice
+     that already lives on every editor.
+
+     So it shows who you are and stops. Everyone in the household is on the
+     household page, and being somebody else means signing in as them. */
+  var meM=MEM(ME());
+  $('#who').innerHTML=meM
+    ? '<button class="mechip" data-nav="household" title="Who is in this household">'+
+      E(meM.name)+'</button>'
+    : '';
   var sp=$('#syncSlot'); if(sp) sp.innerHTML=syncPill();
   var th=$('#themeBtn');
   if(th){var cur=S.theme||'dark';
@@ -377,9 +387,7 @@ function costEditor(id){
   var c=id?S.fin.costs.filter(function(x){return x.id===id;})[0]:{name:'',section:'Living',who:shared()?EVERYONE:ME(),low:'',real:'',high:'',actual:''};
   var m=modal(id?'Edit cost':'Add cost',
     form([{id:'cn',l:'Cost',v:c.name},
-      {id:'cs',l:'Section',t:'select',o:[['Living','Living'],['Utilities','Utilities'],
-        ['Health','Health'],['Housing (rent)','Housing (rent)'],['Housing (buy)','Housing (buy)'],
-        ['Debt','Debt'],['Savings','Savings']],v:c.section},
+      {id:'cs',l:'Section',t:'select',o:sectionOpts(),v:newSection(c.section,c.name)},
       {id:'cw',l:'Who',t:'select',o:whoOpts(),v:c.who},
       {id:'cl',l:'Low',t:'number',v:c.low},{id:'cr',l:'Realistic',t:'number',v:c.real},
       {id:'ch',l:'High',t:'number',v:c.high},{id:'ca',l:'Actual',t:'number',v:c.actual},
@@ -711,7 +719,9 @@ document.addEventListener('click',function(e){
   if(!t||!t.closest) return;
   try{
   if((el=t.closest('[data-nav]'))){nav(el.dataset.nav);return;}
-  if((el=t.closest('[data-w]'))){S.who=el.dataset.w;save();route();return;}
+  /* Kept so a stale button left in an open page cannot throw, but it no longer
+     changes who you are. Correcting that is a deliberate act in Settings. */
+  if((el=t.closest('[data-w]'))){return;}
   if((el=t.closest('[data-acttab]'))){actTab=el.dataset.acttab;route();return;}
   if((el=t.closest('[data-actline]'))){lineEntries(el.dataset.actline);return;}
   if((el=t.closest('[data-actadd]'))){
@@ -947,6 +957,10 @@ function settingsModal(){
    '<h4 class="lbl">Household</h4>'+
    '<label class="f" style="margin-top:10px"><span>Household name</span>'+
    '<input id="stHouse" value="'+E(S.household||'')+'" placeholder="My household"></label>'+
+   (shared()?'<label class="f" style="margin-top:12px"><span>Which of these is you</span>'+
+     '<select id="stMe">'+opt(MEMS().map(function(m){return [m.id,m.name];}),ME())+'</select></label>'+
+     '<p class="xs muted">Only changes which profile the app treats as yours. It does not '+
+     'sign you in as anybody, and everyone keeps their own account.</p>':'')+
    '<div id="stMembers"></div>'+
    '<div class="row" style="margin-top:10px"><button class="b o s" id="stAddMem">Add someone</button>'+
    '<button class="b o s" data-nav="household">Invites and sharing</button></div>'+
@@ -997,6 +1011,8 @@ function settingsModal(){
     i.click();};
   var hn=$('#stHouse',m);
   if(hn) hn.onchange=function(){S.household=this.value.trim();save();};
+  var mePick=$('#stMe',m);
+  if(mePick) mePick.onchange=function(){S.who=this.value;save();chrome();route();};
   drawSettingsMembers(m);
   var am=$('#stAddMem',m);
   if(am) am.onclick=function(){

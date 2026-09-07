@@ -90,7 +90,7 @@ var S=(function(){
     if(raw){var o=JSON.parse(raw),d=DEF();
       for(var k in d) if(!(k in o)) o[k]=d[k];
       for(var f in d.fin) if(!(f in o.fin)) o.fin[f]=d.fin[f];
-      return migrateToMembers(o);}
+      return migrateSections(migrateToMembers(o));}
   }catch(e){}
   return DEF();
 })();
@@ -197,6 +197,72 @@ function applyCollection(id,scope){
   }
   if(n) save();
   return n;
+}
+
+/* ---------------- cost sections ----------------
+   The old list had a Living bucket holding groceries, fuel, car insurance,
+   haircuts and clothing, which is four unrelated things in a drawer and tells
+   you nothing when it turns out to be your biggest number after rent.
+
+   These split on the question people actually ask, which is what could I
+   change. Fixed things you signed a contract for sit apart from food, from
+   getting about, from what you chose to spend on yourself, and from money that
+   is still yours once it moves. Getting around is its own section because for
+   most people it is second only to home and it hides inside Living otherwise.
+
+   Home stays split by renting and buying because a scenario switches between
+   them, and only one side is ever counted at a time. */
+var SECTIONS=[
+ ['Home (renting)','Rent, renters insurance, anything tied to renting'],
+ ['Home (buying)','Mortgage, property tax, home insurance, repairs'],
+ ['Utilities','Power, water, gas, trash, internet, phone'],
+ ['Food','Groceries and eating out'],
+ ['Getting around','Fuel, car payment and insurance, repairs, transit'],
+ ['Health','Insurance, appointments, prescriptions, the gym'],
+ ['Personal','Clothes, haircuts, subscriptions, things for the house'],
+ ['Fun','Going out, hobbies, travel, presents'],
+ ['People and pets','Childcare, pets, helping family'],
+ ['Debt','Cards, student loans, anything being paid down'],
+ ['Saving','Emergency fund, retirement, saving up for something']
+];
+function sectionOpts(){
+  return SECTIONS.map(function(x){return [x[0],x[0]];});
+}
+/* Sections that never count against each other. Only one home is real at a
+   time, which is what the housing path switch picks between. */
+var RENT_SECTION='Home (renting)', BUY_SECTION='Home (buying)';
+
+/* Rows written before the sections were reworked. Living was the junk drawer,
+   so it splits by what the line actually was rather than moving wholesale. */
+var OLD_SECTIONS={'Housing (rent)':RENT_SECTION,'Housing (buy)':BUY_SECTION,
+                  'Savings':'Saving','Living':'Personal'};
+var LIVING_HINTS=[
+ [/groceries|food|eating out|restaurant|takeaway|takeout|coffee/i,'Food'],
+ [/fuel|gas for|petrol|car|vehicle|transit|bus|train|parking|registration|insurance \(car\)/i,'Getting around'],
+ [/gym|doctor|dental|medical|prescription|therapy/i,'Health'],
+ [/pet|dog|cat|child|daycare|nursery/i,'People and pets'],
+ [/social|fun|hobby|travel|holiday|vacation|gift|birthday|night out/i,'Fun']
+];
+function migrateSections(o){
+  if(o.__sections7) return o;
+  ((o.fin||{}).costs||[]).forEach(function(c){ c.section=newSection(c.section,c.name); });
+  Object.keys((o.fin||{}).scenarios||{}).forEach(function(n){
+    ((o.fin.scenarios[n]||{}).costs||[]).forEach(function(c){
+      c.section=newSection(c.section,c.name); });
+  });
+  o.__sections7=true;
+  return o;
+}
+function newSection(sec,name){
+  if(!sec) return 'Personal';
+  var known=SECTIONS.some(function(x){return x[0]===sec;});
+  if(known) return sec;
+  if(sec==='Living'){
+    for(var i=0;i<LIVING_HINTS.length;i++)
+      if(LIVING_HINTS[i][0].test(name||'')) return LIVING_HINTS[i][1];
+    return 'Personal';
+  }
+  return OLD_SECTIONS[sec]||'Personal';
 }
 
 /* ---------------- who is who ----------------
