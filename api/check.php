@@ -129,10 +129,13 @@ $anyAccount = false;
 if ($pdo !== null) {
     foreach ($pdo->query('SHOW TABLES')->fetchAll(PDO::FETCH_COLUMN) as $t) $have[] = $t;
     $missing = array_values(array_diff($want, $have));
+    /* The button at the top of this page does this, so pointing at SSH while it
+       is sitting there is just noise. The command line route is still worth
+       mentioning for anyone who would rather. */
     check('Tables created', !$missing,
           $missing ? 'Missing: ' . implode(', ', $missing) : count($want) . ' tables present',
-          'Run php api/migrate.php over SSH. No SSH: put a random string in '
-          . 'api/.migrate-key, open /api/migrate.php?key=thatstring, then delete the file.');
+          'Use the Create the tables button at the top of this page. Or, if you prefer a '
+          . 'terminal, php api/migrate.php over SSH.');
     if (!$missing) {
         try {
             $anyAccount = (int) $pdo->query('SELECT COUNT(*) FROM accounts')->fetchColumn() > 0;
