@@ -330,6 +330,7 @@ function bindFin(sub){
   on('#bpNew','click',function(){bpListEditor(null);});
   on('#stNew','click',function(){stratListEditor(null);});
   on('#stMode','change',function(){S.fin.stratMode=this.value;save();route();});
+  if(sub==='actual') bindActuals();
   countUp($('#view'));
 }
 /* ---------------- switching lines in and out ----------------
@@ -711,6 +712,23 @@ document.addEventListener('click',function(e){
   try{
   if((el=t.closest('[data-nav]'))){nav(el.dataset.nav);return;}
   if((el=t.closest('[data-w]'))){S.who=el.dataset.w;save();route();return;}
+  if((el=t.closest('[data-acttab]'))){actTab=el.dataset.acttab;route();return;}
+  if((el=t.closest('[data-actline]'))){lineEntries(el.dataset.actline);return;}
+  if((el=t.closest('[data-actadd]'))){
+    var lid=el.dataset.actadd;
+    var mk=el.closest('.mask'); if(mk) mk.remove();
+    actualEditor(null,lid); return;}
+  if((el=t.closest('[data-acte]'))){
+    var eid=el.dataset.acte;
+    var mk2=el.closest('.mask'); if(mk2) mk2.remove();
+    actualEditor(eid,null); return;}
+  if((el=t.closest('[data-actd]'))){
+    if(!confirm('Delete this entry?'))return;
+    var did=el.dataset.actd;
+    S.fin.actuals=actuals().filter(function(x){return x.id!==did;});
+    save();
+    var mk3=el.closest('.mask'); if(mk3) mk3.remove();
+    route(); return;}
   if((el=t.closest('[data-mpswap]'))){
     var sp=el.dataset.mpswap.split('|'); swapPlanMeal(+sp[0],+sp[1]); return;}
   if((el=t.closest('[data-hcopy]'))){

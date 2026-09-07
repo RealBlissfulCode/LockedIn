@@ -38,6 +38,7 @@ from app_core import APP_CORE                    # noqa: E402
 from app_auth import APP_AUTH                    # noqa: E402
 from app_state import APP_STATE                  # noqa: E402
 from app_setup import APP_SETUP, APP_IMPORT, APP_PLANNER, APP_HOUSEHOLD  # noqa: E402
+from app_actuals import APP_ACTUALS               # noqa: E402
 from app_charts import APP_CHARTS                # noqa: E402
 from app_views1 import APP_VIEWS1                # noqa: E402
 from app_views2 import APP_VIEWS2                # noqa: E402
@@ -349,7 +350,7 @@ def render_html():
     # carries is generic, and everything about a person arrives from the API
     # after they sign in.
     app_js = ("(function(){\n'use strict';\nvar _D=window._DATA;\n"
-              + APP_CORE + APP_CHARTS + APP_AUTH + APP_STATE + APP_SETUP + APP_IMPORT + APP_PLANNER + APP_HOUSEHOLD
+              + APP_CORE + APP_CHARTS + APP_AUTH + APP_STATE + APP_SETUP + APP_IMPORT + APP_PLANNER + APP_HOUSEHOLD + APP_ACTUALS
               + APP_VIEWS1 + APP_VIEWS2 + APP_WIRE
               + "\nboot();\n})();\n")
 

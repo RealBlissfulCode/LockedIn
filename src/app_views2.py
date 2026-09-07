@@ -183,7 +183,7 @@ function finSw(attr,val,on,label,small){
 function vFinancial(sub){
   if(sub==='purchases') return vPurchases();
   if(sub==='strategies') return vStrategies();
-  if(sub==='actual') return vActual();
+  if(sub==='actual') return vActuals();
   var mode=S.fin.costMode||'real', path=S.fin.path||'rent';
   var inc=finIncome('both',mode), cost=finCost(mode,path), gap=inc-cost;
 
@@ -517,110 +517,6 @@ function vFinancial(sub){
 
    stats+verdict+parked+'</div>'+
    waterfall+split+band+projection+cmp+incTable+costTable+'</div>';
-}
-/* Six calendar months of shifts, oldest first, so the chart runs left to right
-   the way a year does. A month with nothing in it stays as a zero instead of
-   getting dropped. Drop it and the gaps close up, and a slow month ends up
-   looking like it never happened. */
-function shiftMonths(n){
-  var out=[],d=new Date(),i;
-  d.setDate(1);
-  for(i=n-1;i>=0;i--){
-    var m=new Date(d.getFullYear(),d.getMonth()-i,1);
-    var key=m.getFullYear()+'-'+p2(m.getMonth()+1);
-    out.push({key:key,label:m.toLocaleDateString(undefined,{month:'short'}),
-      net:0,gross:0,hours:0});
-  }
-  S.fin.shifts.forEach(function(s){
-    var k=String(s.date||'').slice(0,7);
-    for(var j=0;j<out.length;j++) if(out[j].key===k){
-      out[j].net+=(s.net||0); out[j].gross+=(s.gross||0); out[j].hours+=(s.hours||0);}
-  });
-  return out;
-}
-function vActual(){
-  var from=new Date();from.setDate(from.getDate()-90);
-  var f=from.getFullYear()+'-'+p2(from.getMonth()+1)+'-'+p2(from.getDate());
-  var sh=S.fin.shifts.slice().sort(function(a,b){return b.date<a.date?-1:1;});
-  function tot(who,field){return shiftsFor(who,f).reduce(function(a,s){return a+(s[field]||0);},0);}
-  /* One card per member instead of two fixed ones. Somebody with nothing
-     logged still gets a card, because an empty card is how you notice. */
-  var perMember=MEMS().map(function(m){
-    return {id:m.id,name:m.name,
-            hours:tot(m.id,'hours'),gross:tot(m.id,'gross'),net:tot(m.id,'net')};});
-  var jH=perMember.reduce(function(a,x){return a+x.hours;},0);
-  var aH=0;
-  var jN=perMember.reduce(function(a,x){return a+x.net;},0);
-  var aN=0;
-  var eff=function(g,h){return h>0?g/h:0;};
-  var months=Math.max(1,90/30.4);
-  var mons=shiftMonths(6), plan=finIncome('both','real');
-  var monMax=Math.max.apply(null,mons.map(function(m){return m.net;}).concat([plan,1]));
-  var logged=mons.filter(function(m){return m.net>0;});
-  var monAvg=logged.length?logged.reduce(function(a,m){return a+m.net;},0)/logged.length:0;
-  var monBest=logged.length?Math.max.apply(null,logged.map(function(m){return m.net;})):0;
-  var real=(jN+aN)/months, vsPlan=plan?real/plan*100:0;
-  var costNow=finCost(S.fin.costMode||'real',S.fin.path||'rent');
-  var realGap=real-costNow;
-  return '<div class="page"><div class="phead"><h1>Actual earnings</h1>'+
-   '<p>Log real shifts. Averages, effective hourly and after-tax rate all come from what actually landed, not the plan.</p></div>'+
-   '<div class="row toolbar"><button class="b" id="shAdd">Log a shift</button>'+
-   '<button class="b o" id="shCsv">Export shifts</button>'+
-   '<button class="b o" data-nav="financial">&larr; Plan</button></div>'+
-   '<div class="sec"><h2>Last 90 days</h2><div class="grid g2">'+
-   perMember.map(function(x){
-     var h=x.hours,g=x.gross,n=x.net;
-     return '<div class="card pad"><h3 class="ctitle">'+E(x.name)+'</h3>'+
-     '<div class="stats"><div class="stat acc"><b>'+M(n/months)+'</b><span>Net / mo</span></div>'+
-     '<div class="stat"><b>'+h.toFixed(0)+'</b><span>Hours</span></div>'+
-     '<div class="stat"><b>'+$$$(eff(g,h))+'</b><span>Gross / hr</span></div>'+
-     '<div class="stat"><b>'+$$$(eff(n,h))+'</b><span>Net / hr</span></div></div>'+
-     '<p class="sm muted" style="margin-top:10px">'+(g>0?'Take-home is '+Math.round(n/g*100)+'% of gross.':'No shifts logged yet.')+'</p>'+
-     '</div>';}).join('')+'</div>'+
-   /* Nothing logged means there is no comparison to make. Draw one anyway and
-      it puts a -100% against the plan on the strength of no data at all. */
-   (logged.length
-     ?'<div class="note'+(vsPlan<90?' warn':(vsPlan>=100?' good':''))+'" style="margin-top:14px">'+
-      '<b>Real against plan.</b> '+
-      'Combined that is <b>'+M(real)+'</b> net a month from logged shifts, against a plan of <b>'+
-      M(plan)+'</b>'+(plan?', '+Math.round(vsPlan)+'% of it':'')+'. '+
-      'Set against the '+M(costNow)+' of live costs, the months that actually happened leave <b>'+
-      M(realGap)+'</b>. '+
-      '<button class="b o s" id="scenFromActual" style="margin-left:8px">Save that as a scenario</button></div>'
-     :'<div class="note" style="margin-top:14px"><b>Nothing logged yet.</b> '+
-      'The plan says '+M(plan)+' a month against '+M(costNow)+' of live costs. Log a few shifts and '+
-      'this page starts checking that against what actually landed.</div>')+'</div>'+
-
-   '<div class="sec"><h2>Six months of real money</h2>'+
-   '<p class="sub">Net, by calendar month, against the planned income line. Only the switched-on '+
-   'income lines make up that plan, so parking a job on the Financial page moves the bar here too.</p>'+
-   '<div class="card pad">'+
-   (logged.length
-     ?chartCols({max:monMax,h:160,cols:mons.map(function(m){
-        return {label:m.label,sub:m.net?M(m.net):'-',
-          bars:[{v:m.net,cls:m.net>=plan?'ct2':'ct1',
-            tip:m.label+': '+M(m.net)+' net over '+Math.round(m.hours)+' hours'},
-           {v:plan,cls:'ctm',tip:'Plan '+M(plan)}]};})})+
-      '<div class="ckey"><span><i class="ct2"></i>Beat the plan</span>'+
-      '<span><i class="ct1"></i>Under the plan</span><span><i class="ctm"></i>Plan</span></div>'+
-      '<div class="stats" style="margin-top:16px">'+
-      '<div class="stat"><b data-cv="'+monAvg+'">'+M(monAvg)+'</b><span>Avg logged month</span></div>'+
-      '<div class="stat"><b data-cv="'+monBest+'">'+M(monBest)+'</b><span>Best month</span></div>'+
-      '<div class="stat '+(monAvg>=plan?'good':'bad')+'"><b data-cv="'+(monAvg-plan)+'">'+
-        M(monAvg-plan)+'</b><span>Against plan</span></div>'+
-      '<div class="stat"><b data-cv="'+Math.round(takeHomeRate()*100)+'" data-cf="pct">'+
-        Math.round(takeHomeRate()*100)+'%</b><span>Take home</span></div>'+
-      '<div class="stat"><b data-cv="'+(jH+aH)+'" data-cf="h">'+(Math.round((jH+aH)*10)/10)+'h</b>'+
-        '<span>Hours / 90 days</span></div></div>'
-     :chEmpty('Nothing logged in the last six months. One shift is enough to start the chart.'))+
-   '</div></div>'+
-   '<div class="sec"><h2>Shifts</h2>'+(sh.length?'<div class="tw"><table>'+
-   '<thead><tr><th>Date</th><th>Job</th><th>Hours</th><th>Gross</th><th>Net</th><th>Note</th><th></th></tr></thead><tbody>'+
-   sh.slice(0,80).map(function(s){var j=S.fin.jobs.filter(function(x){return x.id===s.jobId;})[0];
-     return '<tr><td>'+shortD(s.date)+'</td><td>'+E(j?j.name:'?')+'</td><td>'+s.hours+'</td>'+
-     '<td>'+M(s.gross)+'</td><td>'+M(s.net)+'</td><td class="sm muted">'+E(s.note||'')+'</td>'+
-     '<td><button class="x" data-shd="'+s.id+'">&times;</button></td></tr>';}).join('')+
-   '</tbody></table></div>':'<div class="empty">No shifts logged.</div>')+'</div></div>';
 }
 function vPurchases(){
   var P_=S.fin.purchases||{}, names=Object.keys(P_);

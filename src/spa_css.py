@@ -353,6 +353,7 @@ padding:12px;overflow:auto;font:500 12px/1.5 var(--f-mono);color:var(--ink-2);ma
 
 /* misc */
 .pill{display:inline-block;background:var(--panel);color:var(--ink-2);border-radius:999px;padding:6px 14px;
+font-family:inherit;font-size:inherit;
 font-size:12.5px;font-weight:600;cursor:pointer;border:1px solid var(--line);transition:.18s var(--ez)}
 .pill:hover{border-color:var(--brass);color:var(--brass)}
 .pill.on{background:var(--brass);color:var(--on-accent);border-color:var(--brass)}
@@ -781,6 +782,11 @@ border:1px solid var(--line-2);border-radius:var(--r);background:var(--bg-2);col
 background:var(--panel-2);margin-top:12px}
 .gfound b{display:block;font-size:15px}
 .gfound span{display:block;font-size:12px;color:var(--ink-3);margin-top:3px}
+
+/* Measured against planned. Over is not automatically bad and under is not
+   automatically good, so these only carry direction, not judgement. */
+.up{color:var(--amber)}
+.down{color:var(--steel)}
 
 /* An invite code is read out loud and typed on a phone, so it gets spacing. */
 .invcode{font-family:var(--f-mono);letter-spacing:.14em}

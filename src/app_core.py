@@ -26,7 +26,7 @@ function DEF(){return{
  ingOv:{}, fav:[], lists:{}, mine:[], photos:{},
  shop:{active:null, lists:{}},
  days:{},
- fin:{jobs:[],shifts:[],costs:[],scenarios:{},purchases:{},strategies:{},
+ fin:{jobs:[],shifts:[],actuals:[],costs:[],scenarios:{},purchases:{},strategies:{},
       costMode:'real',path:'rent',activeScenario:null, draft:null},
  plan:{cols:[]},
  sched:{tmpl:{}, cols:[]},
