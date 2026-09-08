@@ -374,6 +374,83 @@ function finToggle(kind,pred,to){
   return n;
 }
 var ONOFF=[['1','Counted in the totals'],['0','Switched off']];
+/* What a line is actually made of.
+ *
+ * "Feminine products, $25" is a number you cannot argue with three months
+ * later. The same line written out as tampons at $8, pads at $6 and painkillers
+ * at $4 is one you can check, cut, or hand to somebody else. Parts are optional
+ * and a line without any behaves exactly as it always did; a line with them can
+ * push their total into the realistic column in one tap so the two never drift
+ * apart. Quantity times each, per month, because that is the unit every other
+ * number on this page is in. */
+function partRow(p){
+  p=p||{};
+  /* Labels rather than placeholders. A placeholder disappears the moment you
+     type in the box, and then two numbers sitting next to each other give no
+     clue which one was the count and which one was the price. */
+  return '<div class="prow" data-pid="'+E(p.id||uid())+'">'+
+    '<label class="pf pfn"><span>What</span>'+
+      '<input class="pn" value="'+E(p.n||'')+'" placeholder="Tampons"></label>'+
+    '<label class="pf"><span>Qty</span>'+
+      '<input class="pq" type="number" step="any" inputmode="decimal" '+
+      'value="'+E(p.qty==null?'':String(p.qty))+'" placeholder="1"></label>'+
+    '<label class="pf"><span>$ each</span>'+
+      '<input class="pe" type="number" step="any" inputmode="decimal" '+
+      'value="'+E(p.each==null?'':String(p.each))+'" placeholder="0"></label>'+
+    '<button type="button" class="b o s pdel" aria-label="Remove this part">Remove</button>'+
+    '</div>';
+}
+function partsBlock(parts){
+  return '<div class="pbox">'+
+    '<div class="spread"><span class="plab">Breakdown</span>'+
+    '<span class="chip p" id="pTot">$0</span></div>'+
+    '<p class="xs muted">Optional. Quantity times each, per month.</p>'+
+    '<div class="parts" id="parts">'+((parts||[]).map(partRow).join(''))+'</div>'+
+    '<div class="row" style="margin-top:9px">'+
+    '<button type="button" class="b o s" id="pAdd">Add a part</button>'+
+    '<button type="button" class="b o s" id="pUse">Use the total</button></div></div>';
+}
+function readParts(m){
+  var out=[];
+  $$('.prow',m).forEach(function(r){
+    var n=r.querySelector('.pn').value.trim();
+    var q=r.querySelector('.pq').value, e=r.querySelector('.pe').value;
+    if(!n&&!q&&!e) return;
+    out.push({id:r.dataset.pid||uid(),n:n||'Part',
+      qty:q===''?1:num(q),each:num(e)});
+  });
+  return out;
+}
+function partsTotal(parts){
+  return (parts||[]).reduce(function(a,p){
+    return a+(p.qty==null?1:p.qty)*(p.each||0);},0);
+}
+function wireParts(m,intoId){
+  function refresh(){
+    var e=$('#pTot',m);
+    if(e) e.textContent=M(partsTotal(readParts(m)));
+  }
+  $('#pAdd',m).onclick=function(){
+    $('#parts',m).insertAdjacentHTML('beforeend',partRow({id:uid(),qty:1}));
+    refresh();
+    var rows=$$('.prow',m); rows[rows.length-1].querySelector('.pn').focus();
+  };
+  $('#pUse',m).onclick=function(){
+    var t=partsTotal(readParts(m)), f=$('#'+intoId,m);
+    if(!t){ toast('Nothing in the breakdown yet'); return; }
+    if(f){ f.value=Math.round(t*100)/100; toast('Realistic set to '+M(t)); }
+  };
+  m.addEventListener('click',function(ev){
+    var d=ev.target.closest&&ev.target.closest('.pdel');
+    if(!d) return;
+    d.closest('.prow').remove(); refresh();
+  });
+  m.addEventListener('input',function(ev){
+    if(ev.target.closest&&ev.target.closest('.parts')) refresh();
+  });
+  refresh();
+}
+
 function jobEditor(id){
   var j=id?S.fin.jobs.filter(function(x){return x.id===id;})[0]:{who:ME(),name:'',employer:'',title:'',rate:'',low:'',real:'',high:'',actual:''};
   var m=modal(id?'Edit income':'Add income',
@@ -384,7 +461,9 @@ function jobEditor(id){
       {id:'jl',l:'Low / mo',t:'number',v:j.low},{id:'jm',l:'Realistic / mo',t:'number',v:j.real},
       {id:'jh',l:'High / mo',t:'number',v:j.high},
       {id:'ja',l:'Actual / mo',t:'number',v:j.actual},
-      {id:'jo',l:'Counted',t:'select',o:ONOFF,v:j.off?'0':'1'}]),
+      {id:'jo',l:'Counted',t:'select',o:ONOFF,v:j.off?'0':'1'},
+      {id:'jx',l:'Notes',t:'area',v:j.note||'',ph:'Anything worth remembering about this one'}])+
+    partsBlock(j.parts),
     (id?'<button class="b o dz" id="jDel">Delete</button>':'')+
     '<button class="b o" data-close>Cancel</button><button class="b" id="jSave">Save</button>');
   var dl_=$('#jDel',m); if(dl_)dl_.onclick=function(){
@@ -393,9 +472,11 @@ function jobEditor(id){
     var o={id:id||uid(),who:$('#jw',m).value,name:$('#jn',m).value.trim()||'Income',
       employer:$('#je',m).value,title:$('#jt',m).value,rate:num($('#jr',m).value)||null,
       low:num($('#jl',m).value),real:num($('#jm',m).value),high:num($('#jh',m).value),
-      actual:num($('#ja',m).value)||null,off:$('#jo',m).value==='0'};
+      actual:num($('#ja',m).value)||null,off:$('#jo',m).value==='0',
+      note:$('#jx',m).value.trim(),parts:readParts(m)};
     if(id)S.fin.jobs=S.fin.jobs.map(function(x){return x.id===id?o:x;}); else S.fin.jobs.push(o);
     save();m.remove();route();};
+  wireParts(m,'jm');
 }
 function costEditor(id){
   var c=id?S.fin.costs.filter(function(x){return x.id===id;})[0]:{name:'',section:'Living',who:shared()?EVERYONE:ME(),low:'',real:'',high:'',actual:''};
@@ -405,7 +486,9 @@ function costEditor(id){
       {id:'cw',l:'Who',t:'select',o:whoOpts(),v:c.who},
       {id:'cl',l:'Low',t:'number',v:c.low},{id:'cr',l:'Realistic',t:'number',v:c.real},
       {id:'ch',l:'High',t:'number',v:c.high},{id:'ca',l:'Actual',t:'number',v:c.actual},
-      {id:'co',l:'Counted',t:'select',o:ONOFF,v:c.off?'0':'1'}]),
+      {id:'co',l:'Counted',t:'select',o:ONOFF,v:c.off?'0':'1'},
+      {id:'cx',l:'Notes',t:'area',v:c.note||'',ph:'Anything worth remembering about this one'}])+
+    partsBlock(c.parts),
     (id?'<button class="b o dz" id="cDel">Delete</button>':'')+
     '<button class="b o" data-close>Cancel</button><button class="b" id="cSave">Save</button>');
   var d=$('#cDel',m); if(d)d.onclick=function(){
@@ -414,9 +497,11 @@ function costEditor(id){
     var o={id:id||uid(),name:$('#cn',m).value.trim()||'Cost',section:$('#cs',m).value,
       who:$('#cw',m).value,low:num($('#cl',m).value),real:num($('#cr',m).value),
       high:num($('#ch',m).value),actual:num($('#ca',m).value)||null,
-      off:$('#co',m).value==='0'};
+      off:$('#co',m).value==='0',
+      note:$('#cx',m).value.trim(),parts:readParts(m)};
     if(id)S.fin.costs=S.fin.costs.map(function(x){return x.id===id?o:x;}); else S.fin.costs.push(o);
     save();m.remove();route();};
+  wireParts(m,'cr');
 }
 function shiftEditor(){
   if(!S.fin.jobs.length){toast('Add a job first');return;}
@@ -947,9 +1032,11 @@ document.addEventListener('click',function(e){
       S.sched.cols=tmplCols().filter(function(x){return x.id!==el.dataset.tcdel;});
       save();nav('schedule/templates');}
     return;}
-  if(t.closest('#syncPill')){
-    if(syncState==='off'){ settingsModal(); return; }
-    pushState(); pullState(); toast('Saving'); return;}
+  if((el=t.closest('[data-pex]'))){
+    var pid=el.dataset.pex;
+    if(openParts[pid]) delete openParts[pid]; else openParts[pid]=1;
+    route(); return;}
+  if(t.closest('#syncPill')){ syncPanel(); return; }
   if(t.closest('#settings')){settingsModal();return;}
   }catch(err){ if(window.console&&console.error)console.error('click',err);
     toast('Something went wrong: '+(err.message||err)); }
@@ -971,6 +1058,55 @@ function setGroup(id,title,sub,body,open){
     '<summary><span class="sgt">'+E(title)+'</span>'+
     (sub?'<span class="sgs">'+E(sub)+'</span>':'')+'</summary>'+
     '<div class="sgb">'+body+'</div></details>';
+}
+
+/* Who this device thinks it is.
+ *
+ * Two devices showing different data is either two accounts or two builds, and
+ * from the outside there was no way to tell which. This says the email, the
+ * household, the version number of the account and the name of the code
+ * running, so holding the two phones side by side answers it in one look. The
+ * two buttons at the bottom are the manual override for when they disagree and
+ * you do not care to work out why. */
+function syncPanel(){
+  if(syncState==='off'){ settingsModal(); return; }
+  var mem=(typeof MEMS==='function'?MEMS():[])||[];
+  var rows=[
+    ['Signed in as', ACCOUNT?ACCOUNT.email:'nobody'],
+    ['Household', (S.household||'unnamed')+(mem.length>1?' ('+mem.length+' people)':' (just you)')],
+    ['Account version', 'v'+docVer],
+    ['This device', 'build '+BUILD],
+    ['Last saved', syncAt?clockTime(syncAt):'not yet'],
+    ['State', syncMsg||syncState]
+  ];
+  var m=modal('Saving and syncing',
+    '<p class="sm muted">If this does not read the same on your phone and your '+
+    'computer, that is the reason they are showing different things. The email '+
+    'has to match and so does the build.</p>'+
+    '<div class="tw cards" style="margin-top:12px"><table><tbody>'+
+    rows.map(function(r){
+      return '<tr><td data-l="'+E(r[0])+'" class="sm muted">'+E(r[0])+'</td>'+
+        '<td data-l="'+E(r[0])+'"><b>'+E(String(r[1]))+'</b></td></tr>';}).join('')+
+    '</tbody></table></div>'+
+    '<p class="xs muted" style="margin-top:12px">Both of these overwrite. Use them '+
+    'when the two devices will not agree and you know which one is right.</p>'+
+    '<div class="row" style="margin-top:8px">'+
+    '<button class="b o" id="syPush">Send this device up</button>'+
+    '<button class="b o" id="syPull">Take the account down</button></div>',
+    '<button class="b o" id="syNow">Check now</button>'+
+    '<button class="b" data-close>Close</button>');
+  $('#syNow',m).onclick=function(){ pullState(); toast('Checking'); m.remove(); };
+  $('#syPush',m).onclick=function(){
+    if(!confirm('Send everything on this device up, replacing what the account has?'))return;
+    syncSnap(); forceNext=true; syncPending=true; pushState();
+    toast('Sending this device up'); m.remove();
+  };
+  $('#syPull',m).onclick=function(){
+    if(!confirm('Replace everything on this device with what the account has?'))return;
+    baseBv={}; baseDv={}; syncSnap();
+    pullState().then(function(){ route(); chrome(); toast('Took the account copy'); });
+    m.remove();
+  };
 }
 
 function settingsModal(){

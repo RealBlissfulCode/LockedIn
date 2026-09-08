@@ -694,6 +694,57 @@ td.num{white-space:nowrap}
 td.act{text-align:right;white-space:nowrap}
 th:last-child,td.act{padding-right:18px}
 
+/* ---------------- what a line is made of ----------------
+   A small count next to the name, and the parts underneath when you open it.
+   The marker carries the number of parts so you can see which lines are broken
+   down without opening any of them. */
+.pmark{margin-left:9px;min-width:20px;height:20px;padding:0 6px;border-radius:99px;
+border:1px solid var(--line-2);background:var(--panel-2);color:var(--ink-3);
+font:700 10px/1 var(--f-mono);cursor:pointer;vertical-align:1px;transition:.18s var(--ez)}
+.pmark:hover{border-color:var(--brass);color:var(--brass)}
+.pmark.on{background:var(--brass);border-color:var(--brass);color:var(--on-accent)}
+tr.prow2>td{background:var(--panel-2);padding:14px 16px 16px}
+.plist{list-style:none;margin:0;padding:0}
+.plist li{display:flex;align-items:baseline;gap:12px;padding:7px 0;
+border-bottom:1px solid var(--line)}
+.plist li:last-child{border-bottom:0}
+.pnm{flex:1 1 auto;font-size:13.5px;color:var(--ink)}
+.pqt{font-family:var(--f-mono);font-size:12px;color:var(--ink-4);white-space:nowrap}
+.pamt{font-family:var(--f-mono);font-size:13.5px;font-weight:700;white-space:nowrap;
+min-width:74px;text-align:right}
+.ptot{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-top:11px;
+padding-top:11px;border-top:1px solid var(--line-2);font-size:13px;color:var(--ink-3)}
+.ptot b{font-family:var(--f-mono);font-size:15px;color:var(--ink)}
+.pdiff{font-size:11.5px;color:var(--clay)}
+.pnote{margin:11px 0 0;font-size:13.5px;line-height:1.6;color:var(--ink-2);
+white-space:pre-wrap;overflow-wrap:break-word}
+
+/* The breakdown as you type it. Four fields on a desk, stacked on a phone,
+   because a $ box 40px wide is not something anybody can hit with a thumb. */
+.pbox{margin-top:16px;padding:15px;border:1px solid var(--line);border-radius:var(--r);
+background:var(--panel-2)}
+.plab{font:700 9px/1 var(--f-body);letter-spacing:.18em;text-transform:uppercase;
+color:var(--ink-4)}
+.parts{margin-top:10px}
+.prow{display:grid;grid-template-columns:1fr 82px 104px auto;gap:8px;margin-bottom:8px;
+align-items:end}
+.pf{display:flex;flex-direction:column;gap:4px;min-width:0}
+.pf>span{font:700 9px/1 var(--f-body);letter-spacing:.14em;text-transform:uppercase;
+color:var(--ink-4)}
+.prow input{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:var(--r-s);
+background:var(--panel);color:var(--ink);font-size:16px}
+.prow input:focus{outline:0;border-color:var(--brass);box-shadow:var(--glow)}
+.prow .pdel{white-space:nowrap}
+@media (max-width:620px){
+.prow{grid-template-columns:1fr 1fr;grid-template-areas:"n n" "q e" "d d";gap:9px;
+padding:12px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel);
+margin-bottom:10px}
+.prow .pfn{grid-area:n}.prow .pf:nth-of-type(2){grid-area:q}.prow .pf:nth-of-type(3){grid-area:e}
+.prow .pdel{grid-area:d;min-height:44px;justify-content:center}
+.prow input{min-height:44px}
+.pamt{min-width:0}
+}
+
 /* ---------------- charts ---------------- */
 .cempty{padding:26px 4px;text-align:center;color:var(--ink-4);font-size:12.5px}
 .cchart{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:8px;align-items:end}
@@ -925,6 +976,8 @@ font:700 9px/1.5 var(--f-body);letter-spacing:.16em;text-transform:uppercase;tex
 .tw.cards td:not([data-l]):before{content:none}
 /* The name leads the card, full width and unlabelled. The switch rides with it
    so the thing you tap and the thing it belongs to are on the same line. */
+.tw.cards tr.prow2>td{display:block;padding:13px 14px}
+.tw.cards tr.prow2{margin-top:-9px}
 .tw.cards td.hd{display:flex;justify-content:flex-start;align-items:center;gap:10px;white-space:normal;
 text-align:left;font-size:15px;padding:0 0 9px;margin-bottom:5px;
 border-bottom:1px solid var(--line)}

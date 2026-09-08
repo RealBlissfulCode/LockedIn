@@ -16,6 +16,7 @@ a person arrives from the API after they sign in, which is the only way it can
 work when the person is not us.
 """
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -349,9 +350,19 @@ def render_html():
     # Nothing is encrypted any more and nothing needs to be. Everything the page
     # carries is generic, and everything about a person arrives from the API
     # after they sign in.
+    body = (APP_CORE + APP_CHARTS + APP_AUTH + APP_STATE + APP_SETUP + APP_IMPORT
+            + APP_PLANNER + APP_HOUSEHOLD + APP_ACTUALS
+            + APP_VIEWS1 + APP_VIEWS2 + APP_WIRE)
+
+    # A short name for exactly this code, shown in the sync panel. Two devices
+    # showing different data is either two accounts or two builds, and until
+    # this existed there was no way to tell which from the outside. It is a hash
+    # of the code rather than a clock so the build stays byte identical.
+    build_id = hashlib.sha256(body.encode("utf-8")).hexdigest()[:7]
+
     app_js = ("(function(){\n'use strict';\nvar _D=window._DATA;\n"
-              + APP_CORE + APP_CHARTS + APP_AUTH + APP_STATE + APP_SETUP + APP_IMPORT + APP_PLANNER + APP_HOUSEHOLD + APP_ACTUALS
-              + APP_VIEWS1 + APP_VIEWS2 + APP_WIRE
+              + "var BUILD='" + build_id + "';\n"
+              + body
               + "\nboot();\n})();\n")
 
     data_js = "window._DATA=" + json.dumps(public, separators=(",", ":")) + ";\n"

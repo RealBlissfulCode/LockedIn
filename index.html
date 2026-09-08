@@ -693,6 +693,57 @@ td.num{white-space:nowrap}
 td.act{text-align:right;white-space:nowrap}
 th:last-child,td.act{padding-right:18px}
 
+/* ---------------- what a line is made of ----------------
+   A small count next to the name, and the parts underneath when you open it.
+   The marker carries the number of parts so you can see which lines are broken
+   down without opening any of them. */
+.pmark{margin-left:9px;min-width:20px;height:20px;padding:0 6px;border-radius:99px;
+border:1px solid var(--line-2);background:var(--panel-2);color:var(--ink-3);
+font:700 10px/1 var(--f-mono);cursor:pointer;vertical-align:1px;transition:.18s var(--ez)}
+.pmark:hover{border-color:var(--brass);color:var(--brass)}
+.pmark.on{background:var(--brass);border-color:var(--brass);color:var(--on-accent)}
+tr.prow2>td{background:var(--panel-2);padding:14px 16px 16px}
+.plist{list-style:none;margin:0;padding:0}
+.plist li{display:flex;align-items:baseline;gap:12px;padding:7px 0;
+border-bottom:1px solid var(--line)}
+.plist li:last-child{border-bottom:0}
+.pnm{flex:1 1 auto;font-size:13.5px;color:var(--ink)}
+.pqt{font-family:var(--f-mono);font-size:12px;color:var(--ink-4);white-space:nowrap}
+.pamt{font-family:var(--f-mono);font-size:13.5px;font-weight:700;white-space:nowrap;
+min-width:74px;text-align:right}
+.ptot{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-top:11px;
+padding-top:11px;border-top:1px solid var(--line-2);font-size:13px;color:var(--ink-3)}
+.ptot b{font-family:var(--f-mono);font-size:15px;color:var(--ink)}
+.pdiff{font-size:11.5px;color:var(--clay)}
+.pnote{margin:11px 0 0;font-size:13.5px;line-height:1.6;color:var(--ink-2);
+white-space:pre-wrap;overflow-wrap:break-word}
+
+/* The breakdown as you type it. Four fields on a desk, stacked on a phone,
+   because a $ box 40px wide is not something anybody can hit with a thumb. */
+.pbox{margin-top:16px;padding:15px;border:1px solid var(--line);border-radius:var(--r);
+background:var(--panel-2)}
+.plab{font:700 9px/1 var(--f-body);letter-spacing:.18em;text-transform:uppercase;
+color:var(--ink-4)}
+.parts{margin-top:10px}
+.prow{display:grid;grid-template-columns:1fr 82px 104px auto;gap:8px;margin-bottom:8px;
+align-items:end}
+.pf{display:flex;flex-direction:column;gap:4px;min-width:0}
+.pf>span{font:700 9px/1 var(--f-body);letter-spacing:.14em;text-transform:uppercase;
+color:var(--ink-4)}
+.prow input{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:var(--r-s);
+background:var(--panel);color:var(--ink);font-size:16px}
+.prow input:focus{outline:0;border-color:var(--brass);box-shadow:var(--glow)}
+.prow .pdel{white-space:nowrap}
+@media (max-width:620px){
+.prow{grid-template-columns:1fr 1fr;grid-template-areas:"n n" "q e" "d d";gap:9px;
+padding:12px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel);
+margin-bottom:10px}
+.prow .pfn{grid-area:n}.prow .pf:nth-of-type(2){grid-area:q}.prow .pf:nth-of-type(3){grid-area:e}
+.prow .pdel{grid-area:d;min-height:44px;justify-content:center}
+.prow input{min-height:44px}
+.pamt{min-width:0}
+}
+
 /* ---------------- charts ---------------- */
 .cempty{padding:26px 4px;text-align:center;color:var(--ink-4);font-size:12.5px}
 .cchart{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:8px;align-items:end}
@@ -924,6 +975,8 @@ font:700 9px/1.5 var(--f-body);letter-spacing:.16em;text-transform:uppercase;tex
 .tw.cards td:not([data-l]):before{content:none}
 /* The name leads the card, full width and unlabelled. The switch rides with it
    so the thing you tap and the thing it belongs to are on the same line. */
+.tw.cards tr.prow2>td{display:block;padding:13px 14px}
+.tw.cards tr.prow2{margin-top:-9px}
 .tw.cards td.hd{display:flex;justify-content:flex-start;align-items:center;gap:10px;white-space:normal;
 text-align:left;font-size:15px;padding:0 0 9px;margin-bottom:5px;
 border-bottom:1px solid var(--line)}
@@ -995,6 +1048,7 @@ border-bottom:1px solid var(--line)}
 </script><script>(function(){
 'use strict';
 var _D=window._DATA;
+var BUILD='e8b8ecf';
 
 /* ============================================================
    THE HANDBOOK  -  five sections, one state object, one file.
@@ -4253,6 +4307,33 @@ function modeLabel(m){
 }
 /* The switch. Same markup for a line, a section and a person, so all three
    behave alike and one CSS rule covers them. */
+/* The expanded breakdown under a line. Same shape for income and costs, and it
+   folds into a card on a phone like every other row here. */
+var openParts={};
+function partsMark(x){
+  var n=(x.parts||[]).length;
+  if(!n&&!x.note) return '';
+  return '<button type="button" class="pmark'+(openParts[x.id]?' on':'')+'" data-pex="'+E(x.id)+'" '+
+    'aria-expanded="'+(openParts[x.id]?'true':'false')+'" '+
+    'title="'+(n?n+(n===1?' part':' parts'):'Note')+'">'+(n?n:'i')+'</button>';
+}
+function partsRow(x,cols,real){
+  if(!openParts[x.id]) return '';
+  var ps=x.parts||[], tot=partsTotal(ps);
+  var body='';
+  if(ps.length){
+    body+='<ul class="plist">'+ps.map(function(p){
+      var q=(p.qty==null?1:p.qty);
+      return '<li><span class="pnm">'+E(p.n)+'</span>'+
+        '<span class="pqt">'+(q===1?'':N(q)+' &times; '+M(p.each||0))+'</span>'+
+        '<span class="pamt">'+M(q*(p.each||0))+'</span></li>';}).join('')+'</ul>'+
+      '<div class="ptot"><span>Breakdown adds up to</span><b>'+M(tot)+'</b>'+
+      (Math.abs(tot-(real||0))>=1
+        ? '<span class="pdiff">realistic says '+M(real||0)+'</span>' : '')+'</div>';
+  }
+  if(x.note) body+='<p class="pnote">'+E(x.note)+'</p>';
+  return '<tr class="prow2"><td colspan="'+cols+'">'+body+'</td></tr>';
+}
 function finSw(attr,val,on,label,small){
   return '<button type="button" class="sw'+(small?' xs':'')+(on?' on':'')+'" '+
     'data-'+attr+'="'+E(val)+'" aria-pressed="'+(on?'true':'false')+'" '+
@@ -4511,7 +4592,7 @@ function vFinancial(sub){
      var on=finLive(j);
      return '<tr'+(on?'':' class="offrow"')+'>'+
      '<td class="hd">'+finSw('jobtog',j.id,on,j.name||'this income line')+
-       '<b>'+E(j.name)+'</b>'+(on?'':'<span class="offtag">off</span>')+'</td>'+
+       '<b>'+E(j.name)+'</b>'+partsMark(j)+(on?'':'<span class="offtag">off</span>')+'</td>'+
      '<td data-l="Who"><span class="chip">'+E(WHO(j.who))+'</span></td>'+
      '<td data-l="Rate" class="sm muted">'+(j.rate?$$$(j.rate)+'/hr':'')+'</td>'+
      '<td data-l="Employer" class="sm muted">'+E(j.employer||'')+'</td>'+
@@ -4519,7 +4600,8 @@ function vFinancial(sub){
      '<td data-l="Realistic" class="num"><b>'+M(j.real)+'</b></td>'+
      '<td data-l="High" class="num">'+M(j.high)+'</td>'+
      '<td data-l="Actual" class="num">'+(j.actual?M(j.actual):'<span class="muted">-</span>')+'</td>'+
-     '<td class="act"><button class="b o s" data-jobe="'+j.id+'">Edit</button></td></tr>';}).join('')
+     '<td class="act"><button class="b o s" data-jobe="'+j.id+'">Edit</button></td></tr>'+
+     partsRow(j,9,j.real);}).join('')
     :'<tr><td colspan="9" class="sm muted" style="text-align:center;padding:22px">No income lines yet.</td></tr>')+
    '<tr style="background:var(--panel-2)"><td class="hd" colspan="4"><b>Counted total</b></td>'+
    '<td data-l="Low" class="num"><b>'+M(finIncome('both','low'))+'</b></td>'+
@@ -4545,7 +4627,8 @@ function vFinancial(sub){
      var on=finLive(c), inPath=costInPath(c,path);
      return '<tr'+(on&&inPath?'':' class="offrow"')+'>'+
      '<td class="hd">'+finSw('costtog',c.id,on,c.name||'this cost line')+
-       '<b>'+E(c.name)+'</b>'+(on?(inPath?'':'<span class="offtag">other path</span>')
+       '<b>'+E(c.name)+'</b>'+partsMark(c)+
+       (on?(inPath?'':'<span class="offtag">other path</span>')
        :'<span class="offtag">off</span>')+'</td>'+
      '<td data-l="Section" class="sm muted">'+E(c.section)+'</td>'+
      '<td data-l="Who"><span class="chip">'+E(WHO(c.who))+'</span></td>'+
@@ -4553,7 +4636,8 @@ function vFinancial(sub){
      '<td data-l="Realistic" class="num"><b>'+M(c.real)+'</b></td>'+
      '<td data-l="High" class="num">'+M(c.high)+'</td>'+
      '<td data-l="Actual" class="num">'+(c.actual?M(c.actual):'<span class="muted">-</span>')+'</td>'+
-     '<td class="act"><button class="b o s" data-coste="'+c.id+'">Edit</button></td></tr>';}).join('')
+     '<td class="act"><button class="b o s" data-coste="'+c.id+'">Edit</button></td></tr>'+
+     partsRow(c,8,c.real);}).join('')
     :'<tr><td colspan="9" class="sm muted" style="text-align:center;padding:22px">No cost lines yet.</td></tr>')+
    '<tr style="background:var(--panel-2)"><td class="hd" colspan="3"><b>Counted total</b></td>'+
    '<td data-l="Low" class="num"><b>'+M(finCost('low',path))+'</b></td>'+
@@ -5409,6 +5493,83 @@ function finToggle(kind,pred,to){
   return n;
 }
 var ONOFF=[['1','Counted in the totals'],['0','Switched off']];
+/* What a line is actually made of.
+ *
+ * "Feminine products, $25" is a number you cannot argue with three months
+ * later. The same line written out as tampons at $8, pads at $6 and painkillers
+ * at $4 is one you can check, cut, or hand to somebody else. Parts are optional
+ * and a line without any behaves exactly as it always did; a line with them can
+ * push their total into the realistic column in one tap so the two never drift
+ * apart. Quantity times each, per month, because that is the unit every other
+ * number on this page is in. */
+function partRow(p){
+  p=p||{};
+  /* Labels rather than placeholders. A placeholder disappears the moment you
+     type in the box, and then two numbers sitting next to each other give no
+     clue which one was the count and which one was the price. */
+  return '<div class="prow" data-pid="'+E(p.id||uid())+'">'+
+    '<label class="pf pfn"><span>What</span>'+
+      '<input class="pn" value="'+E(p.n||'')+'" placeholder="Tampons"></label>'+
+    '<label class="pf"><span>Qty</span>'+
+      '<input class="pq" type="number" step="any" inputmode="decimal" '+
+      'value="'+E(p.qty==null?'':String(p.qty))+'" placeholder="1"></label>'+
+    '<label class="pf"><span>$ each</span>'+
+      '<input class="pe" type="number" step="any" inputmode="decimal" '+
+      'value="'+E(p.each==null?'':String(p.each))+'" placeholder="0"></label>'+
+    '<button type="button" class="b o s pdel" aria-label="Remove this part">Remove</button>'+
+    '</div>';
+}
+function partsBlock(parts){
+  return '<div class="pbox">'+
+    '<div class="spread"><span class="plab">Breakdown</span>'+
+    '<span class="chip p" id="pTot">$0</span></div>'+
+    '<p class="xs muted">Optional. Quantity times each, per month.</p>'+
+    '<div class="parts" id="parts">'+((parts||[]).map(partRow).join(''))+'</div>'+
+    '<div class="row" style="margin-top:9px">'+
+    '<button type="button" class="b o s" id="pAdd">Add a part</button>'+
+    '<button type="button" class="b o s" id="pUse">Use the total</button></div></div>';
+}
+function readParts(m){
+  var out=[];
+  $$('.prow',m).forEach(function(r){
+    var n=r.querySelector('.pn').value.trim();
+    var q=r.querySelector('.pq').value, e=r.querySelector('.pe').value;
+    if(!n&&!q&&!e) return;
+    out.push({id:r.dataset.pid||uid(),n:n||'Part',
+      qty:q===''?1:num(q),each:num(e)});
+  });
+  return out;
+}
+function partsTotal(parts){
+  return (parts||[]).reduce(function(a,p){
+    return a+(p.qty==null?1:p.qty)*(p.each||0);},0);
+}
+function wireParts(m,intoId){
+  function refresh(){
+    var e=$('#pTot',m);
+    if(e) e.textContent=M(partsTotal(readParts(m)));
+  }
+  $('#pAdd',m).onclick=function(){
+    $('#parts',m).insertAdjacentHTML('beforeend',partRow({id:uid(),qty:1}));
+    refresh();
+    var rows=$$('.prow',m); rows[rows.length-1].querySelector('.pn').focus();
+  };
+  $('#pUse',m).onclick=function(){
+    var t=partsTotal(readParts(m)), f=$('#'+intoId,m);
+    if(!t){ toast('Nothing in the breakdown yet'); return; }
+    if(f){ f.value=Math.round(t*100)/100; toast('Realistic set to '+M(t)); }
+  };
+  m.addEventListener('click',function(ev){
+    var d=ev.target.closest&&ev.target.closest('.pdel');
+    if(!d) return;
+    d.closest('.prow').remove(); refresh();
+  });
+  m.addEventListener('input',function(ev){
+    if(ev.target.closest&&ev.target.closest('.parts')) refresh();
+  });
+  refresh();
+}
+
 function jobEditor(id){
   var j=id?S.fin.jobs.filter(function(x){return x.id===id;})[0]:{who:ME(),name:'',employer:'',title:'',rate:'',low:'',real:'',high:'',actual:''};
   var m=modal(id?'Edit income':'Add income',
@@ -5419,7 +5580,9 @@ function jobEditor(id){
       {id:'jl',l:'Low / mo',t:'number',v:j.low},{id:'jm',l:'Realistic / mo',t:'number',v:j.real},
       {id:'jh',l:'High / mo',t:'number',v:j.high},
       {id:'ja',l:'Actual / mo',t:'number',v:j.actual},
-      {id:'jo',l:'Counted',t:'select',o:ONOFF,v:j.off?'0':'1'}]),
+      {id:'jo',l:'Counted',t:'select',o:ONOFF,v:j.off?'0':'1'},
+      {id:'jx',l:'Notes',t:'area',v:j.note||'',ph:'Anything worth remembering about this one'}])+
+    partsBlock(j.parts),
     (id?'<button class="b o dz" id="jDel">Delete</button>':'')+
     '<button class="b o" data-close>Cancel</button><button class="b" id="jSave">Save</button>');
   var dl_=$('#jDel',m); if(dl_)dl_.onclick=function(){
@@ -5428,9 +5591,11 @@ function jobEditor(id){
     var o={id:id||uid(),who:$('#jw',m).value,name:$('#jn',m).value.trim()||'Income',
       employer:$('#je',m).value,title:$('#jt',m).value,rate:num($('#jr',m).value)||null,
       low:num($('#jl',m).value),real:num($('#jm',m).value),high:num($('#jh',m).value),
-      actual:num($('#ja',m).value)||null,off:$('#jo',m).value==='0'};
+      actual:num($('#ja',m).value)||null,off:$('#jo',m).value==='0',
+      note:$('#jx',m).value.trim(),parts:readParts(m)};
     if(id)S.fin.jobs=S.fin.jobs.map(function(x){return x.id===id?o:x;}); else S.fin.jobs.push(o);
     save();m.remove();route();};
+  wireParts(m,'jm');
 }
 function costEditor(id){
   var c=id?S.fin.costs.filter(function(x){return x.id===id;})[0]:{name:'',section:'Living',who:shared()?EVERYONE:ME(),low:'',real:'',high:'',actual:''};
@@ -5440,7 +5605,9 @@ function costEditor(id){
       {id:'cw',l:'Who',t:'select',o:whoOpts(),v:c.who},
       {id:'cl',l:'Low',t:'number',v:c.low},{id:'cr',l:'Realistic',t:'number',v:c.real},
       {id:'ch',l:'High',t:'number',v:c.high},{id:'ca',l:'Actual',t:'number',v:c.actual},
-      {id:'co',l:'Counted',t:'select',o:ONOFF,v:c.off?'0':'1'}]),
+      {id:'co',l:'Counted',t:'select',o:ONOFF,v:c.off?'0':'1'},
+      {id:'cx',l:'Notes',t:'area',v:c.note||'',ph:'Anything worth remembering about this one'}])+
+    partsBlock(c.parts),
     (id?'<button class="b o dz" id="cDel">Delete</button>':'')+
     '<button class="b o" data-close>Cancel</button><button class="b" id="cSave">Save</button>');
   var d=$('#cDel',m); if(d)d.onclick=function(){
@@ -5449,9 +5616,11 @@ function costEditor(id){
     var o={id:id||uid(),name:$('#cn',m).value.trim()||'Cost',section:$('#cs',m).value,
       who:$('#cw',m).value,low:num($('#cl',m).value),real:num($('#cr',m).value),
       high:num($('#ch',m).value),actual:num($('#ca',m).value)||null,
-      off:$('#co',m).value==='0'};
+      off:$('#co',m).value==='0',
+      note:$('#cx',m).value.trim(),parts:readParts(m)};
     if(id)S.fin.costs=S.fin.costs.map(function(x){return x.id===id?o:x;}); else S.fin.costs.push(o);
     save();m.remove();route();};
+  wireParts(m,'cr');
 }
 function shiftEditor(){
   if(!S.fin.jobs.length){toast('Add a job first');return;}
@@ -5982,9 +6151,11 @@ document.addEventListener('click',function(e){
       S.sched.cols=tmplCols().filter(function(x){return x.id!==el.dataset.tcdel;});
       save();nav('schedule/templates');}
     return;}
-  if(t.closest('#syncPill')){
-    if(syncState==='off'){ settingsModal(); return; }
-    pushState(); pullState(); toast('Saving'); return;}
+  if((el=t.closest('[data-pex]'))){
+    var pid=el.dataset.pex;
+    if(openParts[pid]) delete openParts[pid]; else openParts[pid]=1;
+    route(); return;}
+  if(t.closest('#syncPill')){ syncPanel(); return; }
   if(t.closest('#settings')){settingsModal();return;}
   }catch(err){ if(window.console&&console.error)console.error('click',err);
     toast('Something went wrong: '+(err.message||err)); }
@@ -6006,6 +6177,55 @@ function setGroup(id,title,sub,body,open){
     '<summary><span class="sgt">'+E(title)+'</span>'+
     (sub?'<span class="sgs">'+E(sub)+'</span>':'')+'</summary>'+
     '<div class="sgb">'+body+'</div></details>';
+}
+
+/* Who this device thinks it is.
+ *
+ * Two devices showing different data is either two accounts or two builds, and
+ * from the outside there was no way to tell which. This says the email, the
+ * household, the version number of the account and the name of the code
+ * running, so holding the two phones side by side answers it in one look. The
+ * two buttons at the bottom are the manual override for when they disagree and
+ * you do not care to work out why. */
+function syncPanel(){
+  if(syncState==='off'){ settingsModal(); return; }
+  var mem=(typeof MEMS==='function'?MEMS():[])||[];
+  var rows=[
+    ['Signed in as', ACCOUNT?ACCOUNT.email:'nobody'],
+    ['Household', (S.household||'unnamed')+(mem.length>1?' ('+mem.length+' people)':' (just you)')],
+    ['Account version', 'v'+docVer],
+    ['This device', 'build '+BUILD],
+    ['Last saved', syncAt?clockTime(syncAt):'not yet'],
+    ['State', syncMsg||syncState]
+  ];
+  var m=modal('Saving and syncing',
+    '<p class="sm muted">If this does not read the same on your phone and your '+
+    'computer, that is the reason they are showing different things. The email '+
+    'has to match and so does the build.</p>'+
+    '<div class="tw cards" style="margin-top:12px"><table><tbody>'+
+    rows.map(function(r){
+      return '<tr><td data-l="'+E(r[0])+'" class="sm muted">'+E(r[0])+'</td>'+
+        '<td data-l="'+E(r[0])+'"><b>'+E(String(r[1]))+'</b></td></tr>';}).join('')+
+    '</tbody></table></div>'+
+    '<p class="xs muted" style="margin-top:12px">Both of these overwrite. Use them '+
+    'when the two devices will not agree and you know which one is right.</p>'+
+    '<div class="row" style="margin-top:8px">'+
+    '<button class="b o" id="syPush">Send this device up</button>'+
+    '<button class="b o" id="syPull">Take the account down</button></div>',
+    '<button class="b o" id="syNow">Check now</button>'+
+    '<button class="b" data-close>Close</button>');
+  $('#syNow',m).onclick=function(){ pullState(); toast('Checking'); m.remove(); };
+  $('#syPush',m).onclick=function(){
+    if(!confirm('Send everything on this device up, replacing what the account has?'))return;
+    syncSnap(); forceNext=true; syncPending=true; pushState();
+    toast('Sending this device up'); m.remove();
+  };
+  $('#syPull',m).onclick=function(){
+    if(!confirm('Replace everything on this device with what the account has?'))return;
+    baseBv={}; baseDv={}; syncSnap();
+    pullState().then(function(){ route(); chrome(); toast('Took the account copy'); });
+    m.remove();
+  };
 }
 
 function settingsModal(){

@@ -177,6 +177,33 @@ function modeLabel(m){
 }
 /* The switch. Same markup for a line, a section and a person, so all three
    behave alike and one CSS rule covers them. */
+/* The expanded breakdown under a line. Same shape for income and costs, and it
+   folds into a card on a phone like every other row here. */
+var openParts={};
+function partsMark(x){
+  var n=(x.parts||[]).length;
+  if(!n&&!x.note) return '';
+  return '<button type="button" class="pmark'+(openParts[x.id]?' on':'')+'" data-pex="'+E(x.id)+'" '+
+    'aria-expanded="'+(openParts[x.id]?'true':'false')+'" '+
+    'title="'+(n?n+(n===1?' part':' parts'):'Note')+'">'+(n?n:'i')+'</button>';
+}
+function partsRow(x,cols,real){
+  if(!openParts[x.id]) return '';
+  var ps=x.parts||[], tot=partsTotal(ps);
+  var body='';
+  if(ps.length){
+    body+='<ul class="plist">'+ps.map(function(p){
+      var q=(p.qty==null?1:p.qty);
+      return '<li><span class="pnm">'+E(p.n)+'</span>'+
+        '<span class="pqt">'+(q===1?'':N(q)+' &times; '+M(p.each||0))+'</span>'+
+        '<span class="pamt">'+M(q*(p.each||0))+'</span></li>';}).join('')+'</ul>'+
+      '<div class="ptot"><span>Breakdown adds up to</span><b>'+M(tot)+'</b>'+
+      (Math.abs(tot-(real||0))>=1
+        ? '<span class="pdiff">realistic says '+M(real||0)+'</span>' : '')+'</div>';
+  }
+  if(x.note) body+='<p class="pnote">'+E(x.note)+'</p>';
+  return '<tr class="prow2"><td colspan="'+cols+'">'+body+'</td></tr>';
+}
 function finSw(attr,val,on,label,small){
   return '<button type="button" class="sw'+(small?' xs':'')+(on?' on':'')+'" '+
     'data-'+attr+'="'+E(val)+'" aria-pressed="'+(on?'true':'false')+'" '+
@@ -435,7 +462,7 @@ function vFinancial(sub){
      var on=finLive(j);
      return '<tr'+(on?'':' class="offrow"')+'>'+
      '<td class="hd">'+finSw('jobtog',j.id,on,j.name||'this income line')+
-       '<b>'+E(j.name)+'</b>'+(on?'':'<span class="offtag">off</span>')+'</td>'+
+       '<b>'+E(j.name)+'</b>'+partsMark(j)+(on?'':'<span class="offtag">off</span>')+'</td>'+
      '<td data-l="Who"><span class="chip">'+E(WHO(j.who))+'</span></td>'+
      '<td data-l="Rate" class="sm muted">'+(j.rate?$$$(j.rate)+'/hr':'')+'</td>'+
      '<td data-l="Employer" class="sm muted">'+E(j.employer||'')+'</td>'+
@@ -443,7 +470,8 @@ function vFinancial(sub){
      '<td data-l="Realistic" class="num"><b>'+M(j.real)+'</b></td>'+
      '<td data-l="High" class="num">'+M(j.high)+'</td>'+
      '<td data-l="Actual" class="num">'+(j.actual?M(j.actual):'<span class="muted">-</span>')+'</td>'+
-     '<td class="act"><button class="b o s" data-jobe="'+j.id+'">Edit</button></td></tr>';}).join('')
+     '<td class="act"><button class="b o s" data-jobe="'+j.id+'">Edit</button></td></tr>'+
+     partsRow(j,9,j.real);}).join('')
     :'<tr><td colspan="9" class="sm muted" style="text-align:center;padding:22px">No income lines yet.</td></tr>')+
    '<tr style="background:var(--panel-2)"><td class="hd" colspan="4"><b>Counted total</b></td>'+
    '<td data-l="Low" class="num"><b>'+M(finIncome('both','low'))+'</b></td>'+
@@ -469,7 +497,8 @@ function vFinancial(sub){
      var on=finLive(c), inPath=costInPath(c,path);
      return '<tr'+(on&&inPath?'':' class="offrow"')+'>'+
      '<td class="hd">'+finSw('costtog',c.id,on,c.name||'this cost line')+
-       '<b>'+E(c.name)+'</b>'+(on?(inPath?'':'<span class="offtag">other path</span>')
+       '<b>'+E(c.name)+'</b>'+partsMark(c)+
+       (on?(inPath?'':'<span class="offtag">other path</span>')
        :'<span class="offtag">off</span>')+'</td>'+
      '<td data-l="Section" class="sm muted">'+E(c.section)+'</td>'+
      '<td data-l="Who"><span class="chip">'+E(WHO(c.who))+'</span></td>'+
@@ -477,7 +506,8 @@ function vFinancial(sub){
      '<td data-l="Realistic" class="num"><b>'+M(c.real)+'</b></td>'+
      '<td data-l="High" class="num">'+M(c.high)+'</td>'+
      '<td data-l="Actual" class="num">'+(c.actual?M(c.actual):'<span class="muted">-</span>')+'</td>'+
-     '<td class="act"><button class="b o s" data-coste="'+c.id+'">Edit</button></td></tr>';}).join('')
+     '<td class="act"><button class="b o s" data-coste="'+c.id+'">Edit</button></td></tr>'+
+     partsRow(c,8,c.real);}).join('')
     :'<tr><td colspan="9" class="sm muted" style="text-align:center;padding:22px">No cost lines yet.</td></tr>')+
    '<tr style="background:var(--panel-2)"><td class="hd" colspan="3"><b>Counted total</b></td>'+
    '<td data-l="Low" class="num"><b>'+M(finCost('low',path))+'</b></td>'+
