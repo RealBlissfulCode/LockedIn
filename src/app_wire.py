@@ -373,7 +373,9 @@ function finToggle(kind,pred,to){
   if(n){save();reroute();}
   return n;
 }
-var ONOFF=[['1','Counted in the totals'],['0','Switched off']];
+/* Short enough to read inside a narrow select. The field is already labelled
+   Counted, so the option does not have to say it twice. */
+var ONOFF=[['1','Yes, count it'],['0','No, switched off']];
 /* What a line is actually made of.
  *
  * "Feminine products, $25" is a number you cannot argue with three months

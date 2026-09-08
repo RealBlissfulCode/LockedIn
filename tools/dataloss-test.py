@@ -25,12 +25,22 @@ with sync_playwright() as pw:
     pg.wait_for_timeout(1500)
 
     # ---- THE REGRESSION: a state saved under the pre-rework section names ----
-    pg.evaluate("""()=>{
+    pg.evaluate("""async()=>{
       const s=JSON.parse(localStorage.getItem('lockedin.v7'));
       delete s.__sections7;
       s.fin.costs.forEach((c,i)=>{ c.section = i%3===0?'Living':(i%3===1?'Housing (rent)':'Savings'); });
       s.fin.costs[0].name='Groceries'; s.fin.costs[3].name='Fuel for the car';
       localStorage.setItem('lockedin.v7', JSON.stringify(s));
+      /* And put the same old shape on the account, because that is the real
+         case: an account last written by an older build. A copy sitting only on
+         one device is not supposed to win against the account. */
+      const cur=await (await fetch('api/doc.php?scope=shared',
+        {credentials:'same-origin',headers:{'X-LockedIn':'1'}})).json();
+      const body=Object.assign({},cur.body||{},s);
+      body.__force=true; delete body.who; delete body.theme;
+      await fetch('api/doc.php?scope=shared',{method:'POST',credentials:'same-origin',
+        headers:{'Content-Type':'application/json','X-LockedIn':'1'},
+        body:JSON.stringify({version:cur.version,body:body})});
     }""")
     pg.reload(); pg.wait_for_timeout(2600)
     after=pg.evaluate("()=>{const r=localStorage.getItem('lockedin.v7');return r?JSON.parse(r).fin.costs.length:0}")
@@ -39,8 +49,9 @@ with sync_playwright() as pw:
     ck("old sections migrated", "Living" not in secs and "Savings" not in secs, secs)
     ck("groceries landed in Food", pg.evaluate("""()=>{const s=JSON.parse(localStorage.getItem('lockedin.v7'));
       return (s.fin.costs.filter(c=>c.name==='Groceries')[0]||{}).section;}""")=="Food")
-    ck("fuel landed in Getting around", pg.evaluate("""()=>{const s=JSON.parse(localStorage.getItem('lockedin.v7'));
-      return (s.fin.costs.filter(c=>c.name==='Fuel for the car')[0]||{}).section;}""")=="Getting around")
+    _fs=pg.evaluate("""()=>{const s=JSON.parse(localStorage.getItem('lockedin.v7'));
+      return (s.fin.costs.filter(c=>c.name==='Fuel for the car')[0]||{}).section;}""")
+    ck("fuel landed in Getting around", _fs=="Getting around", _fs)
     ck("no errors on reload", not errs, errs[:2])
 
     # ---- the server refuses a wipe ----

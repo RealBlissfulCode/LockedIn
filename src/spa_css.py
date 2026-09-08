@@ -193,10 +193,14 @@ align-items:center;gap:7px;justify-content:center}
 color:var(--ink-4);margin-bottom:6px}
 .f input,.f select,.f textarea{width:100%;padding:10px 12px;border:1px solid var(--line-2);
 border-radius:var(--r-s);background:var(--bg-2);color:var(--ink);font-weight:500;transition:.16s var(--ez)}
+/* A select clips its text rather than wrapping it, and the arrow sits on top of
+   the last few characters. Leave room for the arrow, and if an option is still
+   too long say so with an ellipsis instead of cutting a letter in half. */
+.f select{padding-right:34px;text-overflow:ellipsis}
 .f input:focus,.f select:focus,.f textarea:focus{outline:0;border-color:var(--brass);
 box-shadow:var(--glow)}
 .f textarea{resize:vertical;line-height:1.55}
-.fr{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(155px,1fr))}
+.fr{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(178px,1fr))}
 
 /* recipe cards */
 .rc{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
@@ -645,7 +649,7 @@ background:linear-gradient(to right,transparent,var(--panel))}
 .grid{display:flex;flex-wrap:wrap}.grid>*{flex:1 1 300px;min-width:0}
 .g3>*{flex:1 1 250px}.g4>*{flex:1 1 196px}
 .cal{display:flex;flex-wrap:wrap}.cal>*{flex:0 0 14.28%;max-width:14.28%}
-.fr{display:flex;flex-wrap:wrap}.fr>*{flex:1 1 155px}
+.fr{display:flex;flex-wrap:wrap}.fr>*{flex:1 1 178px}
 .rcm{display:flex}.rcm>*{flex:1}
 @supports (display:grid){
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr))}
@@ -654,7 +658,7 @@ background:linear-gradient(to right,transparent,var(--panel))}
 .g3{grid-template-columns:repeat(auto-fill,minmax(250px,1fr))}
 .g4{grid-template-columns:repeat(auto-fill,minmax(196px,1fr))}
 .cal{display:grid;grid-template-columns:repeat(7,1fr)}.cal>*{max-width:none}
-.fr{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr))}
+.fr{display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr))}
 .rcm{display:grid;grid-template-columns:repeat(4,1fr)}
 @media (max-width:860px){.g2,.g3{grid-template-columns:1fr}.grid>*{flex:1 1 100%}
 .fr>*{flex:1 1 100%}.stats{grid-template-columns:repeat(2,1fr)}}

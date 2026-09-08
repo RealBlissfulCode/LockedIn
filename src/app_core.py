@@ -196,13 +196,12 @@ var S=(function(){
 })();
 
 /* A migration that only lives in memory gets redone on every load and never
-   reaches the account. Write it down now, and mark what it touched as this
-   device's own work, so the next push carries the new shape up instead of the
-   server handing the old one back. */
-var MIGRATED=[];
+   reaches the account, so write it down. It does not need to be claimed as an
+   edit: the migration is idempotent and runs again on whatever comes down from
+   the account, and the next real edit carries the new shape up with it. Marking
+   it as this device's work is what made two devices fight. */
 if(S.__migrated&&!LOAD_BROKE){
   delete S.__migrated;
-  MIGRATED=['members','fin','sched','plan'];
   try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}
 }
 function save(){ S.savedAt=Date.now();
@@ -540,6 +539,7 @@ function importAll(file,cb){
          It goes up as an overwrite rather than as one more edit to be weighed
          against what is already there, so the next push wins every branch and
          the other phone gets all of it. */
+      delete S.__migrated;
       syncSnap();
       forceNext=true;
       save(); queuePush(); cb&&cb(true);
