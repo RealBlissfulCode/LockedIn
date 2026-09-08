@@ -2763,9 +2763,20 @@ function importScreen(){
    '<p>Everything from before accounts existed. Looking for it now.</p></div>'+
    '<div id="impBody"><div class="empty">Checking</div></div></div>';
   var localSt=legacyLocal();
-  api('import.php?do=peek').then(function(r){
+  Promise.all([api('import.php?do=peek'),api('import.php?do=seed')]).then(function(both){
+    var r=both[0], seed=both[1];
     var out=$('#impBody'); if(!out) return;
     var opts='';
+    if(seed.ok&&seed.found){
+      var c=seed.counts;
+      opts+='<div class="card pad gap-b"><h3 class="ctitle">The original household</h3>'+
+        '<p class="sm muted">'+c.jobs+' income lines, '+c.costs+' costs, '+
+        c.purchases+' comparison lists, '+c.strategies+' strategy lists and '+
+        c.plans+' plan collections.</p>'+
+        '<p class="sm muted">Everything from before accounts existed, rebuilt and brought '+
+        'forward to the current shape.</p>'+
+        '<button class="b" id="impSeed" style="margin-top:10px">Bring this one across</button></div>';
+    }
     if(r.ok&&r.found){
       opts+='<div class="card pad gap-b"><h3 class="ctitle">On the server</h3>'+
         '<p class="sm muted">Last written '+E(String(r.updatedAt||'').slice(0,10))+
@@ -2793,6 +2804,14 @@ function importScreen(){
         'Importing replaces all of it. Save a file from Settings first if you want a copy.</div>')+
       opts+
       '<div class="row"><button class="b o" data-nav="meals">Not now</button></div>';
+    var sd=$('#impSeed');
+    if(sd) sd.onclick=function(){
+      if(!looksEmpty()&&!confirm('Replace everything in this account with the original data?'))return;
+      this.disabled=true; this.textContent='Bringing it across';
+      applyLegacy(seed.state);
+      toast('Your data is back');
+      location.hash='#/financial'; route();
+    };
     var sv=$('#impServer');
     if(sv) sv.onclick=function(){
       if(!looksEmpty()&&!confirm('Replace everything in this account with the old data?'))return;

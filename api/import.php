@@ -58,6 +58,25 @@ if ($do === 'peek') {
         ]]);
 }
 
+/* The household's original data, rebuilt out of the files the product rewrite
+   deleted. Shipped with the app so restoring it is a button rather than a file
+   somebody has to be sent, and served only to a signed in household owner. */
+if ($do === 'seed') {
+    $p = __DIR__ . '/seed-restore.php';
+    if (!is_file($p)) ok(['found' => false]);
+    $j = require $p;
+    $st = is_array($j) ? ($j['state'] ?? null) : null;
+    if (!is_array($st)) ok(['found' => false]);
+    ok(['found' => true, 'state' => $st,
+        'counts' => [
+            'costs' => count($st['fin']['costs'] ?? []),
+            'jobs' => count($st['fin']['jobs'] ?? []),
+            'purchases' => count($st['fin']['purchases'] ?? []),
+            'strategies' => count($st['fin']['strategies'] ?? []),
+            'plans' => count($st['plan']['cols'] ?? []),
+        ]]);
+}
+
 if ($do === 'fetch') {
     need_post();
     need_xhr();
