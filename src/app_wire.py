@@ -948,8 +948,15 @@ document.addEventListener('click',function(e){
    fine on a desk and miserable on a phone, where finding Sign out meant
    thumbing past every export button in the app. They collapse now, most used
    first, and the account you are signed in as is visible without opening
-   anything. */
+   anything.
+
+   On a wide screen the collapsing is the wrong answer. There is room to show
+   all eight at once in two columns, and eight closed rows with one word in
+   each is a lot of empty space to scroll past to reach Sign out. So a desk
+   opens everything and a phone opens nothing. */
+function setWide(){ return window.innerWidth>=900; }
 function setGroup(id,title,sub,body,open){
+  if(setWide()) open=true;
   return '<details class="setgrp"'+(open?' open':'')+' data-g="'+id+'">'+
     '<summary><span class="sgt">'+E(title)+'</span>'+
     (sub?'<span class="sgs">'+E(sub)+'</span>':'')+'</summary>'+
@@ -965,6 +972,8 @@ function settingsModal(){
   var body=
    '<div class="setwho"><b>'+E(ACCOUNT?ACCOUNT.email:'Not signed in')+'</b>'+
    '<span>'+E(S.household||'Your household')+' &middot; '+E(saving)+'</span></div>'+
+
+   '<div class="setcols">'+
 
    setGroup('acct','Account',E(ACCOUNT?ACCOUNT.email:''),
      '<div class="row"><button class="b o" data-nav="household">Household and invites</button>'+
@@ -1018,7 +1027,7 @@ function settingsModal(){
      '<div class="stats gap-b" style="margin-top:12px">'+
      '<div class="stat"><b>'+E(saving)+'</b><span>State</span></div>'+
      '<div class="stat"><b>'+docVer+'</b><span>Version</span></div>'+
-     '<div class="stat"><b>'+E(syncAt?new Date(syncAt).toLocaleTimeString():'never')+'</b>'+
+     '<div class="stat"><b>'+E(syncAt?clockTime(syncAt):'never')+'</b>'+
      '<span>Last saved</span></div></div>'+
      '<div class="row"><button class="b o" id="stSync">Save now</button></div>')+
 
@@ -1035,9 +1044,12 @@ function settingsModal(){
      'already saved to it, so signing in again brings it back. Save a file first if you want '+
      'one.</p>'+
      '<div class="row" style="margin-top:10px">'+
-     '<button class="b dz" id="stReset">Erase this device</button></div>');
+     '<button class="b dz" id="stReset">Erase this device</button></div>')+
+
+   '</div>';
 
   var m=modal('Settings',body,'<button class="b o" data-close>Close</button>');
+  var mm=$('.modal',m); if(mm) mm.className+=' setmodal';
   $$('[data-theme]',m).forEach(function(b){b.onclick=function(){
     S.theme=b.dataset.theme; save(); applyTheme();
     $$('[data-theme]',m).forEach(function(x){x.classList.remove('on');});

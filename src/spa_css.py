@@ -182,7 +182,7 @@ align-items:center;gap:7px;justify-content:center}
 .b:active{transform:none}
 .b.o{background:transparent;color:var(--ink-2);border-color:var(--line-2);font-weight:600}
 .b.o:hover{background:var(--panel-2);border-color:var(--brass);color:var(--brass)}
-.b.s{padding:6px 12px;font-size:12px}
+.b.s{padding:8px 15px;font-size:12.5px}
 .b.dz{background:transparent;color:var(--clay);border-color:#4A2530}
 .b.dz:hover{background:rgba(248,113,113,.12);border-color:var(--clay);color:var(--clay)}
 .b:disabled{opacity:.4;cursor:not-allowed;transform:none}
@@ -258,7 +258,7 @@ ol.stp li:last-child{padding-bottom:0}ol.stp li:last-child:after{display:none}
 table{border-collapse:collapse;width:100%;font-size:13.5px}
 th{background:var(--panel-2);color:var(--ink-3);text-align:left;font:700 9px/1 var(--f-body);
 letter-spacing:.18em;text-transform:uppercase;padding:12px 13px;border-bottom:1px solid var(--line)}
-td{padding:11px 13px;border-bottom:1px solid var(--line);color:var(--ink-2)}
+td{padding:13px 16px;border-bottom:1px solid var(--line);color:var(--ink-2)}
 td b{color:var(--ink)}
 tbody tr:last-child td{border-bottom:0}
 tbody tr:hover td{background:var(--panel-2)}
@@ -665,12 +665,12 @@ background:linear-gradient(to right,transparent,var(--panel))}
    read as "still here, not counted" instead of as an empty slot. The switch is
    a real button so it is keyboard reachable, and aria-pressed says what state
    it is in. */
-.sw{position:relative;flex:none;width:36px;height:20px;padding:0;border:1px solid var(--line-2);
+.sw{position:relative;flex:none;width:42px;height:24px;padding:0;border:1px solid var(--line-2);
 background:var(--panel-2);border-radius:999px;cursor:pointer;transition:.24s var(--ez)}
-.sw i{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;
+.sw i{position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;
 background:var(--ink-4);transition:.24s var(--ez)}
 .sw.on{background:var(--brass);border-color:var(--brass)}
-.sw.on i{transform:translateX(16px);background:var(--on-accent)}
+.sw.on i{transform:translateX(18px);background:var(--on-accent)}
 .sw:hover{border-color:var(--brass)}
 .sw:focus-visible{outline:0;box-shadow:var(--glow)}
 .sw.xs{width:30px;height:17px}
@@ -683,7 +683,16 @@ tr.offrow>td{opacity:.44}
 tr.offrow>td:first-child{opacity:1}
 tr.offrow .chip{opacity:.75}
 .offtag{font:700 9px/1 var(--f-body);letter-spacing:.14em;text-transform:uppercase;
-color:var(--ink-4);margin-left:7px;vertical-align:1px}
+color:var(--ink-4);margin-left:9px;vertical-align:1px}
+/* The switch and the name were sitting against each other with no air between
+   them, which is what made these rows feel packed even on a wide screen. */
+td.hd{white-space:nowrap}
+td.hd>.sw{vertical-align:-6px;margin-right:13px}
+td.hd>b{font-weight:600}
+/* Money never wraps mid figure, and the action column stays out of its way. */
+td.num{white-space:nowrap}
+td.act{text-align:right;white-space:nowrap}
+th:last-child,td.act{padding-right:18px}
 
 /* ---------------- charts ---------------- */
 .cempty{padding:26px 4px;text-align:center;color:var(--ink-4);font-size:12.5px}
@@ -805,6 +814,24 @@ transform:rotate(45deg);transition:.22s var(--ez)}
 .sgb{padding:2px 0 18px}
 .sgb .row{gap:8px}
 .setgrp[open]{animation:fadein .2s var(--ez)}
+/* A desk has the room to show all eight at once, so it does. Two columns, each
+   section its own card, nothing to hunt for and nothing to open first. */
+@media (min-width:900px){
+.setmodal{max-width:960px}
+.setcols{columns:2;column-gap:22px}
+.setcols .setgrp{display:inline-block;width:100%;break-inside:avoid;
+  border:1px solid var(--line);border-radius:var(--r);background:var(--panel-2);
+  padding:2px 16px 0;margin:0 0 16px}
+.setcols .setgrp:last-of-type{border-bottom:1px solid var(--line)}
+.setcols .setgrp>summary{padding:14px 24px 10px 0}
+.setcols .setgrp>summary:after{right:2px;top:20px}
+.setcols .sgb{padding-bottom:16px}
+/* Three tiles inside half a modal is a narrow box. 24px numerals push a
+   timestamp onto a second line, so they come down in here only. */
+.setcols .stat{padding:12px 13px}
+.setcols .stat b{font-size:18px}
+.setcols .stat span{font-size:8px;letter-spacing:.13em}
+}
 @media (max-width:620px){
 /* Every one of these gets tapped with a thumb, so nothing sits under 44px. */
 .setgrp>summary{padding:16px 26px 16px 2px;min-height:44px;justify-content:center}
@@ -898,7 +925,7 @@ font:700 9px/1.5 var(--f-body);letter-spacing:.16em;text-transform:uppercase;tex
 .tw.cards td:not([data-l]):before{content:none}
 /* The name leads the card, full width and unlabelled. The switch rides with it
    so the thing you tap and the thing it belongs to are on the same line. */
-.tw.cards td.hd{display:flex;justify-content:flex-start;align-items:center;gap:10px;
+.tw.cards td.hd{display:flex;justify-content:flex-start;align-items:center;gap:10px;white-space:normal;
 text-align:left;font-size:15px;padding:0 0 9px;margin-bottom:5px;
 border-bottom:1px solid var(--line)}
 .tw.cards td.hd:before{content:none}

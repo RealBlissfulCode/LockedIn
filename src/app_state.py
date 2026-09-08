@@ -29,6 +29,12 @@ var syncState='off', syncAt=null, syncMsg='', syncTimer=null;
 var syncPending=false, syncBusy=false, syncFails=0;
 var _snap={}, _snapDays={};
 
+/* Seconds on a "last saved" stamp are noise, and they push the time onto two
+   lines in a narrow tile. */
+function clockTime(t){
+  try{ return new Date(t).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}); }
+  catch(e){ return new Date(t).toLocaleTimeString(); }
+}
 function syncSet(st,msg){
   syncState=st; syncMsg=msg||'';
   var e=document.getElementById('syncPill');
@@ -38,7 +44,7 @@ function syncPill(){
   var label={off:'Offline',idle:'Saved',pull:'Checking',push:'Saving',
     offline:'Offline',error:'Not saving'}[syncState]||syncState;
   var cls={idle:'ok',push:'busy',pull:'busy',offline:'warn',error:'bad',off:'off'}[syncState]||'';
-  var title=syncMsg||(syncAt?('Last saved '+new Date(syncAt).toLocaleTimeString()):'');
+  var title=syncMsg||(syncAt?('Last saved '+clockTime(syncAt)):'');
   return '<button class="syncpill '+cls+'" id="syncPill" title="'+E(title)+'">'+
     '<i></i><span>'+E(label)+'</span></button>';
 }
