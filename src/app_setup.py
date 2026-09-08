@@ -505,7 +505,11 @@ function applyLegacy(st){
   o.__td={}; Object.keys(o.days||{}).forEach(function(x){o.__td[x]=nowT;});
   for(var kk in o) S[kk]=o[kk];
   save();
+  /* Rebuild the baseline properly. Clearing it without calling syncTouch left
+     __init unset, so the next edit was treated as a first run and its push was
+     quietly dropped. */
   _snap={}; _snapDays={};
+  syncTouch();
   syncPending=true;
   pushState();
 }
@@ -756,12 +760,13 @@ function planBody(){
      return '<div class="sec"><div class="spread"><h2>'+E(pretty(d.date))+'</h2>'+
      '<span class="chip p'+(Math.abs(off)<250?' t':'')+'">'+N(d.kcal)+' kcal, '+pct+'% of target'+
      ' &middot; '+N(d.p)+'g protein</span></div>'+
-     '<div class="tw"><table><thead><tr><th>When</th><th>Meal</th><th class="num">kcal</th>'+
+     '<div class="tw cards"><table><thead><tr><th>When</th><th>Meal</th><th class="num">kcal</th>'+
      '<th class="num">Protein</th><th></th></tr></thead><tbody>'+
      d.meals.map(function(m,j){var r=byId(m.id);if(!r)return '';
-       return '<tr><td class="sm muted">'+E(t12(m.at))+'</td>'+
-       '<td><b>'+E(r.n)+'</b><div class="xs muted">'+E(r.cat)+'</div></td>'+
-       '<td class="num">'+N(r.k)+'</td><td class="num">'+N(r.p)+'g</td>'+
+       return '<tr><td class="sm muted" data-l="When">'+E(t12(m.at))+'</td>'+
+       '<td data-l="Meal"><b>'+E(r.n)+'</b><div class="xs muted">'+E(r.cat)+'</div></td>'+
+       '<td class="num" data-l="kcal">'+N(r.k)+'</td>'+
+       '<td class="num" data-l="Protein">'+N(r.p)+'g</td>'+
        '<td><button class="b o s" data-mpswap="'+i+'|'+j+'">Swap</button></td></tr>';
      }).join('')+'</tbody></table></div></div>';
    }).join('');

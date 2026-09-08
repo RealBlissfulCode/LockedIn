@@ -359,7 +359,7 @@ function vIngredients(){
    '<button class="b o" id="ingCsv">Export list</button>'+
    '<input class="right" id="ingQ" placeholder="Search "+keys.length+" ingredients" '+
    'style="padding:10px 13px;border:1px solid var(--line-2);border-radius:9px;min-width:220px">'+
-   '</div><div class="tw"><table><thead><tr><th>Ingredient</th><th>Aisle</th>'+
+   '</div><div class="tw cards"><table><thead><tr><th>Ingredient</th><th>Aisle</th>'+
    '<th>Walmart /100g</th><th>Costco /100g</th><th>Best</th><th>Used in</th><th></th></tr></thead>'+
    '<tbody id="ingBody"></tbody></table></div></div>';
 }
@@ -370,11 +370,12 @@ function drawIngTable(q){
   var keys=allIngKeys().filter(function(k){return ING(k).n.toLowerCase().indexOf(q)>=0;})
     .sort(function(a,b2){return ING(a).n.localeCompare(ING(b2).n);});
   b.innerHTML=keys.slice(0,400).map(function(k){var g=ING(k),ov=S.ingOv[k];
-    return '<tr><td><b>'+E(g.n)+'</b>'+(ov?' <span class="chip t">edited</span>':'')+'</td>'+
-    '<td class="sm muted">'+E(g.a||'Other')+'</td>'+
-    '<td>'+(g.w!=null?$$$(g.w):'-')+'</td><td>'+(g.c!=null&&g.c>0?$$$(g.c):'-')+'</td>'+
-    '<td><b>'+$$$(best(g))+'</b> <span class="xs muted">'+bestStore(g)+'</span></td>'+
-    '<td class="sm">'+ingUsage(k)+'</td>'+
+    return '<tr><td data-l="Ingredient"><b>'+E(g.n)+'</b>'+(ov?' <span class="chip t">edited</span>':'')+'</td>'+
+    '<td class="sm muted" data-l="Aisle">'+E(g.a||'Other')+'</td>'+
+    '<td data-l="Walmart /100g">'+(g.w!=null?$$$(g.w):'-')+'</td>'+
+    '<td data-l="Costco /100g">'+(g.c!=null&&g.c>0?$$$(g.c):'-')+'</td>'+
+    '<td data-l="Best"><b>'+$$$(best(g))+'</b> <span class="xs muted">'+bestStore(g)+'</span></td>'+
+    '<td class="sm" data-l="Used in">'+ingUsage(k)+'</td>'+
     '<td><button class="b o s" data-ie="'+k+'">Edit</button></td></tr>';}).join('');
 }
 function ingEditor(k){

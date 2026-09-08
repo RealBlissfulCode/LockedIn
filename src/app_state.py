@@ -54,18 +54,28 @@ function privatePart(){
 
 /* Stamp only what actually changed, so a phone that touched the shopping list
    does not claim to be the newer author of the budget as well. */
+/* The first call takes a baseline and nothing else. It used to stamp every
+   branch with the current time, which meant a browser that had never seen this
+   account declared itself the newest author of everything in it, and then the
+   merge threw away the real data coming back from the server. Signing in on a
+   second device got you an empty app.
+
+   A stamp is a claim that this device changed something. A device that has
+   just opened has changed nothing, so it claims nothing, and anything the
+   server has stamped wins. Restoring a file or bringing old data across stamps
+   deliberately, which is what makes those win instead. */
 function syncTouch(){
   var nowT=Date.now(), first=!_snap.__init;
   S.__t=S.__t||{}; S.__td=S.__td||{};
   BRANCHES.forEach(function(b){
     var cur=JSON.stringify(S[b]===undefined?null:S[b]);
-    if(first){ _snap[b]=cur; if(!S.__t[b]) S.__t[b]=nowT; return; }
+    if(first){ _snap[b]=cur; return; }
     if(_snap[b]!==cur){ _snap[b]=cur; S.__t[b]=nowT; }
   });
   var days=S.days||{};
   Object.keys(days).forEach(function(d){
     var cur=JSON.stringify(days[d]);
-    if(first){ _snapDays[d]=cur; if(!S.__td[d]) S.__td[d]=nowT; return; }
+    if(first){ _snapDays[d]=cur; return; }
     if(_snapDays[d]!==cur){ _snapDays[d]=cur; S.__td[d]=nowT; }
   });
   _snap.__init=true;
@@ -108,7 +118,10 @@ function pullState(){
     /* Take a snapshot without stamping, otherwise arriving data looks like a
        local edit and gets pushed straight back. */
     _snap={}; _snapDays={}; syncTouch();
-    if(changed) try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}
+    /* Always write, not only when the merge moved something. A device opening
+       this account for the first time has nothing saved locally at all, and
+       "nothing changed" is exactly the case where it most needs writing. */
+    try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}
   }).catch(function(){ syncSet('offline'); });
 }
 

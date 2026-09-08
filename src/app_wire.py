@@ -944,82 +944,99 @@ document.addEventListener('click',function(e){
   }catch(err){ if(window.console&&console.error)console.error('click',err);
     toast('Something went wrong: '+(err.message||err)); }
 });
+/* One section at a time. Eight headings stacked in a single scrolling modal is
+   fine on a desk and miserable on a phone, where finding Sign out meant
+   thumbing past every export button in the app. They collapse now, most used
+   first, and the account you are signed in as is visible without opening
+   anything. */
+function setGroup(id,title,sub,body,open){
+  return '<details class="setgrp"'+(open?' open':'')+' data-g="'+id+'">'+
+    '<summary><span class="sgt">'+E(title)+'</span>'+
+    (sub?'<span class="sgs">'+E(sub)+'</span>':'')+'</summary>'+
+    '<div class="sgb">'+body+'</div></details>';
+}
+
 function settingsModal(){
   var when=S.savedAt?new Date(S.savedAt).toLocaleString():'never';
   var size=0; try{size=(localStorage.getItem(KEY)||'').length;}catch(e){}
+  var saving={off:'Local only',idle:'Saved',pull:'Checking',push:'Saving',
+              offline:'Offline',error:'Not saving'}[syncState]||syncState;
+
   var body=
-   '<h4 class="lbl">Appearance</h4>'+
-   '<div class="row" style="margin:10px 0 18px">'+
-   ['dark','light','auto'].map(function(t){
-     return '<button class="pill'+((S.theme||'dark')===t?' on':'')+'" data-theme="'+t+'">'+
-     (t==='auto'?'Match device':t.charAt(0).toUpperCase()+t.slice(1))+'</button>';}).join('')+
-   '</div><div class="hr"></div>'+
-   '<h4 class="lbl">Your data</h4>'+
-   '<p class="sm muted" style="margin:8px 0 14px">Everything lives in this browser on this device. '+
-   'Nothing is uploaded. Save to a file to move it, back it up, or hand it over for changes.</p>'+
-   '<div class="stats gap-b">'+
-   '<div class="stat"><b>'+all().length+'</b><span>Recipes</span></div>'+
-   '<div class="stat"><b>'+Object.keys(S.ingOv).length+'</b><span>Ingredient edits</span></div>'+
-   '<div class="stat"><b>'+Object.keys(S.days).length+'</b><span>Days logged</span></div>'+
-   '<div class="stat"><b>'+Math.round(size/1024)+'k</b><span>Stored</span></div></div>'+
-   '<div class="row" style="margin-bottom:18px">'+
-   '<button class="b" id="stSave">Save to a file</button>'+
-   '<button class="b o" id="stLoad">Load a file</button>'+
-   '<button class="b o" data-nav="import">Bring old data across</button>'+
-   '<button class="b o" data-nav="restore">Earlier versions</button></div>'+
-   '<div class="hr"></div>'+
-   '<h4 class="lbl">On your phone</h4>'+
-   '<p class="sm muted" style="margin:8px 0 12px">Install it and it behaves like any other '+
-   'app, with its own icon and no browser around it.</p>'+
-   '<button class="b o" data-nav="install">How to install it</button>'+
-   '<p class="xs muted">Last saved: '+E(when)+'</p>'+
-   '<div class="hr"></div>'+
-   '<h4 class="lbl">Household</h4>'+
-   '<label class="f" style="margin-top:10px"><span>Household name</span>'+
-   '<input id="stHouse" value="'+E(S.household||'')+'" placeholder="My household"></label>'+
-   (shared()?'<label class="f" style="margin-top:12px"><span>Which of these is you</span>'+
-     '<select id="stMe">'+opt(MEMS().map(function(m){return [m.id,m.name];}),ME())+'</select></label>'+
-     '<p class="xs muted">Only changes which profile the app treats as yours. It does not '+
-     'sign you in as anybody, and everyone keeps their own account.</p>':'')+
-   '<div id="stMembers"></div>'+
-   '<div class="row" style="margin-top:10px"><button class="b o s" id="stAddMem">Add someone</button>'+
-   '<button class="b o s" data-nav="household">Invites and sharing</button></div>'+
-   (shared()?'<p class="xs muted">Whoever is selected in the top bar is who new entries get logged '+
-     'as. You can still change it on any entry.</p>':'')+
-   '<div class="hr"></div>'+
-   '<h4 class="lbl">Exports</h4><div class="row" style="margin-top:10px">'+
-   '<button class="b o s" id="stIng">Ingredients CSV</button>'+
-   '<button class="b o s" id="stLog">Daily log CSV</button>'+
-   '<button class="b o s" id="stShift">Shifts CSV</button>'+
-   '<button class="b o s" id="stFin">Budget CSV</button>'+
-   '<button class="b o s" id="stPlan">Plans CSV</button></div>'+
-   '<div class="hr"></div>'+
-   '<h4 class="lbl">Saving</h4>'+
-   '<p class="sm muted" style="margin:8px 0 12px">'+
-   (syncState!=='off'
-     ? 'Everything is on your account, so it is on every device you sign in on and on '+
-       'everyone else&#39;s in the household. Changes go up a moment after you make them.'
-     : 'Not saving to your account right now. Everything still saves on this device.')+
-   (syncMsg?' <b>'+E(syncMsg)+'</b>':'')+'</p>'+
-   '<div class="stats gap-b">'+
-   '<div class="stat"><b>'+E({off:'Local',idle:'On',pull:'On',push:'On',
-      offline:'Offline',error:'Error'}[syncState]||syncState)+'</b><span>State</span></div>'+
-   '<div class="stat"><b>'+docVer+'</b><span>Version</span></div>'+
-   '<div class="stat"><b>'+E(syncAt?new Date(syncAt).toLocaleTimeString():'never')+'</b>'+
-   '<span>Last saved</span></div></div>'+
-   '<div class="row"><button class="b o" id="stSync">Save now</button></div>'+
-   '<div class="hr"></div>'+
-   '<h4 class="lbl">Account</h4>'+
-   '<p class="sm muted" style="margin:8px 0 12px">Signed in as '+
-   E(ACCOUNT?ACCOUNT.email:'')+'.</p>'+
-   '<div class="row"><button class="b o" data-nav="household">Household and invites</button>'+
-   '<button class="b o" id="stOut">Sign out</button></div>'+
-   '<div class="hr"></div>'+
-   '<h4 class="lbl">Danger</h4>'+
-   '<p class="sm muted" style="margin:8px 0 12px">This wipes the copy held on this device. '+
-   'Your account keeps what is already saved to it, so signing in again brings it back. '+
-   'Save a file first if you want one.</p>'+
-   '<button class="b dz" id="stReset">Erase this device</button>';
+   '<div class="setwho"><b>'+E(ACCOUNT?ACCOUNT.email:'Not signed in')+'</b>'+
+   '<span>'+E(S.household||'Your household')+' &middot; '+E(saving)+'</span></div>'+
+
+   setGroup('acct','Account',E(ACCOUNT?ACCOUNT.email:''),
+     '<div class="row"><button class="b o" data-nav="household">Household and invites</button>'+
+     '<button class="b o" id="stOut">Sign out</button></div>')+
+
+   setGroup('data','Your data','Save, load, restore',
+     '<p class="sm muted">Everything is on your account and on every device you sign in on. '+
+     'A file is for keeping your own copy or moving it somewhere else.</p>'+
+     '<div class="stats gap-b" style="margin-top:12px">'+
+     '<div class="stat"><b>'+Object.keys(S.days).length+'</b><span>Days logged</span></div>'+
+     '<div class="stat"><b>'+(S.fin.costs||[]).length+'</b><span>Cost lines</span></div>'+
+     '<div class="stat"><b>'+Math.round(size/1024)+'k</b><span>On this device</span></div></div>'+
+     '<div class="row"><button class="b" id="stSave">Save to a file</button>'+
+     '<button class="b o" id="stLoad">Load a file</button></div>'+
+     '<div class="row" style="margin-top:8px">'+
+     '<button class="b o" data-nav="import">Bring old data across</button>'+
+     '<button class="b o" data-nav="restore">Earlier versions</button></div>'+
+     '<p class="xs muted" style="margin-top:10px">Last saved to a file: '+E(when)+'</p>')+
+
+   setGroup('house','Household',shared()?MEMS().length+' people':'Just you',
+     '<label class="f"><span>Household name</span>'+
+     '<input id="stHouse" value="'+E(S.household||'')+'" placeholder="My household"></label>'+
+     (shared()?'<label class="f"><span>Which of these is you</span>'+
+       '<select id="stMe">'+opt(MEMS().map(function(m){return [m.id,m.name];}),ME())+'</select></label>'+
+       '<p class="xs muted">Only changes which profile the app treats as yours. It does not '+
+       'sign you in as anybody, and everyone keeps their own account.</p>':'')+
+     '<div id="stMembers"></div>'+
+     '<div class="row" style="margin-top:10px"><button class="b o s" id="stAddMem">Add someone</button>'+
+     '<button class="b o s" data-nav="household">Invites and sharing</button></div>')+
+
+   setGroup('phone','On your phone','Install it',
+     '<p class="sm muted">Install it and it behaves like any other app, with its own icon '+
+     'and no browser around it.</p>'+
+     '<div class="row" style="margin-top:10px">'+
+     '<button class="b o" data-nav="install">How to install it</button></div>')+
+
+   setGroup('look','Appearance',(S.theme||'dark')==='auto'?'Match device':(S.theme||'dark'),
+     '<div class="row">'+
+     ['dark','light','auto'].map(function(t){
+       return '<button class="pill'+((S.theme||'dark')===t?' on':'')+'" data-theme="'+t+'">'+
+       (t==='auto'?'Match device':t.charAt(0).toUpperCase()+t.slice(1))+'</button>';}).join('')+
+     '</div>')+
+
+   setGroup('sync','Saving',saving,
+     '<p class="sm muted">'+
+     (syncState!=='off'
+       ? 'Everything is on your account, so it is on every device you sign in on and on '+
+         'everyone else&#39;s in the household. Changes go up a moment after you make them.'
+       : 'Not saving to your account right now. Everything still saves on this device.')+
+     (syncMsg?' <b>'+E(syncMsg)+'</b>':'')+'</p>'+
+     '<div class="stats gap-b" style="margin-top:12px">'+
+     '<div class="stat"><b>'+E(saving)+'</b><span>State</span></div>'+
+     '<div class="stat"><b>'+docVer+'</b><span>Version</span></div>'+
+     '<div class="stat"><b>'+E(syncAt?new Date(syncAt).toLocaleTimeString():'never')+'</b>'+
+     '<span>Last saved</span></div></div>'+
+     '<div class="row"><button class="b o" id="stSync">Save now</button></div>')+
+
+   setGroup('exp','Exports','Spreadsheets',
+     '<div class="row">'+
+     '<button class="b o s" id="stIng">Ingredients</button>'+
+     '<button class="b o s" id="stLog">Daily log</button>'+
+     '<button class="b o s" id="stShift">Shifts</button>'+
+     '<button class="b o s" id="stFin">Budget</button>'+
+     '<button class="b o s" id="stPlan">Plans</button></div>')+
+
+   setGroup('danger','Erase this device','Your account is not touched',
+     '<p class="sm muted">This wipes the copy held on this device. Your account keeps what is '+
+     'already saved to it, so signing in again brings it back. Save a file first if you want '+
+     'one.</p>'+
+     '<div class="row" style="margin-top:10px">'+
+     '<button class="b dz" id="stReset">Erase this device</button></div>');
+
   var m=modal('Settings',body,'<button class="b o" data-close>Close</button>');
   $$('[data-theme]',m).forEach(function(b){b.onclick=function(){
     S.theme=b.dataset.theme; save(); applyTheme();

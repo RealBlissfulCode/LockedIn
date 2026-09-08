@@ -54,15 +54,17 @@ function vTraining(sub){
    '<div class="sec"><h2>Macro shift by session</h2>'+
    '<p class="sub">Carbs swing roughly 50% across session types, protein about 8%. Glycogen is local '+
    'and gets emptied by the session; protein demand is a daily total.</p>'+
-   '<div class="tw"><table><thead><tr><th>Session</th><th class="num">Kcal</th><th class="num">Protein</th>'+
+   '<div class="tw cards"><table><thead><tr><th>Session</th><th class="num">Kcal</th><th class="num">Protein</th>'+
    '<th class="num">Carbs</th><th class="num">Fat</th><th>Leads with</th></tr></thead><tbody>'+
    Object.keys(TRAIN).map(function(k){var tt=dayTarget(S.who,k),T2=TRAIN[k];
      var lead=T2.c>=1.15?'Carbs':T2.p>=1.06?'Protein':T2.k<1?'Volume and fiber':'Balance';
      return '<tr'+(d.workout===k?' style="background:var(--panel-2)"':'')+'>'+
-     '<td><b>'+T2.n+'</b>'+(d.workout===k?' <span class="chip t">today</span>':'')+'</td>'+
-     '<td class="num">'+N(tt.kcal)+'</td><td class="num">'+tt.p+' g</td>'+
-     '<td class="num">'+tt.c+' g</td><td class="num">'+tt.f+' g</td>'+
-     '<td class="sm muted">'+lead+'</td></tr>';}).join('')+
+     '<td data-l="Session"><b>'+T2.n+'</b>'+(d.workout===k?' <span class="chip t">today</span>':'')+'</td>'+
+     '<td class="num" data-l="Kcal">'+N(tt.kcal)+'</td>'+
+     '<td class="num" data-l="Protein">'+tt.p+' g</td>'+
+     '<td class="num" data-l="Carbs">'+tt.c+' g</td>'+
+     '<td class="num" data-l="Fat">'+tt.f+' g</td>'+
+     '<td class="sm muted" data-l="Leads with">'+lead+'</td></tr>';}).join('')+
    '</tbody></table></div></div></div>';
 }
 function vExercises(){
@@ -107,9 +109,10 @@ function drawEx(){
 }
 function sessModal(i){
   var s=SESS[i]; if(!s)return;
-  var body='<div class="tw"><table><thead><tr><th>Exercise</th><th>Sets</th><th>Reps</th><th>Note</th></tr></thead><tbody>'+
-   s.ex.map(function(x){return '<tr><td><b>'+E(x.n)+'</b></td><td>'+E(x.sets)+'</td><td>'+E(x.reps)+
-     '</td><td class="sm muted">'+E(x.note)+'</td></tr>';}).join('')+'</tbody></table></div>';
+  var body='<div class="tw cards"><table><thead><tr><th>Exercise</th><th>Sets</th><th>Reps</th><th>Note</th></tr></thead><tbody>'+
+   s.ex.map(function(x){return '<tr><td data-l="Exercise"><b>'+E(x.n)+'</b></td>'+
+     '<td data-l="Sets">'+E(x.sets)+'</td><td data-l="Reps">'+E(x.reps)+'</td>'+
+     '<td class="sm muted" data-l="Note">'+E(x.note)+'</td></tr>';}).join('')+'</tbody></table></div>';
   modal(s.name,body,'<button class="b" data-x>Close</button>').querySelectorAll('[data-x]')
     .forEach(function(b){b.onclick=function(){b.closest('.mask').remove();};});
 }
@@ -398,17 +401,19 @@ function vFinancial(sub){
                   {v:r.t.cost,cls:'ct5',tip:'Costs '+M(r.t.cost)}]};}))})+
       '<div class="ckey"><span><i class="ct2"></i>Income</span><span><i class="ct5"></i>Costs</span>'+
       '<span class="muted">Number under each column is the surplus</span></div></div>'+
-      '<div class="tw"><table><thead><tr><th>Scenario</th><th>Basis</th><th>Housing</th>'+
+      '<div class="tw cards"><table><thead><tr><th>Scenario</th><th>Basis</th><th>Housing</th>'+
       '<th class="num">Income</th><th class="num">Costs</th><th class="num">Monthly</th>'+
       '<th class="num">Yearly</th><th class="num">Off</th><th></th></tr></thead><tbody>'+
       scRows.map(function(r){
         return '<tr'+(r.n===act?' style="background:var(--panel-2)"':'')+'>'+
-        '<td><b>'+E(r.n)+'</b>'+(r.n===act?' <span class="chip t">open</span>':'')+'</td>'+
-        '<td class="sm muted">'+E(modeLabel(r.sc.mode))+'</td><td class="sm muted">'+E(r.sc.path)+'</td>'+
-        '<td class="num">'+M(r.t.inc)+'</td><td class="num">'+M(r.t.cost)+'</td>'+
-        '<td class="num" style="color:'+(r.t.gap>=0?'var(--sage)':'var(--clay)')+'"><b>'+M(r.t.gap)+'</b></td>'+
-        '<td class="num">'+M(r.t.gap*12)+'</td>'+
-        '<td class="num sm muted">'+(r.off||'-')+'</td>'+
+        '<td data-l="Scenario"><b>'+E(r.n)+'</b>'+(r.n===act?' <span class="chip t">open</span>':'')+'</td>'+
+        '<td class="sm muted" data-l="Basis">'+E(modeLabel(r.sc.mode))+'</td>'+
+        '<td class="sm muted" data-l="Housing">'+E(r.sc.path)+'</td>'+
+        '<td class="num" data-l="Income">'+M(r.t.inc)+'</td>'+
+        '<td class="num" data-l="Costs">'+M(r.t.cost)+'</td>'+
+        '<td class="num" data-l="Monthly" style="color:'+(r.t.gap>=0?'var(--sage)':'var(--clay)')+'"><b>'+M(r.t.gap)+'</b></td>'+
+        '<td class="num" data-l="Yearly">'+M(r.t.gap*12)+'</td>'+
+        '<td class="num sm muted" data-l="Off">'+(r.off||'-')+'</td>'+
         '<td><button class="b o s" data-scload="'+E(r.n)+'">Open</button> '+
         '<button class="x" data-scdel="'+E(r.n)+'">&times;</button></td></tr>';}).join('')+
       '</tbody></table></div></div>';

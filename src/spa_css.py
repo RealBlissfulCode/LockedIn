@@ -567,6 +567,8 @@ body{padding-bottom:80px}
 .g4{grid-template-columns:1fr 1fr}
 .stats{grid-template-columns:repeat(2,1fr)}
 .stat{border-bottom:1px solid var(--line)}
+/* An odd number of tiles in two columns leaves a dead square. Last one takes the row. */
+.stats>.stat:last-child:nth-child(odd){grid-column:1/-1;border-right:0}
 .stat:nth-child(odd){border-right:1px solid var(--line)}
 .stat:nth-child(even){border-right:0}
 .dhero{min-height:200px;padding:20px;border-radius:var(--r)}
@@ -583,7 +585,7 @@ ol.stp li{padding-left:38px}
 /* Sized for thumbs. 28px targets are a cursor size, not a finger size. */
 .b{padding:11px 18px;font-size:14px}
 .b.s,.sec>.spread .b{padding:9px 15px;font-size:13px}
-.x{width:36px;height:36px;font-size:18px}
+.x{width:42px;height:42px;font-size:19px}
 .pill{padding:9px 16px}
 .gitem input[type=checkbox],.pitem input[type=checkbox]{width:22px;height:22px}
 .iconbtn,.syncpill{flex:0 0 auto}
@@ -783,6 +785,34 @@ background:var(--panel-2);margin-top:12px}
 .gfound b{display:block;font-size:15px}
 .gfound span{display:block;font-size:12px;color:var(--ink-3);margin-top:3px}
 
+/* Settings, one section at a time. */
+.setwho{padding:12px 14px;border-radius:var(--r);background:var(--panel-2);
+border:1px solid var(--line);margin-bottom:14px}
+.setwho b{display:block;font-size:14px;overflow-wrap:break-word}
+.setwho span{display:block;font-size:12px;color:var(--ink-3);margin-top:3px}
+.setgrp{border-top:1px solid var(--line)}
+.setgrp:last-of-type{border-bottom:1px solid var(--line)}
+.setgrp>summary{list-style:none;cursor:pointer;padding:15px 26px 15px 2px;position:relative;
+display:flex;flex-direction:column;align-items:flex-start;text-align:left;gap:3px}
+.setgrp>summary::-webkit-details-marker{display:none}
+.setgrp>summary:after{content:"";position:absolute;right:6px;top:21px;width:7px;height:7px;
+border-right:1.6px solid var(--ink-4);border-bottom:1.6px solid var(--ink-4);
+transform:rotate(45deg);transition:.22s var(--ez)}
+.setgrp[open]>summary:after{transform:rotate(225deg);border-color:var(--brass)}
+.setgrp>summary:hover .sgt{color:var(--brass)}
+.sgt{font-weight:600;font-size:14.5px;transition:.18s var(--ez)}
+.sgs{font-size:12px;color:var(--ink-4);overflow-wrap:break-word}
+.sgb{padding:2px 0 18px}
+.sgb .row{gap:8px}
+.setgrp[open]{animation:fadein .2s var(--ez)}
+@media (max-width:620px){
+/* Every one of these gets tapped with a thumb, so nothing sits under 44px. */
+.setgrp>summary{padding:16px 26px 16px 2px;min-height:44px;justify-content:center}
+.sgt{font-size:15px}
+.sgb .b,.sgb .pill,.sgb select,.sgb button{min-height:44px;flex:1 1 auto;justify-content:center}
+.sgb .row{gap:9px}
+}
+
 .steps{margin:0;padding-left:20px;color:var(--ink-2);font-size:14px;line-height:1.75}
 .steps li{margin-bottom:9px}
 .steps b{color:var(--ink)}
@@ -893,6 +923,8 @@ border-bottom:1px solid var(--line)}
 
 .stats{grid-template-columns:repeat(2,1fr)}
 .stat{padding:11px 12px}
+/* An odd number of tiles in two columns leaves a dead square. Last one takes the row. */
+.stats>.stat:last-child:nth-child(odd){grid-column:1/-1;border-right:0}
 .stat b{font-size:19px}
 .stat.acc b{font-size:21px}
 .stat span{font-size:8px;letter-spacing:.14em;margin-top:5px}
@@ -923,6 +955,8 @@ border-bottom:1px solid var(--line)}
 
 @media (max-width:420px){
 .stats{grid-template-columns:1fr 1fr}
+/* An odd number of tiles in two columns leaves a dead square. Last one takes the row. */
+.stats>.stat:last-child:nth-child(odd){grid-column:1/-1;border-right:0}
 .stat b{font-size:17.5px}
 .fr{grid-template-columns:1fr}
 .fr>*{flex:1 1 100%}
