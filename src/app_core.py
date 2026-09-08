@@ -49,12 +49,18 @@ var RENT_SECTION='Home (renting)', BUY_SECTION='Home (buying)';
    so it splits by what the line actually was rather than moving wholesale. */
 var OLD_SECTIONS={'Housing (rent)':RENT_SECTION,'Housing (buy)':BUY_SECTION,
                   'Savings':'Saving','Living':'Personal'};
+/* Word boundaries, not substrings. Without them "Emergency Funds" matches fun
+   and a savings line lands under going out, which is exactly the kind of quiet
+   wrong answer nobody checks. Saving is tested first for the same reason. */
 var LIVING_HINTS=[
- [/groceries|food|eating out|restaurant|takeaway|takeout|coffee/i,'Food'],
- [/fuel|gas for|petrol|car|vehicle|transit|bus|train|parking|registration|insurance \(car\)/i,'Getting around'],
- [/gym|doctor|dental|medical|prescription|therapy/i,'Health'],
- [/pet|dog|cat|child|daycare|nursery/i,'People and pets'],
- [/social|fun|hobby|travel|holiday|vacation|gift|birthday|night out/i,'Fun']
+ [/\b(savings?|emergency fund\w*|retirement|sinking fund\w*|nest egg)\b/i,'Saving'],
+ [/\b(groceries|grocery|food|eating out|restaurant|takeaway|takeout|coffee)\b/i,'Food'],
+ [/\b(fuel|petrol|car|cars|vehicle|transit|bus|train|parking|registration|tags|rideshare)\b/i,'Getting around'],
+ [/\b(gym|doctor|dental|dentist|medical|prescription|prescriptions|therapy|eye|optician|orthodontic\w*)\b/i,'Health'],
+ [/\b(pet|pets|dog|dogs|cat|cats|child|children|childcare|daycare|nursery)\b/i,'People and pets'],
+ [/\b(phone|mobile|cell|internet|broadband|electric\w*|water|sewer|trash|refuse)\b/i,'Utilities'],
+ [/\b(social|fun|hobby|hobbies|travel|holiday|vacation|gift|gifts|birthday|birthdays|night out|going out)\b/i,'Fun'],
+ [/\b(debt|loan|loans|credit card\w*|student loan\w*)\b/i,'Debt']
 ];
 function migrateSections(o){
   if(o.__sections7) return o;
@@ -517,8 +523,17 @@ function importAll(file,cb){
     try{
       var o=JSON.parse(fr.result);
       var st=o.state||o;
-      if(!st.prof) throw new Error('not a handbook file');
-      var d=DEF(); for(var k in d) if(!(k in st)) st[k]=d[k];
+      /* This used to insist on a prof key, which only the old two profile shape
+         ever had, so the app could not read a file it had written itself.
+         Anything carrying members or a fin block is one of ours. */
+      if(!st||typeof st!=='object'||(!st.members&&!st.prof&&!st.fin))
+        throw new Error('this is not a LockedIn file');
+      var d=DEF();
+      for(var k in d) if(!(k in st)) st[k]=d[k];
+      if(!st.fin||typeof st.fin!=='object') st.fin=d.fin;
+      for(var ff in d.fin) if(!(ff in st.fin)) st.fin[ff]=d.fin[ff];
+      /* An older file gets brought forward the same way a saved one does. */
+      st=migrateSections(migrateToMembers(st));
       var keepV=S.__v;
       S=st; S.__v=keepV;
       /* A restored file replaces everything on purpose, so every branch is
