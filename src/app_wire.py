@@ -64,6 +64,16 @@ function errPanel(where,e){
    still lands at the top. */
 var _lastHash=null;
 function reroute(){route();}
+/* Somebody else's edit just landed. Redraw so it appears without a refresh,
+   but not while a modal is open or a field has the cursor in it, because
+   rebuilding the page under somebody's hands is worse than waiting. The next
+   pull is a few seconds away and will catch it. */
+function redrawFromSync(){
+  if(document.querySelector('.mask')) return;
+  var a=document.activeElement;
+  if(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;
+  try{ route(); chrome(); }catch(e){}
+}
 function route(){
   var h=(location.hash||'#/meals').slice(2).split('/'), v=h[0]||'meals', sub=h[1]||'';
   var m=$('#view'); if(!m) return;

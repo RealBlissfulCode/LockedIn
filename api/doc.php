@@ -22,6 +22,19 @@ if ($do === 'all' && method() === 'GET') {
         'private' => read_doc($houseId, 'private:' . $me)]);
 }
 
+/* Version numbers and nothing else. The app asks for this every few seconds so
+   the other person's edits turn up while you are looking at the page, and it
+   has to stay cheap enough to ask that often: two integers, no document. */
+if ($do === 'ver' && method() === 'GET') {
+    $rows = all('SELECT scope, version FROM docs WHERE household_id = ? AND scope IN (?, ?)',
+                [$houseId, 'shared', 'private:' . $me]);
+    $out = ['shared' => 0, 'private' => 0];
+    foreach ($rows as $r) {
+        $out[$r['scope'] === 'shared' ? 'shared' : 'private'] = (int) $r['version'];
+    }
+    ok($out);
+}
+
 $scope = (string) ($_GET['scope'] ?? 'shared');
 if (!scope_allowed($scope, $me)) fail(403, 'bad_scope');
 
@@ -68,4 +81,4 @@ if (!empty($res['conflict'])) {
     send(409, ['ok' => false, 'error' => 'conflict',
                'version' => $res['version'], 'body' => $res['body']]);
 }
-ok(['version' => $res['version']]);
+ok(['version' => $res['version'], '__bv' => $res['__bv'] ?? null, '__dv' => $res['__dv'] ?? null]);

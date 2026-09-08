@@ -498,18 +498,15 @@ function applyLegacy(st){
   o.theme=keepTheme;
   o.onboarded=true;
   o.household=S.household;
-  /* Everything is newly authored as far as the server is concerned, otherwise
-     the merge treats the arriving data as older and undoes it on next push. */
-  var nowT=Date.now();
-  o.__t={}; BRANCHES.forEach(function(b){o.__t[b]=nowT;});
-  o.__td={}; Object.keys(o.days||{}).forEach(function(x){o.__td[x]=nowT;});
   for(var kk in o) S[kk]=o[kk];
   save();
-  /* Rebuild the baseline properly. Clearing it without calling syncTouch left
-     __init unset, so the next edit was treated as a first run and its push was
-     quietly dropped. */
-  _snap={}; _snapDays={};
-  syncTouch();
+  /* Bringing old data across is a decision, same as loading a file. It goes up
+     as an overwrite so the server takes all of it and the other phone gets it,
+     rather than being weighed branch by branch against what is already there.
+     Re-baseline rather than blanking the snapshot: a blank one reads as a first
+     run, and a first run takes a baseline instead of saving. */
+  syncSnap();
+  forceNext=true;
   syncPending=true;
   pushState();
 }

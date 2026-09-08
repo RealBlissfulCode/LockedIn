@@ -196,13 +196,13 @@ var S=(function(){
 })();
 
 /* A migration that only lives in memory gets redone on every load and never
-   reaches the account. Write it down now, and stamp what it touched so the
-   next push carries it instead of the server keeping the old shape forever. */
+   reaches the account. Write it down now, and mark what it touched as this
+   device's own work, so the next push carries the new shape up instead of the
+   server handing the old one back. */
+var MIGRATED=[];
 if(S.__migrated&&!LOAD_BROKE){
   delete S.__migrated;
-  var _mt=Date.now();
-  S.__t=S.__t||{};
-  ['members','fin','days','sched','plan'].forEach(function(b){ S.__t[b]=_mt; });
+  MIGRATED=['members','fin','sched','plan'];
   try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}
 }
 function save(){ S.savedAt=Date.now();
@@ -536,14 +536,13 @@ function importAll(file,cb){
       st=migrateSections(migrateToMembers(st));
       var keepV=S.__v;
       S=st; S.__v=keepV;
-      /* A restored file replaces everything on purpose, so every branch is
-         stamped now. Otherwise the merge treats it as older than the server
-         and quietly undoes the restore on the next push. */
-      var nowT=Date.now();
-      S.__t=S.__t||{}; BRANCHES.forEach(function(b){S.__t[b]=nowT;});
-      S.__td=S.__td||{};
-      Object.keys(S.days||{}).forEach(function(d){S.__td[d]=nowT;});
-      save(); cb&&cb(true);
+      /* Loading a file is somebody deciding, out loud, that this is the data.
+         It goes up as an overwrite rather than as one more edit to be weighed
+         against what is already there, so the next push wins every branch and
+         the other phone gets all of it. */
+      syncSnap();
+      forceNext=true;
+      save(); queuePush(); cb&&cb(true);
     }catch(e){ alert('That did not read as a handbook file.\n\n'+e.message); cb&&cb(false); }
   };
   fr.readAsText(file);

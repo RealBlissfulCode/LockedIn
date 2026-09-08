@@ -28,6 +28,11 @@ var docVer=0, privVer=0;
 var syncState='off', syncAt=null, syncMsg='', syncTimer=null;
 var syncPending=false, syncBusy=false, syncFails=0;
 var _snap={}, _snapDays={};
+/* The branch version numbers this device has seen, straight from the server.
+   Higher on the server than in here means somebody else changed that branch
+   after the last time we looked. See branch_versions in api/lib/store.php. */
+var baseBv={}, baseDv={};
+var forceNext=false;
 
 /* Seconds on a "last saved" stamp are noise, and they push the time onto two
    lines in a narrow tile. */
@@ -58,51 +63,131 @@ function privatePart(){
   return c;
 }
 
-/* Stamp only what actually changed, so a phone that touched the shopping list
-   does not claim to be the newer author of the budget as well. */
-/* The first call takes a baseline and nothing else. It used to stamp every
-   branch with the current time, which meant a browser that had never seen this
-   account declared itself the newest author of everything in it, and then the
-   merge threw away the real data coming back from the server. Signing in on a
-   second device got you an empty app.
-
-   A stamp is a claim that this device changed something. A device that has
-   just opened has changed nothing, so it claims nothing, and anything the
-   server has stamped wins. Restoring a file or bringing old data across stamps
-   deliberately, which is what makes those win instead. */
-function syncTouch(){
-  var nowT=Date.now(), first=!_snap.__init;
-  S.__t=S.__t||{}; S.__td=S.__td||{};
+/* The pieces the document is merged in, matching doc_units in api/lib/store.php.
+ *
+ * A whole branch is too coarse. fin holds the cost lines, the income lines, the
+ * purchase lists and the scenarios, so merging fin as one unit means two people
+ * touching anything financial at the same moment costs one of them everything
+ * they just did. Anything shaped like a map splits one level down, so a cost
+ * rename on a phone and a new list on a laptop both survive. Arrays stay whole,
+ * because half an array is not something anybody wants merged. */
+var USEP='\u0001';
+function isMap(v){ return v&&typeof v==='object'&&!Array.isArray(v); }
+function unitsOf(o){
+  var out={};
   BRANCHES.forEach(function(b){
-    var cur=JSON.stringify(S[b]===undefined?null:S[b]);
-    if(first){ _snap[b]=cur; return; }
-    if(_snap[b]!==cur){ _snap[b]=cur; S.__t[b]=nowT; }
+    var v=o?o[b]:undefined;
+    if(isMap(v)){ for(var k in v) out[b+USEP+k]=1; }
+    else out[b]=1;
   });
-  var days=S.days||{};
-  Object.keys(days).forEach(function(d){
-    var cur=JSON.stringify(days[d]);
-    if(first){ _snapDays[d]=cur; return; }
-    if(_snapDays[d]!==cur){ _snapDays[d]=cur; S.__td[d]=nowT; }
-  });
-  _snap.__init=true;
-  if(!first) queuePush();
+  return out;
+}
+function unitGet(o,u){
+  if(!o) return undefined;
+  var i=u.indexOf(USEP);
+  if(i<0) return o[u];
+  var a=u.slice(0,i), b=u.slice(i+1);
+  return isMap(o[a])?o[a][b]:undefined;
+}
+function unitSet(o,u,val){
+  var i=u.indexOf(USEP);
+  if(i<0){ if(val===undefined) delete o[u]; else o[u]=val; return; }
+  var a=u.slice(0,i), b=u.slice(i+1);
+  if(!isMap(o[a])) o[a]={};
+  if(val===undefined) delete o[a][b]; else o[a][b]=val;
+}
+function allUnits(remote){
+  var u=unitsOf(S);
+  if(remote){ var r=unitsOf(remote); for(var k in r) u[k]=1; }
+  return Object.keys(u);
 }
 
-/* Branch by branch, newest stamp wins. Days are merged one date at a time. */
-function mergeIn(remote){
+/* What this device has changed since it last agreed with the server. _snap is
+   that agreement: every pull and every successful push resets it. A unit whose
+   JSON no longer matches its snapshot is one you edited, and an edit in front
+   of you always beats an older copy coming down the wire. */
+function dirtyBranch(u){
+  return _snap[u]!==JSON.stringify(unitGet(S,u)===undefined?null:unitGet(S,u));
+}
+function snapOne(u){
+  _snap[u]=JSON.stringify(unitGet(S,u)===undefined?null:unitGet(S,u));
+}
+function dirtyDay(d){
+  return _snapDays[d]!==JSON.stringify((S.days||{})[d]);
+}
+function anyDirty(){
+  if(!_snap.__init) return false;
+  var n=false;
+  allUnits().forEach(function(u){ if(dirtyBranch(u)) n=true; });
+  Object.keys(S.days||{}).forEach(function(d){ if(dirtyDay(d)) n=true; });
+  return n;
+}
+/* Reset the agreement to whatever is in S right now. Called after a pull and
+   after a push, because both mean the server and this device match again. */
+function syncSnap(){
+  _snap={}; _snapDays={};
+  allUnits().forEach(snapOne);
+  var days=S.days||{};
+  Object.keys(days).forEach(function(d){ _snapDays[d]=JSON.stringify(days[d]); });
+  /* Anything a migration rewrote on the way in counts as edited here, so it
+     goes up rather than being replaced by the older shape on the server. */
+  if(typeof MIGRATED!=='undefined') allUnits().forEach(function(u){
+    if(MIGRATED.indexOf(u.split(USEP)[0])>=0) _snap[u]='\u0000';
+  });
+  _snap.__init=true;
+}
+/* Called after anything writes to S. Work out whether that actually changed
+   something and queue a save if it did. */
+function syncTouch(){
+  if(!_snap.__init){ syncSnap(); return; }
+  if(anyDirty()) queuePush();
+}
+
+/* Branch by branch, using the version numbers the server put on them.
+ *
+ * Take the server's copy of a branch when its number is higher than the one we
+ * hold and we have not touched that branch ourselves. If we have touched it,
+ * ours stays and goes up on the next push, so typing into the schedule is never
+ * undone by a refresh landing on top of it. Two people editing different things
+ * both keep their work, because the decision is made per branch and per day
+ * rather than over the whole document. */
+function mergeIn(remote,ver){
   if(!remote||typeof remote!=='object') return false;
-  var rt=remote.__t||{}, rd=remote.__td||{}, changed=false;
-  S.__t=S.__t||{}; S.__td=S.__td||{};
-  BRANCHES.forEach(function(b){
-    if(!(b in remote)) return;
-    if((rt[b]||0)>(S.__t[b]||0)){ S[b]=remote[b]; S.__t[b]=rt[b]; changed=true; }
+  var rb=remote.__bv||{}, rd=remote.__dv||{}, changed=false;
+  /* A document written before the server started numbering branches has no
+     numbers on it. Read the whole thing as being at the document's own version,
+     which is true and gets the first pull after an update to work. */
+  var fb=ver||0;
+  allUnits(remote).forEach(function(u){
+    var rv=rb[u]!==undefined?rb[u]:fb;
+    if(rv<=(baseBv[u]||0)) return;      /* nothing new over there */
+    if(dirtyBranch(u)) return;          /* being edited here, ours wins */
+    var rvVal=unitGet(remote,u);
+    if(rvVal===undefined&&rb[u]===undefined) return;  /* not carried, not a delete */
+    unitSet(S,u,rvVal); snapOne(u); baseBv[u]=rv; changed=true;
   });
   var rdays=remote.days||{};
   S.days=S.days||{};
   Object.keys(rdays).forEach(function(d){
-    if((rd[d]||0)>(S.__td[d]||0)){ S.days[d]=rdays[d]; S.__td[d]=rd[d]; changed=true; }
+    var rv=rd[d]!==undefined?rd[d]:fb;
+    if(rv<=(baseDv[d]||0)) return;
+    if(dirtyDay(d)) return;
+    S.days[d]=rdays[d]; baseDv[d]=rv; changed=true;
   });
   return changed;
+}
+/* Everything we did not take, we still record as seen, so a branch we are
+   editing does not keep looking new every time we ask. */
+function seenBv(remote,ver){
+  var rb=(remote&&remote.__bv)||{}, rd=(remote&&remote.__dv)||{}, fb=ver||0, d;
+  allUnits(remote).forEach(function(u){
+    var rv=rb[u]!==undefined?rb[u]:fb;
+    if(rv>(baseBv[u]||0)&&!dirtyBranch(u)) baseBv[u]=rv;
+  });
+  for(d in ((remote&&remote.days)||{})){
+    var dv=rd[d]!==undefined?rd[d]:fb;
+    if(dv>(baseDv[d]||0)&&!dirtyDay(d)) baseDv[d]=dv;
+  }
 }
 
 function pullState(){
@@ -115,19 +200,25 @@ function pullState(){
     docVer=r.shared.version||0;
     privVer=r.private.version||0;
     serverWeight=stateWeight(r.shared.body);
-    var changed=false;
-    if(r.shared.body) changed=mergeIn(r.shared.body)||changed;
+    var hadLocal=anyDirty();
+    if(r.shared.body){ mergeIn(r.shared.body,docVer); seenBv(r.shared.body,docVer); }
     if(r.private.body){ PRIVATE.forEach(function(k){
       if(r.private.body[k]!==undefined) S[k]=r.private.body[k]; }); }
     syncAt=Date.now();
     syncSet('idle');
-    /* Take a snapshot without stamping, otherwise arriving data looks like a
-       local edit and gets pushed straight back. */
-    _snap={}; _snapDays={}; syncTouch();
+    /* Anything this device was still holding is left dirty on purpose, so the
+       snapshot only moves forward over branches that now match the server. A
+       half typed schedule is not thrown away by a poll landing on it. */
+    allUnits().forEach(function(u){ if(!dirtyBranch(u)) snapOne(u); });
+    var days=S.days||{};
+    Object.keys(days).forEach(function(d){ if(!dirtyDay(d)) _snapDays[d]=JSON.stringify(days[d]); });
+    _snap.__init=true;
     /* Always write, not only when the merge moved something. A device opening
        this account for the first time has nothing saved locally at all, and
        "nothing changed" is exactly the case where it most needs writing. */
     try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}
+    if(hadLocal||anyDirty()) queuePush();
+    if(typeof redrawFromSync==='function') redrawFromSync();
   }).catch(function(){ syncSet('offline'); });
 }
 
@@ -135,7 +226,9 @@ function queuePush(){
   if(syncState==='off') return;
   syncPending=true;
   if(syncTimer) clearTimeout(syncTimer);
-  syncTimer=setTimeout(pushState,1200);
+  /* Short enough that the other person sees it while you are still looking at
+     the screen, long enough not to send a request per keystroke. */
+  syncTimer=setTimeout(pushState,600);
 }
 
 /* A rough size for a document, used only to notice a cliff. Counting the
@@ -171,19 +264,44 @@ function pushState(){
   }
   syncBusy=true; syncPending=false;
   syncSet('push');
+  var sent=JSON.stringify(S), wasForce=forceNext;
   var payload=stripLocal(S);
-  payload.days=S.days; payload.__t=S.__t; payload.__td=S.__td;
+  payload.days=S.days;
+  if(wasForce) payload.__force=true;
   api('doc.php?scope=shared',{body:{version:docVer,body:payload}}).then(function(r){
     if(r.ok){
       docVer=r.version; syncAt=Date.now(); syncFails=0; syncSet('idle');
       serverWeight=stateWeight(S);
+      if(wasForce) forceNext=false;
+      /* The server says which branches it recorded and at what version. Anything
+         that has not been edited again since we sent it now matches the server,
+         so its snapshot moves up; anything typed in the meantime stays dirty and
+         goes in the next push. */
+      if(r.__bv) for(var b in r.__bv) baseBv[b]=r.__bv[b];
+      if(r.__dv) for(var d in r.__dv) baseDv[d]=r.__dv[d];
+      var still=JSON.parse(sent);
+      allUnits(still).forEach(function(u){
+        if(JSON.stringify(unitGet(S,u))===JSON.stringify(unitGet(still,u))) snapOne(u);
+      });
+      /* The snapshot is real again. Leaving this unset made the next edit look
+         like the first one this session, and a first one takes a baseline
+         instead of queueing a save, so it went nowhere. */
+      _snap.__init=true;
+      Object.keys(S.days||{}).forEach(function(d){
+        if(JSON.stringify(S.days[d])===JSON.stringify((still.days||{})[d]))
+          _snapDays[d]=JSON.stringify(S.days[d]);
+      });
+      if(anyDirty()) queuePush();
       return pushPrivate();
     }
     if(r.__status===409){
-      /* Somebody else wrote while we were typing. Merge theirs in, take their
-         version, and try once more on the next tick. */
+      /* Somebody else wrote while we were typing. Take what they have for the
+         branches we are not touching, keep ours for the ones we are, and send
+         again on the next tick. */
       docVer=r.version||docVer;
-      if(mergeIn(r.body)){ try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){} }
+      if(r.body){ mergeIn(r.body,docVer); seenBv(r.body,docVer); }
+      try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}
+      if(typeof redrawFromSync==='function') redrawFromSync();
       syncPending=true; syncSet('idle');
       setTimeout(function(){ syncBusy=false; pushState(); },400);
       return 'retry';
@@ -208,11 +326,39 @@ function pushPrivate(){
   });
 }
 
+/* Watching for the other person.
+ *
+ * Two people on one household need each other's edits to turn up while they are
+ * looking at the page, not on the next refresh. A full document every few
+ * seconds would be rude to a shared host, so this asks for the version numbers
+ * instead, which is two integers, and only pulls the document when one of them
+ * has moved. Backgrounded tabs slow right down; nobody is reading them. */
+var verTimer=null, verFails=0;
+function checkVersions(){
+  if(syncState==='off'||syncBusy) return;
+  api('doc.php?do=ver').then(function(r){
+    if(!r||!r.ok){ verFails++; return; }
+    verFails=0;
+    if((r.shared||0)!==docVer||(r.private||0)!==privVer) pullState();
+  }).catch(function(){ verFails++; });
+}
+function watchTick(){
+  if(verTimer) clearTimeout(verTimer);
+  var hidden=document.hidden;
+  /* Back off when the network keeps refusing rather than hammering it. */
+  var every=hidden?45000:(verFails>3?30000:5000);
+  verTimer=setTimeout(function(){ checkVersions(); watchTick(); },every);
+}
+
 function syncStart(){
   syncSet('idle');
   window.addEventListener('focus',function(){ if(!syncBusy) pullState(); });
   window.addEventListener('online',function(){ pullState(); });
-  setInterval(function(){ if(!syncBusy&&!syncPending) pullState(); },90000);
+  document.addEventListener('visibilitychange',function(){
+    if(!document.hidden&&!syncBusy) pullState();
+    watchTick();
+  });
+  watchTick();
   /* A tab closing mid-edit should still land. */
   window.addEventListener('pagehide',function(){
     if(syncPending&&!syncBusy){ if(syncTimer) clearTimeout(syncTimer); pushState(); }
