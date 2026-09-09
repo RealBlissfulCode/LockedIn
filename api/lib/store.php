@@ -141,12 +141,24 @@ function doc_weight(array $b): int {
 
 /* Keep what is being replaced, and drop anything older than a month. Twenty
    versions back is plenty to undo a bad client and small enough not to matter. */
+/* Keeping the old copy must never be the reason a save fails.
+ *
+ * This is a safety net, not the thing being saved. It was added after some
+ * databases had already been set up, so on one of those the table is simply not
+ * there, and every save since has died on this line and come back as a 500 with
+ * nothing to say for itself. Somebody was watching their work vanish for a week
+ * because of a backup they never asked for. It tries, and if it cannot, the
+ * save carries on without it. */
 function keep_history(int $houseId, string $scope, string $json, int $version, int $weight): void {
-    q('INSERT INTO doc_history (household_id, scope, body, version, weight, saved_at)
-       VALUES (?, ?, ?, ?, ?, ?)', [$houseId, $scope, $json, $version, $weight, now()]);
-    if (random_int(1, 20) === 1) {
-        q('DELETE FROM doc_history WHERE household_id = ? AND scope = ? AND saved_at < ?',
-          [$houseId, $scope, in_days(-30)]);
+    try {
+        q('INSERT INTO doc_history (household_id, scope, body, version, weight, saved_at)
+           VALUES (?, ?, ?, ?, ?, ?)', [$houseId, $scope, $json, $version, $weight, now()]);
+        if (random_int(1, 20) === 1) {
+            q('DELETE FROM doc_history WHERE household_id = ? AND scope = ? AND saved_at < ?',
+              [$houseId, $scope, in_days(-30)]);
+        }
+    } catch (Throwable $e) {
+        error_log('history skipped: ' . $e->getMessage());
     }
 }
 

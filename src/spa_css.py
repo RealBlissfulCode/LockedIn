@@ -530,6 +530,11 @@ transition:.18s var(--ez)}
 /* ------------------------------------------------------------ misc polish */
 :focus-visible{outline:2px solid var(--brass);outline-offset:2px;border-radius:3px}
 .tw table{min-width:560px}
+/* A table narrow enough to fit does not need a floor under it. This was forcing
+   560px on two and three column tables inside a modal that is 600px wide, which
+   put a sideways scrollbar under a table with nothing to scroll to. */
+.tw.cards table{min-width:0}
+.tw.cards{overflow-x:visible}
 /* The money tables carry a switch column on top of their own eight. */
 .tw.wide table{min-width:700px}
 .chip{overflow-wrap:break-word}

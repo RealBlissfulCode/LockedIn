@@ -70,7 +70,20 @@ $in = body();
 if (!isset($in['body']) || !is_array($in['body'])) fail(400, 'no_body');
 $base = (int) ($in['version'] ?? 0);
 
-$res = write_doc($houseId, $scope, $in['body'], $base, $me);
+/* Say what actually went wrong.
+ *
+ * An unhandled throw here came back as a bare 500 with the reason only in a log
+ * on the server, so from the outside "it will not save" was all anybody could
+ * tell, on any device, for as long as it lasted. The reason goes back to the
+ * person now, because they are the one who can act on it. */
+try {
+    $res = write_doc($houseId, $scope, $in['body'], $base, $me);
+} catch (Throwable $e) {
+    error_log('write failed: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
+    $msg = $e->getMessage();
+    if (strlen($msg) > 200) $msg = substr($msg, 0, 200) . '...';
+    send(500, ['ok' => false, 'error' => 'save_failed', 'detail' => $msg]);
+}
 if (!empty($res['refused'])) {
     send(409, ['ok' => false, 'error' => 'would_wipe',
                'was' => $res['was'], 'now' => $res['now'], 'version' => $res['version']]);
