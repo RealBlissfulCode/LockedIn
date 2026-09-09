@@ -53,7 +53,17 @@ with sync_playwright() as pw:
     pg.wait_for_timeout(250)
     keys=pg.evaluate("()=>[...document.querySelectorAll('.mask [data-io]')].map(b=>b.dataset.io)")
     pg.evaluate("()=>{document.querySelectorAll('.mask').forEach(m=>m.remove())}")
-    ck("every section is registered", len(keys)==10, keys)
+    ck("every section is registered", len(keys)==20, keys)
+    # nothing in the account may be missing from the section files
+    missing=pg.evaluate("""()=>{
+      const s=JSON.parse(localStorage.getItem('lockedin.v7'));
+      const device=['v','who','savedAt','theme','onboarded','seeded','seeded6','__sections7',
+                    '__t','__td','__bv','__dv','__migrated','secret'];
+      const covered=new Set(%s);
+      return Object.keys(s).filter(k=>device.indexOf(k)<0&&!covered.has(k));
+    }""" % json.dumps(['members','household','prefs','ingOv','fav','lists','mine','photos',
+                       'shop','days','fin','plan','sched','exLog']))
+    ck("no part of the account is left out", not missing, missing)
     for k in keys:
         openIO(k)
         with pg.expect_download() as d:
@@ -64,7 +74,9 @@ with sync_playwright() as pw:
             rr=list(_csv.reader(fh))
         # counted straight out of his own file, not guessed
         want={'plans':68,'schedule':14,'income':9,'costs':40,'purchases':21,
-              'strategies':65,'shopping':1,'daylog':23,'breakdown':1}
+              'strategies':65,'shopping':1,'daylog':23,'breakdown':1,
+              'templates':1,'people':3,'recipelists':1,'traininglog':1,
+              'shifts':1,'actuals':1,'scenarios':1,'meals':1,'spending':1,'photos':3}
         n=len(rr)
         if k in want:
             ck("%s exports every row" % k, n==want[k], "%d rows, expected %d"%(n,want[k]))

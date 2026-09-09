@@ -61,12 +61,12 @@ function ynBool(v){ return /^(y|yes|true|1|done|x)$/i.test(String(v).trim()); }
    like a cost line's breakdown or a comparison list's own columns. */
 var SECTION_IO=[
  {key:'plans', label:'Plans', page:'planning',
-  head:['Plan','Section','Item','Done','Note'],
+  head:['Road','Plan','Section','Item','Done','Note'],
   rows:function(){
     var out=[];
     planCols().forEach(function(c){ (c.subs||[]).forEach(function(s){
       (s.items||[]).forEach(function(i){
-        out.push([c.name,s.name,i.text,i.done?'yes':'',i.note||'']); }); }); });
+        out.push([trackName(planTrack(c)),c.name,s.name,i.text,i.done?'yes':'',i.note||'']); }); }); });
     return out;
   },
   load:function(rows,replace){
@@ -76,7 +76,15 @@ var SECTION_IO=[
       var pn=g('Plan',r)||'Imported', sn=g('Section',r)||'Everything else';
       var c=null;
       (S.plan.cols||[]).forEach(function(x){ if(!c&&x.name===pn) c=x; });
-      if(!c){ c={id:uid(),name:pn,note:'',subs:[]}; S.plan.cols.push(c); }
+      if(!c){
+        c={id:uid(),name:pn,note:'',subs:[]};
+        /* Only set the road when the sheet actually names one. A file written
+           before roads existed has no such column, and guessing from the plan's
+           own name beats dropping all of it on the first road. */
+        var road=g('Road',r);
+        if(road) c.track=trackKeyFor(road);
+        S.plan.cols.push(c);
+      }
       var s=null;
       (c.subs=c.subs||[]).forEach(function(x){ if(!s&&x.name===sn) s=x; });
       if(!s){ s={id:uid(),name:sn,note:'',items:[]}; c.subs.push(s); }
@@ -275,6 +283,208 @@ var SECTION_IO=[
   json:function(){ return {ingOv:S.ingOv}; },
   loadJson:function(o){ if(o.ingOv) S.ingOv=o.ingOv; }},
 
+ {key:'templates', label:'Schedule templates', page:'schedule/templates',
+  head:['Template','Day','Who','What','From','To','Where'],
+  rows:function(){
+    var out=[], T=(S.sched||{}).tmpl||{};
+    Object.keys(T).forEach(function(n){
+      (T[n]||[]).forEach(function(day,di){
+        (day||[]).forEach(function(x){
+          out.push([n,DOW[di]||di,WHO(x.who),x.what||'',x.from||'',x.to||'',x.where||'']); }); }); });
+    return out;
+  },
+  load:function(rows,replace){
+    var g=csvCols(rows[0]), body=rows.slice(1);
+    S.sched=S.sched||{tmpl:{},cols:[]};
+    if(replace) S.sched.tmpl={};
+    body.forEach(function(r){
+      var n=g('Template',r)||'Imported';
+      var T=S.sched.tmpl[n]||(S.sched.tmpl[n]=[[],[],[],[],[],[],[]]);
+      var d=g('Day',r), di=DOW.indexOf(d);
+      if(di<0) di=Math.max(0,Math.min(6,parseInt(d,10)||0));
+      T[di]=T[di]||[];
+      T[di].push({who:whoIdFor(g('Who',r)),what:g('What',r),
+        from:g('From',r),to:g('To',r),where:g('Where',r)});
+    });
+  },
+  json:function(){ return {sched:S.sched}; },
+  loadJson:function(o){ if(o.sched) S.sched=o.sched; }},
+
+ {key:'people', label:'People and preferences', page:'household',
+  head:['Name','Sex','Weight','Height','Age','Body fat','Activity','Goal'],
+  rows:function(){
+    return MEMS().map(function(m){
+      return [m.name,m.sex,m.w||'',m.h||'',m.age||'',m.bf||'',m.act||'',m.goal||'']; });
+  },
+  load:function(rows,replace){
+    var g=csvCols(rows[0]), body=rows.slice(1);
+    if(replace) S.members=[];
+    body.forEach(function(r){
+      if(!g('Name',r)) return;
+      var m=blankMember(g('Name',r),/^f/i.test(g('Sex',r,'m'))?'f':'m');
+      if(g('Weight',r)) m.w=num(g('Weight',r));
+      if(g('Height',r)) m.h=num(g('Height',r));
+      if(g('Age',r)) m.age=num(g('Age',r));
+      if(g('Body fat',r)) m.bf=num(g('Body fat',r));
+      if(g('Activity',r)) m.act=num(g('Activity',r));
+      if(g('Goal',r)) m.goal=num(g('Goal',r));
+      S.members.push(m);
+    });
+    if(!ME()||!MEMS().some(function(x){return x.id===ME();})) S.who=(MEMS()[0]||{}).id||null;
+  },
+  json:function(){ return {members:S.members,household:S.household,prefs:S.prefs}; },
+  loadJson:function(o){ if(o.members) S.members=o.members;
+    if(o.household!==undefined) S.household=o.household;
+    if(o.prefs) S.prefs=o.prefs; }},
+
+ {key:'recipelists', label:'Recipe lists and favourites', page:'lists',
+  head:['List','Recipe'],
+  rows:function(){
+    var out=[], L=S.lists||{};
+    Object.keys(L).forEach(function(n){
+      (L[n]||[]).forEach(function(id){ var r=byId(id);
+        out.push([n,r?r.n:id]); }); });
+    (S.fav||[]).forEach(function(id){ var r=byId(id); out.push(['Favourites',r?r.n:id]); });
+    return out;
+  },
+  load:function(rows,replace){
+    var g=csvCols(rows[0]), body=rows.slice(1);
+    if(replace){ S.lists={}; S.fav=[]; }
+    var byName={};
+    all().forEach(function(r){ byName[r.n.toLowerCase()]=r.id; });
+    body.forEach(function(r){
+      var ln=g('List',r)||'Imported', nm=g('Recipe',r);
+      var id=byName[nm.toLowerCase()]||(byId(nm)?nm:null);
+      if(!id) return;
+      if(/^favourites?$/i.test(ln)){ if(S.fav.indexOf(id)<0) S.fav.push(id); return; }
+      S.lists[ln]=S.lists[ln]||[];
+      if(S.lists[ln].indexOf(id)<0) S.lists[ln].push(id);
+    });
+  },
+  json:function(){ return {lists:S.lists,fav:S.fav}; },
+  loadJson:function(o){ if(o.lists) S.lists=o.lists; if(o.fav) S.fav=o.fav; }},
+
+ {key:'traininglog', label:'Training log', page:'training',
+  head:['Date','Exercise','Sets','Reps','Weight','Note'],
+  rows:function(){
+    return (S.exLog||[]).map(function(x){
+      return [x.date||'',x.name||x.ex||'',x.sets||'',x.reps||'',x.w||'',x.note||'']; });
+  },
+  load:function(rows,replace){
+    var g=csvCols(rows[0]), body=rows.slice(1);
+    S.exLog=replace?[]:(S.exLog||[]);
+    body.forEach(function(r){
+      if(!g('Exercise',r)) return;
+      S.exLog.push({id:uid(),date:g('Date',r)||today(),name:g('Exercise',r),
+        sets:g('Sets',r),reps:g('Reps',r),w:num(g('Weight',r)),note:g('Note',r)});
+    });
+  },
+  json:function(){ return {exLog:S.exLog}; },
+  loadJson:function(o){ if(o.exLog) S.exLog=o.exLog; }},
+
+ {key:'shifts', label:'Shifts worked', page:'financial/actual',
+  head:['Date','Job','Hours','Gross','Net','Note'],
+  rows:function(){
+    return (S.fin.shifts||[]).map(function(x){
+      var j=(S.fin.jobs||[]).filter(function(y){return y.id===x.jobId;})[0];
+      return [x.date,j?j.name:'',x.hours||'',x.gross||'',x.net||'',x.note||'']; });
+  },
+  load:function(rows,replace){
+    var g=csvCols(rows[0]), body=rows.slice(1);
+    S.fin.shifts=replace?[]:(S.fin.shifts||[]);
+    body.forEach(function(r){
+      var jn=g('Job',r), j=(S.fin.jobs||[]).filter(function(y){return y.name===jn;})[0];
+      S.fin.shifts.push({id:uid(),date:g('Date',r)||today(),jobId:j?j.id:'',
+        hours:num(g('Hours',r)),gross:num(g('Gross',r)),net:num(g('Net',r)),note:g('Note',r)});
+    });
+  },
+  json:function(){ return {shifts:S.fin.shifts}; },
+  loadJson:function(o){ if(o.shifts) S.fin.shifts=o.shifts; }},
+
+ {key:'actuals', label:'What actually happened', page:'financial/actual',
+  head:['Date','Line','Kind','Amount','Note'],
+  rows:function(){
+    return (S.fin.actuals||[]).map(function(a){
+      return [a.date||'',a.name||'',a.kind||'',a.amt||0,a.note||'']; });
+  },
+  load:function(rows,replace){
+    var g=csvCols(rows[0]), body=rows.slice(1);
+    S.fin.actuals=replace?[]:(S.fin.actuals||[]);
+    body.forEach(function(r){
+      S.fin.actuals.push({id:uid(),date:g('Date',r)||today(),name:g('Line',r),
+        kind:g('Kind',r)||'cost',amt:num(g('Amount',r)),note:g('Note',r)});
+    });
+  },
+  json:function(){ return {actuals:S.fin.actuals}; },
+  loadJson:function(o){ if(o.actuals) S.fin.actuals=o.actuals; }},
+
+ {key:'scenarios', label:'Saved scenarios', page:'financial/strategies',
+  head:['Scenario','Basis','Housing','Income lines','Cost lines'],
+  rows:function(){
+    var Sc=S.fin.scenarios||{};
+    return Object.keys(Sc).map(function(n){ var x=Sc[n]||{};
+      return [n,x.mode||'',x.path||'',(x.jobs||[]).length,(x.costs||[]).length]; });
+  },
+  load:function(){ throw new Error('scenarios only come back from a file, not a spreadsheet'); },
+  json:function(){ return {scenarios:S.fin.scenarios}; },
+  loadJson:function(o){ if(o.scenarios) S.fin.scenarios=o.scenarios; }},
+
+ {key:'meals', label:'Meals logged', page:'meals',
+  head:['Date','Time','Meal'],
+  rows:function(){
+    var out=[];
+    Object.keys(S.days||{}).sort().forEach(function(d){
+      ((S.days[d]||{}).meals||[]).forEach(function(m){
+        var r=byId(m.id);
+        out.push([d,m.at||'',r?r.n:m.id]); }); });
+    return out;
+  },
+  load:function(rows,replace){
+    var g=csvCols(rows[0]), body=rows.slice(1);
+    if(replace) Object.keys(S.days||{}).forEach(function(d){ S.days[d].meals=[]; });
+    var byName={};
+    all().forEach(function(r){ byName[r.n.toLowerCase()]=r.id; });
+    body.forEach(function(r){
+      var d=g('Date',r); if(!d) return;
+      var id=byName[g('Meal',r).toLowerCase()]||g('Meal',r);
+      var day=dayLog(d); day.meals=day.meals||[];
+      day.meals.push({id:id,at:g('Time',r)||'12:00'});
+    });
+  },
+  json:function(){ return {days:S.days}; },
+  loadJson:function(o){ if(o.days) S.days=o.days; }},
+
+ {key:'spending', label:'Spending logged', page:'schedule',
+  head:['Date','What','Amount'],
+  rows:function(){
+    var out=[];
+    Object.keys(S.days||{}).sort().forEach(function(d){
+      ((S.days[d]||{}).spend||[]).forEach(function(x){
+        out.push([d,x.what||x.n||'',x.amt||0]); }); });
+    return out;
+  },
+  load:function(rows,replace){
+    var g=csvCols(rows[0]), body=rows.slice(1);
+    if(replace) Object.keys(S.days||{}).forEach(function(d){ S.days[d].spend=[]; });
+    body.forEach(function(r){
+      var d=g('Date',r); if(!d) return;
+      var day=dayLog(d); day.spend=day.spend||[];
+      day.spend.push({id:uid(),what:g('What',r),amt:num(g('Amount',r))});
+    });
+  },
+  json:function(){ return {days:S.days}; },
+  loadJson:function(o){ if(o.days) S.days=o.days; }},
+
+ {key:'photos', label:'Photos and private notes', page:'meals',
+  head:['What','Count'],
+  rows:function(){
+    return [['Photos',Object.keys(S.photos||{}).length],
+            ['Private notes',Object.keys(S.mine||{}).length]];
+  },
+  load:function(){ throw new Error('these only come back from a file, not a spreadsheet'); },
+  json:function(){ return {photos:S.photos,mine:S.mine}; },
+  loadJson:function(o){ if(o.photos) S.photos=o.photos; if(o.mine) S.mine=o.mine; }},
+
  {key:'daylog', label:'Daily log', page:'meals',
   head:['Date','Training','Weight','Notes'],
   rows:function(){
@@ -294,6 +504,22 @@ var SECTION_IO=[
   json:function(){ return {days:S.days}; },
   loadJson:function(o){ if(o.days) S.days=o.days; }}
 ];
+
+/* A road name written by a person back to the key it means. */
+function trackKeyFor(name){
+  name=String(name||'').trim().toLowerCase();
+  if(!name) return 'now';
+  var hit=null;
+  PLAN_TRACKS.forEach(function(t){
+    if(!hit&&(t[0]===name||t[1].toLowerCase()===name)) hit=t[0];
+  });
+  if(hit) return hit;
+  if(/rent|lease/.test(name)) return 'rent';
+  if(/buy|mortgage|purchase/.test(name)) return 'buy';
+  if(/either|both|any/.test(name)) return 'both';
+  if(/undecided|question|open/.test(name)) return 'open';
+  return 'now';
+}
 
 function sectionIO(key){
   var hit=null;
