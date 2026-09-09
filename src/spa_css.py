@@ -191,6 +191,28 @@ align-items:center;gap:7px;justify-content:center}
 .f{display:block;margin-bottom:13px}
 .f>span{display:block;font:700 9.5px/1 var(--f-body);letter-spacing:.18em;text-transform:uppercase;
 color:var(--ink-4);margin-bottom:6px}
+/* Selecting text used the browser's own blue, which belongs to no part of this
+   palette and looks like something has gone wrong when it lands across a label
+   and a field at once. */
+::selection{background:rgba(168,85,247,.34);color:var(--ink)}
+::-moz-selection{background:rgba(168,85,247,.34);color:var(--ink)}
+
+/* Chrome paints a field it thinks it autofilled in its own blue, ignoring the
+   whole palette, and it does it to the label sitting on top of it too. There is
+   no property that turns it off, so the background is an inset shadow the blue
+   cannot reach and the transition is parked far enough out that it never runs. */
+input:-webkit-autofill,input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,input:-webkit-autofill:active,
+textarea:-webkit-autofill,select:-webkit-autofill{
+-webkit-text-fill-color:var(--ink)!important;
+-webkit-box-shadow:0 0 0 1000px var(--bg-2) inset!important;
+box-shadow:0 0 0 1000px var(--bg-2) inset!important;
+caret-color:var(--ink);
+transition:background-color 99999s ease-out 0s}
+.prow input:-webkit-autofill,.prow input:-webkit-autofill:focus{
+-webkit-box-shadow:0 0 0 1000px var(--panel) inset!important;
+box-shadow:0 0 0 1000px var(--panel) inset!important}
+
 .f input,.f select,.f textarea{width:100%;padding:10px 12px;border:1px solid var(--line-2);
 border-radius:var(--r-s);background:var(--bg-2);color:var(--ink);font-weight:500;transition:.16s var(--ez)}
 /* A select clips its text rather than wrapping it, and the arrow sits on top of
@@ -743,21 +765,38 @@ background:var(--panel-2)}
 .plab{font:700 9px/1 var(--f-body);letter-spacing:.18em;text-transform:uppercase;
 color:var(--ink-4)}
 .parts{margin-top:10px}
-.prow{display:grid;grid-template-columns:1fr 82px 104px auto;gap:8px;margin-bottom:8px;
-align-items:end}
-.pf{display:flex;flex-direction:column;gap:4px;min-width:0}
-.pf>span{font:700 9px/1 var(--f-body);letter-spacing:.14em;text-transform:uppercase;
+/* Said once, at the top, so the rows underneath are just the rows. */
+/* The header and the rows have to be the same grid, so the last column is a
+   fixed width rather than auto: an empty spacer measures nothing and a Remove
+   button measures plenty, and the difference came out of the first column,
+   which put every heading over the wrong box. */
+.pgrid,.phead2,.prow{display:grid;
+grid-template-columns:minmax(0,1fr) 76px 92px 84px 94px;gap:9px;align-items:center}
+.phead2{margin:12px 0 6px;padding:0 2px}
+.phead2>span{font:700 9px/1 var(--f-body);letter-spacing:.14em;text-transform:uppercase;
 color:var(--ink-4)}
+.phead2 .psumh{text-align:right}
+.prow{margin-bottom:7px}
+.pf{display:flex;flex-direction:column;gap:4px;min-width:0}
+.pf>span{display:none}
 .prow input{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:var(--r-s);
 background:var(--panel);color:var(--ink);font-size:16px}
 .prow input:focus{outline:0;border-color:var(--brass);box-shadow:var(--glow)}
-.prow .pdel{white-space:nowrap}
+.psum{font-family:var(--f-mono);font-size:13.5px;font-weight:700;text-align:right;
+color:var(--ink-2);white-space:nowrap}
+.prow .pdel{white-space:nowrap;width:100%;justify-content:center}
+.pempty{margin:10px 0 0}
 @media (max-width:620px){
-.prow{grid-template-columns:1fr 1fr;grid-template-areas:"n n" "q e" "d d";gap:9px;
+/* No room for a header row on a phone, so each part carries its own labels and
+   becomes a card, with what it comes to sitting on the same line as Remove. */
+.phead2{display:none}
+.prow{grid-template-columns:1fr 1fr;grid-template-areas:"n n" "q e" "s d";gap:10px;
 padding:12px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel);
-margin-bottom:10px}
+margin-bottom:10px;align-items:end}
 .prow .pfn{grid-area:n}.prow .pf:nth-of-type(2){grid-area:q}.prow .pf:nth-of-type(3){grid-area:e}
+.prow .psum{grid-area:s;text-align:left;font-size:15px;color:var(--ink);align-self:center}
 .prow .pdel{grid-area:d;min-height:44px;justify-content:center}
+.prow .pf>span{display:block}
 .prow input{min-height:44px}
 .pamt{min-width:0}
 }

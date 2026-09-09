@@ -384,30 +384,41 @@ var ONOFF=[['1','Yes, count it'],['0','No, switched off']];
  * push their total into the realistic column in one tap so the two never drift
  * apart. Quantity times each, per month, because that is the unit every other
  * number on this page is in. */
+/* One row of a breakdown.
+ *
+ * The labels used to repeat on every single row, so five parts meant fifteen
+ * headings for three columns, and the thing you were reading got lost in its own
+ * scaffolding. They are said once at the top now, and each row spends the space
+ * on what it is worth instead. On a phone there is no room for a header row, so
+ * there they come back and each part is its own card. */
 function partRow(p){
   p=p||{};
-  /* Labels rather than placeholders. A placeholder disappears the moment you
-     type in the box, and then two numbers sitting next to each other give no
-     clue which one was the count and which one was the price. */
+  var q=(p.qty==null?1:p.qty), e=(p.each||0);
   return '<div class="prow" data-pid="'+E(p.id||uid())+'">'+
     '<label class="pf pfn"><span>What</span>'+
-      '<input class="pn" value="'+E(p.n||'')+'" placeholder="Tampons"></label>'+
+      '<input class="pn" value="'+E(p.n||'')+'" placeholder="Bin bags"></label>'+
     '<label class="pf"><span>Qty</span>'+
-      '<input class="pq" type="number" step="any" inputmode="decimal" '+
+      '<input class="pq" type="number" step="any" inputmode="decimal" min="0" '+
       'value="'+E(p.qty==null?'':String(p.qty))+'" placeholder="1"></label>'+
-    '<label class="pf"><span>$ each</span>'+
-      '<input class="pe" type="number" step="any" inputmode="decimal" '+
+    '<label class="pf"><span>Each</span>'+
+      '<input class="pe" type="number" step="any" inputmode="decimal" min="0" '+
       'value="'+E(p.each==null?'':String(p.each))+'" placeholder="0"></label>'+
+    '<span class="psum" aria-label="What this part comes to">'+M(q*e)+'</span>'+
     '<button type="button" class="b o s pdel" aria-label="Remove this part">Remove</button>'+
     '</div>';
 }
 function partsBlock(parts){
+  parts=parts||[];
   return '<div class="pbox">'+
     '<div class="spread"><span class="plab">Breakdown</span>'+
     '<span class="chip p" id="pTot">$0</span></div>'+
-    '<p class="xs muted">Optional. Quantity times each, per month.</p>'+
-    '<div class="parts" id="parts">'+((parts||[]).map(partRow).join(''))+'</div>'+
-    '<div class="row" style="margin-top:9px">'+
+    '<p class="xs muted">Optional. What the line is actually made of, per month.</p>'+
+    '<div class="phead2" aria-hidden="true">'+
+      '<span>What</span><span>Qty</span><span>Each</span><span class="psumh">Comes to</span>'+
+      '<span></span></div>'+
+    '<div class="parts" id="parts">'+parts.map(partRow).join('')+'</div>'+
+    (parts.length?'':'<p class="pempty xs muted">Nothing broken down yet.</p>')+
+    '<div class="row" style="margin-top:11px">'+
     '<button type="button" class="b o s" id="pAdd">Add a part</button>'+
     '<button type="button" class="b o s" id="pUse">Use the total</button></div></div>';
 }
@@ -430,6 +441,15 @@ function wireParts(m,intoId){
   function refresh(){
     var e=$('#pTot',m);
     if(e) e.textContent=M(partsTotal(readParts(m)));
+    /* Each row says what it comes to as you type, so a wrong quantity shows up
+       on its own line rather than only in a total that does not add up. */
+    $$('.prow',m).forEach(function(r){
+      var q=r.querySelector('.pq').value, ea=r.querySelector('.pe').value;
+      var out=r.querySelector('.psum');
+      if(out) out.textContent=M((q===''?1:num(q))*num(ea));
+    });
+    var em=$('.pempty',m);
+    if(em) em.style.display=$$('.prow',m).length?'none':'';
   }
   $('#pAdd',m).onclick=function(){
     $('#parts',m).insertAdjacentHTML('beforeend',partRow({id:uid(),qty:1}));

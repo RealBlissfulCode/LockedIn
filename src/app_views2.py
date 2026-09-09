@@ -1042,7 +1042,20 @@ function modal(title,body,foot){
   m.innerHTML='<div class="modal"><div class="mhead"><h3>'+E(title)+'</h3><button class="x" data-close>&times;</button></div>'+
    '<div class="mbody">'+body+'</div>'+(foot?'<div class="mfoot">'+foot+'</div>':'')+'</div>';
   document.body.appendChild(m);
-  m.addEventListener('click',function(e){ if(e.target===m||e.target.hasAttribute('data-close'))m.remove(); });
+  /* Closing on a click outside has to mean a click, not the end of a drag.
+   *
+   * A click event fires on the nearest thing that contains both where the press
+   * started and where it ended. Select a word in a field and let go a few pixels
+   * past the edge of the panel and that common ancestor is the backdrop, so the
+   * panel took it as "clicked outside" and threw away what was being typed. Both
+   * the press and the release have to land on the backdrop now. */
+  var downOut=false, upOut=false;
+  m.addEventListener('pointerdown',function(e){ downOut=(e.target===m); });
+  m.addEventListener('pointerup',function(e){ upOut=(e.target===m); });
+  m.addEventListener('click',function(e){
+    if(e.target.closest&&e.target.closest('[data-close]')){ m.remove(); return; }
+    if(e.target===m&&downOut&&upOut) m.remove();
+  });
   return m;
 }
 function form(fields){
