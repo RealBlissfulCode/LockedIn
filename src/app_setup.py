@@ -301,8 +301,60 @@ function finishOnboarding(){
   chrome();
   location.hash='#/meals';
   route();
+
+  /* What the questionnaire produced is a starting point, not a set of edits.
+   *
+   * It used to be treated as edits, which meant the answers landed on top of
+   * whatever the account already had. Somebody joining a household got their
+   * own blank cost lines instead of the household's real ones, and then sent
+   * those blank ones up over everybody else's. The same thing happened to a
+   * second device that was ever asked to sign up.
+   *
+   * So: take a baseline first, so none of this counts as your work, then look
+   * at the account. If it already has something, that wins and all this was is
+   * a way of asking who you are. If the account is empty, these answers are the
+   * only thing there is, and they go up as the starting point. */
+  var mine=me, myPrefs=S.prefs;
+  /* Cancel anything the save above armed. It would have gone up as an edit
+     and landed on the household before the check below ever ran. */
+  if(syncTimer) clearTimeout(syncTimer);
+  syncPending=false;
+  /* Forget which versions this device has already seen. It pulled the household
+     before the questionnaire started, so without this the merge below says it
+     has seen all of that already and hands back nothing, leaving the answers
+     sitting on top of everybody else's work. */
+  baseBv={}; baseDv={};
+  syncSnap();
   syncStart();
-  toast('You are set up. Everything here is yours to change.');
+  /* Ask the account directly rather than reading it off the last pull, so a
+     pull that failed cannot be mistaken for an empty account. */
+  api('doc.php?scope=shared').then(function(r){
+    var already=stateWeight((r&&r.ok&&r.body)||null);
+    if(already>6){
+      return pullState().then(function(){ joinExisting(); });
+    }
+    forceNext=true; syncPending=true; pushState();
+    toast('You are set up. Everything here is yours to change.');
+    chrome(); route();
+  });
+
+  function joinExisting(){
+    {
+      /* The household already has data. Keep it, and make sure this person is
+         in the list of people rather than replacing it with just themselves. */
+      var list=S.members||[];
+      var hit=null;
+      list.forEach(function(x){
+        if(!hit&&(x.name||'').toLowerCase()===(mine.name||'').toLowerCase()) hit=x;
+      });
+      if(!hit){ mine.sort=list.length; list.push(mine); S.members=list; hit=mine; }
+      S.who=hit.id;
+      S.prefs=myPrefs;
+      save();
+      toast('You are in. Everything the household already had is here.');
+    }
+    chrome(); route();
+  }
 }
 
 /* ============================ using the answers ============================ */

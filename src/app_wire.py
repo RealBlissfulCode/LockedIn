@@ -1094,10 +1094,15 @@ function syncPanel(){
     'when the two devices will not agree and you know which one is right.</p>'+
     '<div class="row" style="margin-top:8px">'+
     '<button class="b o" id="syPush">Send this device up</button>'+
-    '<button class="b o" id="syPull">Take the account down</button></div>',
+    '<button class="b o" id="syPull">Take the account down</button></div>'+
+    '<p class="xs muted" style="margin-top:14px">If it still will not agree between '+
+    'two devices, run this and it will say which part is failing.</p>'+
+    '<div class="row" style="margin-top:8px">'+
+    '<button class="b" id="syTest">Test this device against the account</button></div>',
     '<button class="b o" id="syNow">Check now</button>'+
     '<button class="b" data-close>Close</button>');
   $('#syNow',m).onclick=function(){ pullState(); toast('Checking'); m.remove(); };
+  $('#syTest',m).onclick=function(){ syncSelfTest(); m.remove(); };
   $('#syPush',m).onclick=function(){
     if(!confirm('Send everything on this device up, replacing what the account has?'))return;
     syncSnap(); forceNext=true; syncPending=true; pushState();
@@ -1109,6 +1114,76 @@ function syncPanel(){
     pullState().then(function(){ route(); chrome(); toast('Took the account copy'); });
     m.remove();
   };
+}
+
+/* Does this device actually talk to the account.
+ *
+ * Everything above reports what the app believes. This goes and finds out: it
+ * reads the account, writes to it, reads it back, and says which step failed
+ * and what came back when it did. Two devices disagreeing is always one of
+ * these steps failing quietly on one of them. */
+function syncSelfTest(){
+  var rows=[];
+  function line(name,ok,detail){
+    rows.push('<tr><td data-l="Check"><b>'+E(name)+'</b></td>'+
+      '<td data-l="Result"><span class="chip'+(ok?' t':' bad')+'">'+(ok?'ok':'failed')+'</span></td>'+
+      '<td data-l="Detail" class="sm muted">'+E(detail||'')+'</td></tr>');
+  }
+  function show(verdict){
+    var m2=modal('Sync test',
+      '<div class="note'+(verdict.ok?'':' warn')+'"><b>'+E(verdict.title)+'</b><br>'+
+      E(verdict.what)+'</div>'+
+      '<div class="tw cards" style="margin-top:14px"><table><tbody>'+rows.join('')+
+      '</tbody></table></div>',
+      '<button class="b" data-close>Close</button>');
+    return m2;
+  }
+  var doc=null, before=0;
+  toast('Testing');
+  api('auth.php?do=me').then(function(r){
+    line('Reaching the server', !!(r&&r.ok), r&&r.ok?'':(r&&r.error)||'no answer');
+    if(!r||!r.ok) throw {t:'This device cannot reach your account',
+      w:'The app loaded but the part that saves your data did not answer. If this '+
+        'says no_api, the api folder is not on the server or the host is not running it.'};
+    line('Signed in as', !!(r.account&&r.account.email), (r.account&&r.account.email)||'nobody');
+    line('Household', !!r.household, r.household?(r.household.name+', '+
+      ((r.household.members||[]).length)+' in it'):'none');
+    return api('doc.php?do=ver');
+  }).then(function(r){
+    var numbers=r&&r.ok&&typeof r.shared==='number';
+    line('Server tells us its version', !!numbers,
+      numbers?('shared v'+r.shared):'this server is running older api files');
+    return api('doc.php?scope=shared');
+  }).then(function(r){
+    if(!r||!r.ok) throw {t:'Cannot read your account',
+      w:'Signing in worked but reading the data did not: '+((r&&r.error)||'no answer')};
+    doc=r.body||{}; before=r.version||0;
+    var size=JSON.stringify(doc).length;
+    line('Reading your account', true, 'v'+before+', '+Math.round(size/1024)+'k');
+    line('Size the host has to accept', size<1500000,
+      size<1500000?'fine':'this is large enough that a shared host may refuse to save it');
+    /* Write it straight back. Same content, so nothing can be lost by it. */
+    return api('doc.php?scope=shared',{body:{version:before,body:doc}});
+  }).then(function(r){
+    if(!r||!r.ok){
+      line('Saving to your account', false,
+        (r&&r.error||'no answer')+(r&&r.__status?' ('+r.__status+')':''));
+      throw {t:'This device cannot save to your account',
+        w:'It can read your data but not write it, which is why it keeps showing you '+
+          'its own copy. The server said: '+((r&&r.error)||'nothing')+
+          (r&&r.__status?' with status '+r.__status:'')+'.'};
+    }
+    line('Saving to your account', (r.version||0)>before, 'now v'+(r.version||0));
+    line('Anything still waiting to save', !anyDirty(), anyDirty()?'yes, and it has not gone up':'nothing');
+    show({ok:true,title:'This device is talking to your account properly',
+      what:'It read your data, saved to it and the version moved. If the other device '+
+           'still disagrees, run this on that one too. The build shown in the panel '+
+           'behind this has to match on both.'});
+  }).catch(function(e){
+    if(e&&e.t) show({ok:false,title:e.t,what:e.w});
+    else show({ok:false,title:'The test itself fell over',
+      what:(e&&e.message)||String(e)});
+  });
 }
 
 function settingsModal(){

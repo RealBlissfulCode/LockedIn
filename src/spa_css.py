@@ -221,6 +221,7 @@ color:var(--ink);margin-bottom:9px}
 .chip{font:600 10.5px/1 var(--f-body);padding:5px 8px;border-radius:5px;background:var(--panel-2);
 color:var(--ink-2);white-space:nowrap;border:1px solid var(--line)}
 .chip.t{background:rgba(74,222,128,.14);color:var(--sage);border-color:rgba(74,222,128,.28)}
+.chip.bad{background:rgba(220,90,80,.14);color:var(--clay);border-color:rgba(220,90,80,.3)}
 .chip.d1{background:rgba(74,222,128,.14);color:var(--sage);border-color:rgba(74,222,128,.28)}
 .chip.d2{background:rgba(168,85,247,.13);color:var(--brass);border-color:rgba(168,85,247,.28)}
 .chip.d3{background:rgba(248,113,113,.14);color:var(--clay);border-color:rgba(248,113,113,.3)}

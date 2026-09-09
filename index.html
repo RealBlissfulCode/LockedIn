@@ -220,6 +220,7 @@ color:var(--ink);margin-bottom:9px}
 .chip{font:600 10.5px/1 var(--f-body);padding:5px 8px;border-radius:5px;background:var(--panel-2);
 color:var(--ink-2);white-space:nowrap;border:1px solid var(--line)}
 .chip.t{background:rgba(74,222,128,.14);color:var(--sage);border-color:rgba(74,222,128,.28)}
+.chip.bad{background:rgba(220,90,80,.14);color:var(--clay);border-color:rgba(220,90,80,.3)}
 .chip.d1{background:rgba(74,222,128,.14);color:var(--sage);border-color:rgba(74,222,128,.28)}
 .chip.d2{background:rgba(168,85,247,.13);color:var(--brass);border-color:rgba(168,85,247,.28)}
 .chip.d3{background:rgba(248,113,113,.14);color:var(--clay);border-color:rgba(248,113,113,.3)}
@@ -1052,7 +1053,7 @@ border-bottom:1px solid var(--line)}
 </script><script>(function(){
 'use strict';
 var _D=window._DATA;
-var BUILD='21fb97d';
+var BUILD='0063d0a';
 
 /* ============================================================
    THE HANDBOOK  -  five sections, one state object, one file.
@@ -2441,13 +2442,35 @@ function pushState(){
       return 'retry';
     }
     if(r.__status===401){ syncSet('off','Signed out'); return; }
-    syncFails++;
-    syncSet(syncFails>2?'error':'offline', r.error||'');
-  }).catch(function(){
-    syncFails++; syncSet('offline');
+    pushFailed(r.error||('server said '+r.__status), r.__status);
+  }).catch(function(e){
+    pushFailed('could not reach the server', 0);
   }).then(function(res){
     if(res!=='retry') syncBusy=false;
   });
+}
+
+/* A failed save has to come back.
+ *
+ * pushState clears the pending flag the moment it starts sending, so when a
+ * send failed nothing was left marked as needing to go up and nothing ever
+ * tried again. One dropped request, one moment of bad signal, one refusal from
+ * the host, and that change stayed on that device for good while the other
+ * phone carried on without it. Which is exactly how two devices end up holding
+ * different things and neither of them looking broken.
+ *
+ * So it stays pending, and it keeps coming back: quickly at first, then slower,
+ * up to about half a minute apart, until it lands. */
+var lastFail='';
+function pushFailed(why,status){
+  syncFails++;
+  lastFail=why+(status?' ('+status+')':'');
+  syncPending=true;
+  syncSet(syncFails>2?'error':'offline','Not saved yet: '+lastFail);
+  var wait=Math.min(30000,900*Math.pow(2,Math.min(syncFails,5)));
+  if(syncTimer) clearTimeout(syncTimer);
+  syncTimer=setTimeout(function(){ syncBusy=false; pushState(); },wait);
+  if(syncFails===3) toast('Still trying to save. '+lastFail);
 }
 
 function pushPrivate(){
@@ -2486,8 +2509,8 @@ function watchTick(){
 
 function syncStart(){
   syncSet('idle');
-  window.addEventListener('focus',function(){ if(!syncBusy) pullState(); });
-  window.addEventListener('online',function(){ pullState(); });
+  window.addEventListener('focus',function(){ if(!syncBusy){ pullState(); if(syncPending) pushState(); } });
+  window.addEventListener('online',function(){ syncFails=0; pullState(); if(syncPending) pushState(); });
   document.addEventListener('visibilitychange',function(){
     if(!document.hidden&&!syncBusy) pullState();
     watchTick();
@@ -2791,8 +2814,60 @@ function finishOnboarding(){
   chrome();
   location.hash='#/meals';
   route();
+
+  /* What the questionnaire produced is a starting point, not a set of edits.
+   *
+   * It used to be treated as edits, which meant the answers landed on top of
+   * whatever the account already had. Somebody joining a household got their
+   * own blank cost lines instead of the household's real ones, and then sent
+   * those blank ones up over everybody else's. The same thing happened to a
+   * second device that was ever asked to sign up.
+   *
+   * So: take a baseline first, so none of this counts as your work, then look
+   * at the account. If it already has something, that wins and all this was is
+   * a way of asking who you are. If the account is empty, these answers are the
+   * only thing there is, and they go up as the starting point. */
+  var mine=me, myPrefs=S.prefs;
+  /* Cancel anything the save above armed. It would have gone up as an edit
+     and landed on the household before the check below ever ran. */
+  if(syncTimer) clearTimeout(syncTimer);
+  syncPending=false;
+  /* Forget which versions this device has already seen. It pulled the household
+     before the questionnaire started, so without this the merge below says it
+     has seen all of that already and hands back nothing, leaving the answers
+     sitting on top of everybody else's work. */
+  baseBv={}; baseDv={};
+  syncSnap();
   syncStart();
-  toast('You are set up. Everything here is yours to change.');
+  /* Ask the account directly rather than reading it off the last pull, so a
+     pull that failed cannot be mistaken for an empty account. */
+  api('doc.php?scope=shared').then(function(r){
+    var already=stateWeight((r&&r.ok&&r.body)||null);
+    if(already>6){
+      return pullState().then(function(){ joinExisting(); });
+    }
+    forceNext=true; syncPending=true; pushState();
+    toast('You are set up. Everything here is yours to change.');
+    chrome(); route();
+  });
+
+  function joinExisting(){
+    {
+      /* The household already has data. Keep it, and make sure this person is
+         in the list of people rather than replacing it with just themselves. */
+      var list=S.members||[];
+      var hit=null;
+      list.forEach(function(x){
+        if(!hit&&(x.name||'').toLowerCase()===(mine.name||'').toLowerCase()) hit=x;
+      });
+      if(!hit){ mine.sort=list.length; list.push(mine); S.members=list; hit=mine; }
+      S.who=hit.id;
+      S.prefs=myPrefs;
+      save();
+      toast('You are in. Everything the household already had is here.');
+    }
+    chrome(); route();
+  }
 }
 
 /* ============================ using the answers ============================ */
@@ -6292,10 +6367,15 @@ function syncPanel(){
     'when the two devices will not agree and you know which one is right.</p>'+
     '<div class="row" style="margin-top:8px">'+
     '<button class="b o" id="syPush">Send this device up</button>'+
-    '<button class="b o" id="syPull">Take the account down</button></div>',
+    '<button class="b o" id="syPull">Take the account down</button></div>'+
+    '<p class="xs muted" style="margin-top:14px">If it still will not agree between '+
+    'two devices, run this and it will say which part is failing.</p>'+
+    '<div class="row" style="margin-top:8px">'+
+    '<button class="b" id="syTest">Test this device against the account</button></div>',
     '<button class="b o" id="syNow">Check now</button>'+
     '<button class="b" data-close>Close</button>');
   $('#syNow',m).onclick=function(){ pullState(); toast('Checking'); m.remove(); };
+  $('#syTest',m).onclick=function(){ syncSelfTest(); m.remove(); };
   $('#syPush',m).onclick=function(){
     if(!confirm('Send everything on this device up, replacing what the account has?'))return;
     syncSnap(); forceNext=true; syncPending=true; pushState();
@@ -6307,6 +6387,76 @@ function syncPanel(){
     pullState().then(function(){ route(); chrome(); toast('Took the account copy'); });
     m.remove();
   };
+}
+
+/* Does this device actually talk to the account.
+ *
+ * Everything above reports what the app believes. This goes and finds out: it
+ * reads the account, writes to it, reads it back, and says which step failed
+ * and what came back when it did. Two devices disagreeing is always one of
+ * these steps failing quietly on one of them. */
+function syncSelfTest(){
+  var rows=[];
+  function line(name,ok,detail){
+    rows.push('<tr><td data-l="Check"><b>'+E(name)+'</b></td>'+
+      '<td data-l="Result"><span class="chip'+(ok?' t':' bad')+'">'+(ok?'ok':'failed')+'</span></td>'+
+      '<td data-l="Detail" class="sm muted">'+E(detail||'')+'</td></tr>');
+  }
+  function show(verdict){
+    var m2=modal('Sync test',
+      '<div class="note'+(verdict.ok?'':' warn')+'"><b>'+E(verdict.title)+'</b><br>'+
+      E(verdict.what)+'</div>'+
+      '<div class="tw cards" style="margin-top:14px"><table><tbody>'+rows.join('')+
+      '</tbody></table></div>',
+      '<button class="b" data-close>Close</button>');
+    return m2;
+  }
+  var doc=null, before=0;
+  toast('Testing');
+  api('auth.php?do=me').then(function(r){
+    line('Reaching the server', !!(r&&r.ok), r&&r.ok?'':(r&&r.error)||'no answer');
+    if(!r||!r.ok) throw {t:'This device cannot reach your account',
+      w:'The app loaded but the part that saves your data did not answer. If this '+
+        'says no_api, the api folder is not on the server or the host is not running it.'};
+    line('Signed in as', !!(r.account&&r.account.email), (r.account&&r.account.email)||'nobody');
+    line('Household', !!r.household, r.household?(r.household.name+', '+
+      ((r.household.members||[]).length)+' in it'):'none');
+    return api('doc.php?do=ver');
+  }).then(function(r){
+    var numbers=r&&r.ok&&typeof r.shared==='number';
+    line('Server tells us its version', !!numbers,
+      numbers?('shared v'+r.shared):'this server is running older api files');
+    return api('doc.php?scope=shared');
+  }).then(function(r){
+    if(!r||!r.ok) throw {t:'Cannot read your account',
+      w:'Signing in worked but reading the data did not: '+((r&&r.error)||'no answer')};
+    doc=r.body||{}; before=r.version||0;
+    var size=JSON.stringify(doc).length;
+    line('Reading your account', true, 'v'+before+', '+Math.round(size/1024)+'k');
+    line('Size the host has to accept', size<1500000,
+      size<1500000?'fine':'this is large enough that a shared host may refuse to save it');
+    /* Write it straight back. Same content, so nothing can be lost by it. */
+    return api('doc.php?scope=shared',{body:{version:before,body:doc}});
+  }).then(function(r){
+    if(!r||!r.ok){
+      line('Saving to your account', false,
+        (r&&r.error||'no answer')+(r&&r.__status?' ('+r.__status+')':''));
+      throw {t:'This device cannot save to your account',
+        w:'It can read your data but not write it, which is why it keeps showing you '+
+          'its own copy. The server said: '+((r&&r.error)||'nothing')+
+          (r&&r.__status?' with status '+r.__status:'')+'.'};
+    }
+    line('Saving to your account', (r.version||0)>before, 'now v'+(r.version||0));
+    line('Anything still waiting to save', !anyDirty(), anyDirty()?'yes, and it has not gone up':'nothing');
+    show({ok:true,title:'This device is talking to your account properly',
+      what:'It read your data, saved to it and the version moved. If the other device '+
+           'still disagrees, run this on that one too. The build shown in the panel '+
+           'behind this has to match on both.'});
+  }).catch(function(e){
+    if(e&&e.t) show({ok:false,title:e.t,what:e.w});
+    else show({ok:false,title:'The test itself fell over',
+      what:(e&&e.message)||String(e)});
+  });
 }
 
 function settingsModal(){

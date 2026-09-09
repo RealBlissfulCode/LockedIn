@@ -382,13 +382,35 @@ function pushState(){
       return 'retry';
     }
     if(r.__status===401){ syncSet('off','Signed out'); return; }
-    syncFails++;
-    syncSet(syncFails>2?'error':'offline', r.error||'');
-  }).catch(function(){
-    syncFails++; syncSet('offline');
+    pushFailed(r.error||('server said '+r.__status), r.__status);
+  }).catch(function(e){
+    pushFailed('could not reach the server', 0);
   }).then(function(res){
     if(res!=='retry') syncBusy=false;
   });
+}
+
+/* A failed save has to come back.
+ *
+ * pushState clears the pending flag the moment it starts sending, so when a
+ * send failed nothing was left marked as needing to go up and nothing ever
+ * tried again. One dropped request, one moment of bad signal, one refusal from
+ * the host, and that change stayed on that device for good while the other
+ * phone carried on without it. Which is exactly how two devices end up holding
+ * different things and neither of them looking broken.
+ *
+ * So it stays pending, and it keeps coming back: quickly at first, then slower,
+ * up to about half a minute apart, until it lands. */
+var lastFail='';
+function pushFailed(why,status){
+  syncFails++;
+  lastFail=why+(status?' ('+status+')':'');
+  syncPending=true;
+  syncSet(syncFails>2?'error':'offline','Not saved yet: '+lastFail);
+  var wait=Math.min(30000,900*Math.pow(2,Math.min(syncFails,5)));
+  if(syncTimer) clearTimeout(syncTimer);
+  syncTimer=setTimeout(function(){ syncBusy=false; pushState(); },wait);
+  if(syncFails===3) toast('Still trying to save. '+lastFail);
 }
 
 function pushPrivate(){
@@ -427,8 +449,8 @@ function watchTick(){
 
 function syncStart(){
   syncSet('idle');
-  window.addEventListener('focus',function(){ if(!syncBusy) pullState(); });
-  window.addEventListener('online',function(){ pullState(); });
+  window.addEventListener('focus',function(){ if(!syncBusy){ pullState(); if(syncPending) pushState(); } });
+  window.addEventListener('online',function(){ syncFails=0; pullState(); if(syncPending) pushState(); });
   document.addEventListener('visibilitychange',function(){
     if(!document.hidden&&!syncBusy) pullState();
     watchTick();
