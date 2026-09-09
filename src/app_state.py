@@ -77,7 +77,18 @@ function privatePart(){
  * rename on a phone and a new list on a laptop both survive. Arrays stay whole,
  * because half an array is not something anybody wants merged. */
 var USEP='\u0001';
-function isMap(v){ return v&&typeof v==='object'&&!Array.isArray(v); }
+/* Matches is_map in api/lib/store.php, and it has to.
+ *
+ * An empty section splits into no pieces at all, so on this side it stopped
+ * being addressable while the server still counted it as one whole piece. The
+ * two never lined up on a name, and whatever was in it on the account never
+ * came down. An empty one counts as whole here too now, exactly as the server
+ * has it. */
+function isMap(v){
+  if(!v||typeof v!=='object'||Array.isArray(v)) return false;
+  for(var k in v) return true;
+  return false;
+}
 function unitsOf(o){
   var out={};
   BRANCHES.forEach(function(b){
@@ -112,7 +123,15 @@ function allUnits(remote){
    JSON no longer matches its snapshot is one you edited, and an edit in front
    of you always beats an older copy coming down the wire. */
 function dirtyBranch(u){
-  return _snap[u]!==JSON.stringify(unitGet(S,u)===undefined?null:unitGet(S,u));
+  var cur=unitGet(S,u);
+  /* Something that has never existed on this device is not something this
+     device is in the middle of editing. Without this, anything the account had
+     and this device did not looked like local work in progress, so the merge
+     politely left it alone and it never arrived: a shopping list, a recipe
+     list, a photo, an ingredient price, the answers to the questionnaire. They
+     stayed on whichever device made them. */
+  if(_snap[u]===undefined&&cur===undefined) return false;
+  return _snap[u]!==JSON.stringify(cur===undefined?null:cur);
 }
 function snapOne(u){
   _snap[u]=JSON.stringify(unitGet(S,u)===undefined?null:unitGet(S,u));

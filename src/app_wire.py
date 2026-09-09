@@ -151,9 +151,9 @@ function bind(){
   }
   if(v==='lists'){
     on('#rlNew','click',function(){
-      var n=prompt('Name the list','Sunday prep'); if(!n)return;
-      if(!S.lists[n]) S.lists[n]=[];
-      save();route();});
+      askFor('New list',[{id:'rlN',l:'Name',v:'',ph:'Sunday prep'}],function(o){
+        if(!S.lists[o.rlN]) S.lists[o.rlN]=[];
+        save();route();});});
   }
   if(v==='household') bindHousehold();
   if(v==='mealplan') bindMealPlan();
@@ -205,13 +205,16 @@ function drawSettingsMembers(m){
 /* ============================ shopping wiring ============================ */
 function bindShop(){
   on('#newList','click',function(){
-    var n=prompt('Name the list'); if(!n)return;
-    var c=prompt('Category (Groceries, Household, Costco run, Party...)','Groceries')||'Lists';
-    S.shop.lists[n]={cat:c,fav:false,items:[]}; S.shop.active=n; save(); route();});
+    askFor('New list',[{id:'nlN',l:'Name',v:'',ph:'Weekly shop'},
+      {id:'nlC',l:'What kind',v:'Groceries',ph:'Groceries, Household, Costco run...'}],
+      function(o){
+        S.shop.lists[o.nlN]={cat:o.nlC||'Lists',fav:false,items:[]};
+        S.shop.active=o.nlN; save(); route();});});
   on('#listRename','click',function(){
-    var n=prompt('Rename to',S.shop.active); if(!n||n===S.shop.active)return;
-    S.shop.lists[n]=S.shop.lists[S.shop.active]; delete S.shop.lists[S.shop.active];
-    S.shop.active=n; save(); route();});
+    askFor('Rename this list',[{id:'lrN',l:'Name',v:S.shop.active}],function(o){
+      if(o.lrN===S.shop.active) return;
+      S.shop.lists[o.lrN]=S.shop.lists[S.shop.active]; delete S.shop.lists[S.shop.active];
+      S.shop.active=o.lrN; save(); route();});});
   on('#listDup','click',function(){
     var n=S.shop.active+' copy';
     S.shop.lists[n]=JSON.parse(JSON.stringify(S.shop.lists[S.shop.active]));
@@ -323,12 +326,13 @@ function bindFin(sub){
       '" anyway and lose them?')){route();return;}
     scenLoad(v);route();toast('Opened '+v);});
   on('#scenNew','click',function(){
-    var n=prompt('Name the new scenario','Renting, both grinding'); if(!n)return;
-    if(S.fin.scenarios[n]&&!confirm('"'+n+'" exists. Overwrite it?'))return;
-    scenSave(n);route();toast('"'+n+'" created from the current numbers');});
+    askFor('New scenario',[{id:'snN',l:'Name',v:'',ph:'Renting, both grinding'}],function(o){
+      if(S.fin.scenarios[o.snN]&&!confirm('"'+o.snN+'" exists. Overwrite it?'))return;
+      scenSave(o.snN);route();toast('"'+o.snN+'" created from the current numbers');});});
   on('#scenSaveAs','click',function(){
-    var n=prompt('Save these numbers as','Copy of '+(S.fin.activeScenario||'working')); if(!n)return;
-    scenSave(n);route();toast('Saved as "'+n+'"');});
+    askFor('Save these numbers as',
+      [{id:'saN',l:'Name',v:'Copy of '+(S.fin.activeScenario||'working')}],function(o){
+      scenSave(o.saN);route();toast('Saved as "'+o.saN+'"');});});
   on('#scenUpdate','click',function(){
     if(!S.fin.activeScenario)return;
     scenSave(S.fin.activeScenario);route();toast('Saved');});
@@ -480,6 +484,34 @@ function jobEditor(id){
     save();m.remove();route();};
   wireParts(m,'jm');
 }
+/* Asking for a name, properly.
+ *
+ * The browser's own prompt box is a different typeface, a different shape and a
+ * different pair of buttons to everything else in here, and on a phone it drops
+ * a system dialog over the page that looks like something has gone wrong. Same
+ * modal as every other question the app asks, cursor already in the field,
+ * Enter saves. */
+function askFor(title,fields,done){
+  var m=modal(title,form(fields),
+    '<button class="b o" data-close>Cancel</button><button class="b" id="akOk">Save</button>');
+  function go(){
+    var out={};
+    for(var i=0;i<fields.length;i++){
+      var e=$('#'+fields[i].id,m);
+      out[fields[i].id]=e?String(e.value).trim():'';
+    }
+    if(!out[fields[0].id]){ toast('Give it a name'); return; }
+    m.remove(); done(out);
+  }
+  $('#akOk',m).onclick=go;
+  $$('input',m).forEach(function(i){
+    i.onkeydown=function(e){ if(e.key==='Enter'){ e.preventDefault(); go(); } };
+  });
+  var f=$('#'+fields[0].id,m);
+  if(f){ f.focus(); try{f.select();}catch(e){} }
+  return m;
+}
+
 function costEditor(id){
   var c=id?S.fin.costs.filter(function(x){return x.id===id;})[0]:{name:'',section:'Living',who:shared()?EVERYONE:ME(),low:'',real:'',high:'',actual:''};
   var m=modal(id?'Edit cost':'Add cost',
@@ -890,9 +922,11 @@ document.addEventListener('click',function(e){
     var arr=S.lists[rr[0]]||[]; var ri=arr.indexOf(rr[1]);
     if(ri>=0){arr.splice(ri,1);save();route();} return;}
   if((el=t.closest('[data-rle]'))){var on_=el.dataset.rle;
-    var nn=prompt('Rename the list',on_); if(!nn||nn===on_)return;
-    if(S.lists[nn]){toast('"'+nn+'" already exists');return;}
-    if(!renameKey(S.lists,on_,nn))return; save();route();return;}
+    askFor('Rename this list',[{id:'rleN',l:'Name',v:on_}],function(o){
+      if(o.rleN===on_)return;
+      if(S.lists[o.rleN]){toast('"'+o.rleN+'" already exists');return;}
+      if(!renameKey(S.lists,on_,o.rleN))return; save();route();});
+    return;}
   if((el=t.closest('[data-rld]'))){
     if(confirm('Delete the list "'+el.dataset.rld+'"? The recipes themselves stay.')){
       delete S.lists[el.dataset.rld];save();route();} return;}

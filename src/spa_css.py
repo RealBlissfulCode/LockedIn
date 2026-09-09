@@ -298,6 +298,13 @@ text-overflow:ellipsis;padding-left:8px;position:relative}
 .dots{display:none;gap:3px;margin-top:4px;flex-wrap:wrap}
 .dot{width:4px;height:4px;border-radius:50%;background:var(--brass)}
 .dot.w{background:var(--sage)}.dot.e{background:var(--steel)}.dot.m{background:var(--amber)}
+/* A key under a chart or a calendar. The dot used to be an inline-block sitting
+   on the text baseline, which puts it low against the middle of the word rather
+   than level with it. Flex centres it against the line properly, and the dot is
+   sized for reading here rather than for a calendar cell. */
+.dotkey{display:flex;flex-wrap:wrap;gap:7px 18px;align-items:center;margin-top:14px}
+.dotkey>span{display:inline-flex;align-items:center;gap:7px;line-height:1}
+.dotkey .dot{width:7px;height:7px;flex:none}
 
 /* timeline */
 .tl{list-style:none;margin:0;padding:0;position:relative}

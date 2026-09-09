@@ -954,8 +954,8 @@ function drawInvites(){
 function bindHousehold(){
   drawInvites();
   on('#hAddSeat','click',function(){
-    var n=prompt('Who is it? You can invite them to their own login later.');
-    if(!n) return;
+    askFor('Add someone',[{id:'asN',l:'Their name',v:'',ph:'Aaliyah'}],function(o){
+    var n=o.asN;
     api('household.php?do=addSeat',{body:{name:n}}).then(function(r){
       if(!r.ok){toast(r.error==='no_seats'?'Every seat on this plan is taken':'Could not add');return;}
       /* Give them a member row too, so they show up on the plans right away. */
@@ -964,9 +964,12 @@ function bindHousehold(){
       }
       refreshHouse().then(route);
     });
+    });
   });
   on('#hInvite','click',function(){
-    var n=prompt('Who is this code for? (their name, so their seat is waiting)')||'';
+    askFor('Who is this code for',
+      [{id:'ivN',l:'Their name',v:'',ph:'Aaliyah'}],function(o){
+    var n=o.ivN;
     api('household.php?do=invite',{body:{name:n}}).then(function(r){
       if(!r.ok){toast(r.error==='no_seats'?'Every seat on this plan is taken':'Could not make a code');return;}
       modal('Their invite code',
@@ -976,6 +979,7 @@ function bindHousehold(){
         'and sign in with Google. Everything here is shared the moment they land.</p>',
         '<button class="b" data-close>Done</button>');
       drawInvites();
+    });
     });
   });
   on('#hLeave','click',function(){

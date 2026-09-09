@@ -758,10 +758,10 @@ function vSchedule(sub){
    '<h3>'+new Date(calY,calM,1).toLocaleDateString(undefined,{month:'long',year:'numeric'})+'</h3>'+
    '<button class="b o s" id="cNext">&rarr;</button></div>'+
    '<div class="cal">'+DOW.map(function(x){return '<div class="dow">'+x+'</div>';}).join('')+cells+'</div>'+
-   '<div class="row xs muted" style="margin-top:12px">'+
-   '<span><i class="dot e" style="display:inline-block"></i> plans</span>'+
-   '<span><i class="dot w" style="display:inline-block"></i> training</span>'+
-   '<span><i class="dot m" style="display:inline-block"></i> meals</span></div></div>'+
+   '<div class="dotkey xs muted">'+
+   '<span><i class="dot e"></i>plans</span>'+
+   '<span><i class="dot w"></i>training</span>'+
+   '<span><i class="dot m"></i>meals</span></div></div>'+
    '<div class="sec"><div class="spread"><h2>'+pretty(calSel)+'</h2>'+
    '<div class="row"><button class="b" id="evAdd">Add plan</button>'+
    '<button class="b o" id="mealAdd">Log meal</button>'+

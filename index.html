@@ -297,6 +297,13 @@ text-overflow:ellipsis;padding-left:8px;position:relative}
 .dots{display:none;gap:3px;margin-top:4px;flex-wrap:wrap}
 .dot{width:4px;height:4px;border-radius:50%;background:var(--brass)}
 .dot.w{background:var(--sage)}.dot.e{background:var(--steel)}.dot.m{background:var(--amber)}
+/* A key under a chart or a calendar. The dot used to be an inline-block sitting
+   on the text baseline, which puts it low against the middle of the word rather
+   than level with it. Flex centres it against the line properly, and the dot is
+   sized for reading here rather than for a calendar cell. */
+.dotkey{display:flex;flex-wrap:wrap;gap:7px 18px;align-items:center;margin-top:14px}
+.dotkey>span{display:inline-flex;align-items:center;gap:7px;line-height:1}
+.dotkey .dot{width:7px;height:7px;flex:none}
 
 /* timeline */
 .tl{list-style:none;margin:0;padding:0;position:relative}
@@ -1058,7 +1065,7 @@ border-bottom:1px solid var(--line)}
 </script><script>(function(){
 'use strict';
 var _D=window._DATA;
-var BUILD='0063d0a';
+var BUILD='c7ab330';
 
 /* ============================================================
    THE HANDBOOK  -  five sections, one state object, one file.
@@ -2142,7 +2149,18 @@ function privatePart(){
  * rename on a phone and a new list on a laptop both survive. Arrays stay whole,
  * because half an array is not something anybody wants merged. */
 var USEP='\u0001';
-function isMap(v){ return v&&typeof v==='object'&&!Array.isArray(v); }
+/* Matches is_map in api/lib/store.php, and it has to.
+ *
+ * An empty section splits into no pieces at all, so on this side it stopped
+ * being addressable while the server still counted it as one whole piece. The
+ * two never lined up on a name, and whatever was in it on the account never
+ * came down. An empty one counts as whole here too now, exactly as the server
+ * has it. */
+function isMap(v){
+  if(!v||typeof v!=='object'||Array.isArray(v)) return false;
+  for(var k in v) return true;
+  return false;
+}
 function unitsOf(o){
   var out={};
   BRANCHES.forEach(function(b){
@@ -2177,7 +2195,15 @@ function allUnits(remote){
    JSON no longer matches its snapshot is one you edited, and an edit in front
    of you always beats an older copy coming down the wire. */
 function dirtyBranch(u){
-  return _snap[u]!==JSON.stringify(unitGet(S,u)===undefined?null:unitGet(S,u));
+  var cur=unitGet(S,u);
+  /* Something that has never existed on this device is not something this
+     device is in the middle of editing. Without this, anything the account had
+     and this device did not looked like local work in progress, so the merge
+     politely left it alone and it never arrived: a shopping list, a recipe
+     list, a photo, an ingredient price, the answers to the questionnaire. They
+     stayed on whichever device made them. */
+  if(_snap[u]===undefined&&cur===undefined) return false;
+  return _snap[u]!==JSON.stringify(cur===undefined?null:cur);
 }
 function snapOne(u){
   _snap[u]=JSON.stringify(unitGet(S,u)===undefined?null:unitGet(S,u));
@@ -3466,8 +3492,8 @@ function drawInvites(){
 function bindHousehold(){
   drawInvites();
   on('#hAddSeat','click',function(){
-    var n=prompt('Who is it? You can invite them to their own login later.');
-    if(!n) return;
+    askFor('Add someone',[{id:'asN',l:'Their name',v:'',ph:'Aaliyah'}],function(o){
+    var n=o.asN;
     api('household.php?do=addSeat',{body:{name:n}}).then(function(r){
       if(!r.ok){toast(r.error==='no_seats'?'Every seat on this plan is taken':'Could not add');return;}
       /* Give them a member row too, so they show up on the plans right away. */
@@ -3476,9 +3502,12 @@ function bindHousehold(){
       }
       refreshHouse().then(route);
     });
+    });
   });
   on('#hInvite','click',function(){
-    var n=prompt('Who is this code for? (their name, so their seat is waiting)')||'';
+    askFor('Who is this code for',
+      [{id:'ivN',l:'Their name',v:'',ph:'Aaliyah'}],function(o){
+    var n=o.ivN;
     api('household.php?do=invite',{body:{name:n}}).then(function(r){
       if(!r.ok){toast(r.error==='no_seats'?'Every seat on this plan is taken':'Could not make a code');return;}
       modal('Their invite code',
@@ -3488,6 +3517,7 @@ function bindHousehold(){
         'and sign in with Google. Everything here is shared the moment they land.</p>',
         '<button class="b" data-close>Done</button>');
       drawInvites();
+    });
     });
   });
   on('#hLeave','click',function(){
@@ -5047,10 +5077,10 @@ function vSchedule(sub){
    '<h3>'+new Date(calY,calM,1).toLocaleDateString(undefined,{month:'long',year:'numeric'})+'</h3>'+
    '<button class="b o s" id="cNext">&rarr;</button></div>'+
    '<div class="cal">'+DOW.map(function(x){return '<div class="dow">'+x+'</div>';}).join('')+cells+'</div>'+
-   '<div class="row xs muted" style="margin-top:12px">'+
-   '<span><i class="dot e" style="display:inline-block"></i> plans</span>'+
-   '<span><i class="dot w" style="display:inline-block"></i> training</span>'+
-   '<span><i class="dot m" style="display:inline-block"></i> meals</span></div></div>'+
+   '<div class="dotkey xs muted">'+
+   '<span><i class="dot e"></i>plans</span>'+
+   '<span><i class="dot w"></i>training</span>'+
+   '<span><i class="dot m"></i>meals</span></div></div>'+
    '<div class="sec"><div class="spread"><h2>'+pretty(calSel)+'</h2>'+
    '<div class="row"><button class="b" id="evAdd">Add plan</button>'+
    '<button class="b o" id="mealAdd">Log meal</button>'+
@@ -5429,9 +5459,9 @@ function bind(){
   }
   if(v==='lists'){
     on('#rlNew','click',function(){
-      var n=prompt('Name the list','Sunday prep'); if(!n)return;
-      if(!S.lists[n]) S.lists[n]=[];
-      save();route();});
+      askFor('New list',[{id:'rlN',l:'Name',v:'',ph:'Sunday prep'}],function(o){
+        if(!S.lists[o.rlN]) S.lists[o.rlN]=[];
+        save();route();});});
   }
   if(v==='household') bindHousehold();
   if(v==='mealplan') bindMealPlan();
@@ -5483,13 +5513,16 @@ function drawSettingsMembers(m){
 /* ============================ shopping wiring ============================ */
 function bindShop(){
   on('#newList','click',function(){
-    var n=prompt('Name the list'); if(!n)return;
-    var c=prompt('Category (Groceries, Household, Costco run, Party...)','Groceries')||'Lists';
-    S.shop.lists[n]={cat:c,fav:false,items:[]}; S.shop.active=n; save(); route();});
+    askFor('New list',[{id:'nlN',l:'Name',v:'',ph:'Weekly shop'},
+      {id:'nlC',l:'What kind',v:'Groceries',ph:'Groceries, Household, Costco run...'}],
+      function(o){
+        S.shop.lists[o.nlN]={cat:o.nlC||'Lists',fav:false,items:[]};
+        S.shop.active=o.nlN; save(); route();});});
   on('#listRename','click',function(){
-    var n=prompt('Rename to',S.shop.active); if(!n||n===S.shop.active)return;
-    S.shop.lists[n]=S.shop.lists[S.shop.active]; delete S.shop.lists[S.shop.active];
-    S.shop.active=n; save(); route();});
+    askFor('Rename this list',[{id:'lrN',l:'Name',v:S.shop.active}],function(o){
+      if(o.lrN===S.shop.active) return;
+      S.shop.lists[o.lrN]=S.shop.lists[S.shop.active]; delete S.shop.lists[S.shop.active];
+      S.shop.active=o.lrN; save(); route();});});
   on('#listDup','click',function(){
     var n=S.shop.active+' copy';
     S.shop.lists[n]=JSON.parse(JSON.stringify(S.shop.lists[S.shop.active]));
@@ -5601,12 +5634,13 @@ function bindFin(sub){
       '" anyway and lose them?')){route();return;}
     scenLoad(v);route();toast('Opened '+v);});
   on('#scenNew','click',function(){
-    var n=prompt('Name the new scenario','Renting, both grinding'); if(!n)return;
-    if(S.fin.scenarios[n]&&!confirm('"'+n+'" exists. Overwrite it?'))return;
-    scenSave(n);route();toast('"'+n+'" created from the current numbers');});
+    askFor('New scenario',[{id:'snN',l:'Name',v:'',ph:'Renting, both grinding'}],function(o){
+      if(S.fin.scenarios[o.snN]&&!confirm('"'+o.snN+'" exists. Overwrite it?'))return;
+      scenSave(o.snN);route();toast('"'+o.snN+'" created from the current numbers');});});
   on('#scenSaveAs','click',function(){
-    var n=prompt('Save these numbers as','Copy of '+(S.fin.activeScenario||'working')); if(!n)return;
-    scenSave(n);route();toast('Saved as "'+n+'"');});
+    askFor('Save these numbers as',
+      [{id:'saN',l:'Name',v:'Copy of '+(S.fin.activeScenario||'working')}],function(o){
+      scenSave(o.saN);route();toast('Saved as "'+o.saN+'"');});});
   on('#scenUpdate','click',function(){
     if(!S.fin.activeScenario)return;
     scenSave(S.fin.activeScenario);route();toast('Saved');});
@@ -5758,6 +5792,34 @@ function jobEditor(id){
     save();m.remove();route();};
   wireParts(m,'jm');
 }
+/* Asking for a name, properly.
+ *
+ * The browser's own prompt box is a different typeface, a different shape and a
+ * different pair of buttons to everything else in here, and on a phone it drops
+ * a system dialog over the page that looks like something has gone wrong. Same
+ * modal as every other question the app asks, cursor already in the field,
+ * Enter saves. */
+function askFor(title,fields,done){
+  var m=modal(title,form(fields),
+    '<button class="b o" data-close>Cancel</button><button class="b" id="akOk">Save</button>');
+  function go(){
+    var out={};
+    for(var i=0;i<fields.length;i++){
+      var e=$('#'+fields[i].id,m);
+      out[fields[i].id]=e?String(e.value).trim():'';
+    }
+    if(!out[fields[0].id]){ toast('Give it a name'); return; }
+    m.remove(); done(out);
+  }
+  $('#akOk',m).onclick=go;
+  $$('input',m).forEach(function(i){
+    i.onkeydown=function(e){ if(e.key==='Enter'){ e.preventDefault(); go(); } };
+  });
+  var f=$('#'+fields[0].id,m);
+  if(f){ f.focus(); try{f.select();}catch(e){} }
+  return m;
+}
+
 function costEditor(id){
   var c=id?S.fin.costs.filter(function(x){return x.id===id;})[0]:{name:'',section:'Living',who:shared()?EVERYONE:ME(),low:'',real:'',high:'',actual:''};
   var m=modal(id?'Edit cost':'Add cost',
@@ -6168,9 +6230,11 @@ document.addEventListener('click',function(e){
     var arr=S.lists[rr[0]]||[]; var ri=arr.indexOf(rr[1]);
     if(ri>=0){arr.splice(ri,1);save();route();} return;}
   if((el=t.closest('[data-rle]'))){var on_=el.dataset.rle;
-    var nn=prompt('Rename the list',on_); if(!nn||nn===on_)return;
-    if(S.lists[nn]){toast('"'+nn+'" already exists');return;}
-    if(!renameKey(S.lists,on_,nn))return; save();route();return;}
+    askFor('Rename this list',[{id:'rleN',l:'Name',v:on_}],function(o){
+      if(o.rleN===on_)return;
+      if(S.lists[o.rleN]){toast('"'+o.rleN+'" already exists');return;}
+      if(!renameKey(S.lists,on_,o.rleN))return; save();route();});
+    return;}
   if((el=t.closest('[data-rld]'))){
     if(confirm('Delete the list "'+el.dataset.rld+'"? The recipes themselves stay.')){
       delete S.lists[el.dataset.rld];save();route();} return;}
