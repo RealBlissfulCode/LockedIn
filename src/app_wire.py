@@ -130,11 +130,6 @@ function bind(){
   if(v==='shopping'&&h[1]==='ingredients'){ drawIngTable('');
     on('#ingQ','input',function(){drawIngTable(this.value);});
     on('#ingNew','click',function(){ingEditor(null);});
-    on('#ingCsv','click',function(){
-      var rows=[['Ingredient','Aisle','Walmart/100g','Costco/100g','Best','BestStore','UsedIn','Edited']];
-      allIngKeys().forEach(function(k){var g=ING(k);
-        rows.push([g.n,g.a||'',g.w,g.c,best(g).toFixed(3),bestStore(g),ingUsage(k),S.ingOv[k]?'yes':'']);});
-      dl('ingredients-'+today()+'.csv',toCSV(rows),'text/csv');});
   }
   if(v==='shopping'&&h[1]!=='ingredients'){ bindShop(); }
   if(v==='training'&&h[1]==='exercises'){ drawEx();
@@ -680,17 +675,27 @@ function planSub(colId,subId){
   var s=(c.subs||[]).filter(function(x){return x.id===subId;});
   return s[0]||null;
 }
-function planColEditor(id){
-  var c=id?planCol(id):{name:'',note:''};
+function planColEditor(id,track){
+  var c=id?planCol(id):{name:'',note:'',track:track||'now'};
   if(!c) return;
-  var m=modal(id?'Edit plan':'New collection',
+  var m=modal(id?'Edit plan':'New plan',
     form([{id:'pn',l:'Name',v:c.name,ph:'Moving in together'},
-      {id:'po',l:'Note',t:'area',v:c.note||''}]),
+      {id:'pt',l:'Which road',t:'select',o:trackOpts(),v:planTrack(c)},
+      {id:'po',l:'Note',t:'area',v:c.note||'',ph:'What this one is for'}])+
+    '<p class="xs muted">The road decides where it sits on the Planning page. '+
+    'Renting and buying are different work, so they get their own boards.</p>',
+    (id?'<button class="b o dz" id="pDel">Delete</button>':'')+
     '<button class="b o" data-close>Cancel</button><button class="b" id="pSave">Save</button>');
+  var d=$('#pDel',m);
+  if(d) d.onclick=function(){
+    if(!confirm('Delete "'+c.name+'" and everything in it?'))return;
+    S.plan.cols=planCols().filter(function(x){return x.id!==id;});
+    save();m.remove();nav('planning');};
   $('#pSave',m).onclick=function(){
     var n=$('#pn',m).value.trim(); if(!n){toast('Give it a name');return;}
-    if(id){ c.name=n; c.note=$('#po',m).value.trim(); }
-    else { S.plan.cols.push({id:uid(),name:n,note:$('#po',m).value.trim(),subs:[]}); }
+    if(id){ c.name=n; c.note=$('#po',m).value.trim(); c.track=$('#pt',m).value; }
+    else { S.plan.cols.push({id:uid(),name:n,note:$('#po',m).value.trim(),
+      track:$('#pt',m).value,subs:[]}); }
     save();m.remove();route();};
 }
 function planSubEditor(colId,subId){
@@ -1068,6 +1073,8 @@ document.addEventListener('click',function(e){
       S.sched.cols=tmplCols().filter(function(x){return x.id!==el.dataset.tcdel;});
       save();nav('schedule/templates');}
     return;}
+  if((el=t.closest('[data-io]'))){ ioModal(el.dataset.io); return; }
+  if((el=t.closest('[data-plnew]'))){ planColEditor(null,el.dataset.plnew); return; }
   if((el=t.closest('[data-pex]'))){
     var pid=el.dataset.pex;
     if(openParts[pid]) delete openParts[pid]; else openParts[pid]=1;
@@ -1290,11 +1297,12 @@ function settingsModal(){
 
    setGroup('exp','Exports','Spreadsheets',
      '<div class="row">'+
-     '<button class="b o s" id="stIng">Ingredients</button>'+
-     '<button class="b o s" id="stLog">Daily log</button>'+
-     '<button class="b o s" id="stShift">Shifts</button>'+
-     '<button class="b o s" id="stFin">Budget</button>'+
-     '<button class="b o s" id="stPlan">Plans</button></div>')+
+     '<p class="sm muted">Each of these opens the same panel you get from the '+
+     'section itself: a spreadsheet out, a spreadsheet back in.</p>'+
+     '<div class="row" style="margin-top:10px">'+
+     SECTION_IO.map(function(d){
+       return '<button class="b o s" data-io="'+d.key+'">'+E(d.label)+'</button>';
+     }).join('')+'</div>')+
 
    setGroup('danger','Erase this device','Your account is not touched',
      '<p class="sm muted">This wipes the copy held on this device. Your account keeps what is '+
@@ -1324,35 +1332,11 @@ function settingsModal(){
   if(am) am.onclick=function(){
     S.members.push(blankMember('Someone','m'));
     save();chrome();drawSettingsMembers(m);};
-  $('#stIng',m).onclick=function(){
-    var rows=[['Ingredient','Aisle','Walmart/100g','Costco/100g','Best','Store','UsedIn','Edited']];
-    allIngKeys().forEach(function(k){var g=ING(k);
-      rows.push([g.n,g.a||'',g.w,g.c,best(g).toFixed(3),bestStore(g),ingUsage(k),S.ingOv[k]?'yes':'']);});
-    dl('ingredients-'+today()+'.csv',toCSV(rows),'text/csv');};
-  $('#stLog',m).onclick=function(){
-    var rows=[['Date','Training','Kcal','Protein','FoodCost','OtherSpend','Plans','Notes']];
-    Object.keys(S.days).sort().forEach(function(d){var r=S.days[d],e=eaten(d);
-      var sp=(r.spend||[]).reduce(function(a,x){return a+(x.amt||0);},0);
-      rows.push([d,TRAIN[r.workout]?TRAIN[r.workout].n:r.workout,Math.round(e.kcal),
-        Math.round(e.p),e.cost.toFixed(2),sp.toFixed(2),
-        (r.sched||[]).map(function(x){return WHO(x.who)+':'+x.what;}).join('; '),r.notes||'']);});
-    dl('daily-log-'+today()+'.csv',toCSV(rows),'text/csv');};
-  $('#stShift',m).onclick=function(){
-    var rows=[['Date','Who','Job','Hours','Gross','Net','Note']];
-    S.fin.shifts.forEach(function(s){var j=S.fin.jobs.filter(function(x){return x.id===s.jobId;})[0];
-      rows.push([s.date,j?WHO(j.who):'',j?j.name:'',s.hours,s.gross,s.net,s.note||'']);});
-    dl('shifts-'+today()+'.csv',toCSV(rows),'text/csv');};
-  $('#stFin',m).onclick=function(){
-    var rows=[['Type','Section','Name','Who','Low','Realistic','High','Actual']];
-    S.fin.jobs.forEach(function(j){rows.push(['Income','',j.name,WHO(j.who),j.low,j.real,j.high,j.actual||'']);});
-    S.fin.costs.forEach(function(c){rows.push(['Cost',c.section,c.name,WHO(c.who),c.low,c.real,c.high,c.actual||'']);});
-    dl('budget-'+today()+'.csv',toCSV(rows),'text/csv');};
-  $('#stPlan',m).onclick=function(){
-    var rows=[['Plan','Section','Item','Done','Note']];
-    planCols().forEach(function(c){(c.subs||[]).forEach(function(s){
-      (s.items||[]).forEach(function(i){
-        rows.push([c.name,s.name,i.text,i.done?'yes':'',i.note||'']);});});});
-    dl('plans-'+today()+'.csv',toCSV(rows),'text/csv');};
+  
+  
+  
+  
+  
   var sy=$('#stSync',m); if(sy) sy.onclick=function(){
     if(syncState==='off'){toast('Not signed in');return;}
     pushState(); pullState(); toast('Saving');};

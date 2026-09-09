@@ -762,6 +762,22 @@ margin-bottom:10px}
 .pamt{min-width:0}
 }
 
+/* ---------------- planning boards ----------------
+   One board per road. The road you are actually on gets a lit edge so the eye
+   lands there first, and an empty one still shows because a road with nothing
+   on it is worth noticing. */
+.trk{margin-top:26px;padding-left:15px;border-left:2px solid var(--line)}
+.trk.live{border-left-color:var(--brass)}
+.trkhead{display:flex;align-items:flex-start;justify-content:space-between;
+gap:14px;margin-bottom:14px;flex-wrap:wrap}
+.trkhead h2{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:17px}
+.trkhead p{margin:5px 0 0;max-width:56ch}
+.trkempty{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:12px 0 2px}
+@media (max-width:620px){
+.trk{margin-top:22px;padding-left:12px}
+.trkhead h2{font-size:16px}
+}
+
 /* ---------------- charts ---------------- */
 .cempty{padding:26px 4px;text-align:center;color:var(--ink-4);font-size:12.5px}
 .cchart{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:8px;align-items:end}

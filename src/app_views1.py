@@ -196,6 +196,7 @@ function vRecipeLists(){
    '<p>Collections of recipes: a Sunday prep list, the things she actually eats, '+
    'whatever is worth keeping together.</p></div>'+
    '<div class="row toolbar"><button class="b" id="rlNew">New list</button>'+
+   '<button class="b o" data-io="daylog">Import or export</button>'+
    '<button class="b o" data-nav="meals">&larr; Meals</button></div>'+
    (names.length?names.map(function(n){
      var ids=(L[n]||[]), rs=ids.map(byId).filter(Boolean);
@@ -305,6 +306,7 @@ function vShopping(sub){
 
    '<div class="sec"><div class="spread"><h2>Lists</h2>'+
    '<div class="row"><button class="b o s" id="newList">New list</button>'+
+   '<button class="b o s" data-io="shopping">Import or export</button>'+
    '<button class="b o s" data-nav="shopping/ingredients">Ingredient list</button></div></div>'+
    Object.keys(cats).sort().map(function(c){
      return '<div style="margin:10px 0"><div class="lbl" style="margin-bottom:7px">'+E(c)+'</div>'+
@@ -356,7 +358,7 @@ function vIngredients(){
    '<div class="row toolbar">'+
    '<button class="b" id="ingNew">Add an ingredient</button>'+
    '<button class="b o" data-nav="shopping">&larr; Back to lists</button>'+
-   '<button class="b o" id="ingCsv">Export list</button>'+
+   '<button class="b o" data-io="ingredients">Import or export</button>'+
    '<input class="right" id="ingQ" placeholder="Search "+keys.length+" ingredients" '+
    'style="padding:10px 13px;border:1px solid var(--line-2);border-radius:9px;min-width:220px">'+
    '</div><div class="tw cards"><table><thead><tr><th>Ingredient</th><th>Aisle</th>'+

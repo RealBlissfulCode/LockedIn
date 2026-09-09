@@ -761,6 +761,22 @@ margin-bottom:10px}
 .pamt{min-width:0}
 }
 
+/* ---------------- planning boards ----------------
+   One board per road. The road you are actually on gets a lit edge so the eye
+   lands there first, and an empty one still shows because a road with nothing
+   on it is worth noticing. */
+.trk{margin-top:26px;padding-left:15px;border-left:2px solid var(--line)}
+.trk.live{border-left-color:var(--brass)}
+.trkhead{display:flex;align-items:flex-start;justify-content:space-between;
+gap:14px;margin-bottom:14px;flex-wrap:wrap}
+.trkhead h2{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:17px}
+.trkhead p{margin:5px 0 0;max-width:56ch}
+.trkempty{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:12px 0 2px}
+@media (max-width:620px){
+.trk{margin-top:22px;padding-left:12px}
+.trkhead h2{font-size:16px}
+}
+
 /* ---------------- charts ---------------- */
 .cempty{padding:26px 4px;text-align:center;color:var(--ink-4);font-size:12.5px}
 .cchart{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:8px;align-items:end}
@@ -1065,7 +1081,7 @@ border-bottom:1px solid var(--line)}
 </script><script>(function(){
 'use strict';
 var _D=window._DATA;
-var BUILD='c7ab330';
+var BUILD='4811cad';
 
 /* ============================================================
    THE HANDBOOK  -  five sections, one state object, one file.
@@ -1579,8 +1595,11 @@ function estDayCost(t,mode){
 
 /* ---------------- file persistence ---------------- */
 function exportAll(){
-  var blob={app:'handbook',version:6,exported:new Date().toISOString(),state:S};
-  dl('handbook-data-'+today()+'.json',JSON.stringify(blob,null,1),'application/json');
+  /* The whole thing, every section, exactly as it stands. The label used to say
+     handbook version 6, which was the name and the shape from two rewrites ago. */
+  var blob={app:'lockedin',version:S.v||7,exported:new Date().toISOString(),
+            household:S.household||'',state:S};
+  dl('lockedin-'+today()+'.json',JSON.stringify(blob,null,1),'application/json');
   toast('Saved to file');
 }
 function importAll(file,cb){
@@ -3903,6 +3922,374 @@ function bindActuals(){
   countUp($('#view'));
 }
 
+/* ============================ import and export ============================ */
+
+/* A CSV a spreadsheet will actually open. Quotes doubled, anything with a
+   comma, a quote or a newline in it wrapped. */
+function csvEsc2(v){
+  v=(v===null||v===undefined)?'':String(v);
+  return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;
+}
+function csvOut(rows){
+  return rows.map(function(r){return r.map(csvEsc2).join(',');}).join('\r\n');
+}
+/* And one it will actually give back. Handles quoted fields with commas and
+   newlines inside them, doubled quotes, and both line ending conventions,
+   because a file that has been round a Windows machine should still load. */
+function csvIn(text){
+  var rows=[], row=[], cur='', q=false, i=0;
+  text=String(text).replace(/^﻿/,'');
+  while(i<text.length){
+    var ch=text[i];
+    if(q){
+      if(ch==='"'){ if(text[i+1]==='"'){cur+='"';i+=2;continue;} q=false;i++;continue; }
+      cur+=ch;i++;continue;
+    }
+    if(ch==='"'){ q=true;i++;continue; }
+    if(ch===','){ row.push(cur);cur='';i++;continue; }
+    if(ch==='\r'){ i++;continue; }
+    if(ch==='\n'){ row.push(cur);rows.push(row);row=[];cur='';i++;continue; }
+    cur+=ch;i++;
+  }
+  if(cur!==''||row.length){ row.push(cur); rows.push(row); }
+  return rows.filter(function(r){ return r.some(function(c){return String(c).trim()!=='';}); });
+}
+/* Header row to index, so a column can move and the import still works. */
+function csvCols(head){
+  var m={};
+  head.forEach(function(h,i){ m[String(h).trim().toLowerCase()]=i; });
+  return function(name,row,dflt){
+    var i=m[String(name).toLowerCase()];
+    return (i===undefined||row[i]===undefined)?(dflt===undefined?'':dflt):String(row[i]).trim();
+  };
+}
+function ynBool(v){ return /^(y|yes|true|1|done|x)$/i.test(String(v).trim()); }
+
+/* Every section that can go in or out on its own.
+   rows() gives the spreadsheet. load() takes one back, either adding to what is
+   here or replacing it. json()/loadJson() carry the parts a flat table cannot,
+   like a cost line's breakdown or a comparison list's own columns. */
+var SECTION_IO=[
+ {key:'plans', label:'Plans', page:'planning',
+  head:['Plan','Section','Item','Done','Note'],
+  rows:function(){
+    var out=[];
+    planCols().forEach(function(c){ (c.subs||[]).forEach(function(s){
+      (s.items||[]).forEach(function(i){
+        out.push([c.name,s.name,i.text,i.done?'yes':'',i.note||'']); }); }); });
+    return out;
+  },
+  load:function(rows,replace){
+    var g=csvCols(rows[0]), body=rows.slice(1);
+    if(replace) S.plan.cols=[];
+    body.forEach(function(r){
+      var pn=g('Plan',r)||'Imported', sn=g('Section',r)||'Everything else';
+      var c=null;
+      (S.plan.cols||[]).forEach(function(x){ if(!c&&x.name===pn) c=x; });
+      if(!c){ c={id:uid(),name:pn,note:'',subs:[]}; S.plan.cols.push(c); }
+      var s=null;
+      (c.subs=c.subs||[]).forEach(function(x){ if(!s&&x.name===sn) s=x; });
+      if(!s){ s={id:uid(),name:sn,note:'',items:[]}; c.subs.push(s); }
+      s.items=s.items||[];
+      s.items.push({id:uid(),text:g('Item',r),note:g('Note',r),done:ynBool(g('Done',r))});
+    });
+  },
+  json:function(){ return {plan:S.plan}; },
+  loadJson:function(o){ if(o.plan) S.plan=o.plan; }},
+
+ {key:'schedule', label:'Calendar', page:'schedule',
+  head:['Date','Who','What','From','To','Where'],
+  rows:function(){
+    var out=[];
+    Object.keys(S.days||{}).sort().forEach(function(d){
+      ((S.days[d]||{}).sched||[]).forEach(function(x){
+        out.push([d,WHO(x.who),x.what||'',x.from||'',x.to||'',x.where||'']); }); });
+    return out;
+  },
+  load:function(rows,replace){
+    var g=csvCols(rows[0]), body=rows.slice(1);
+    if(replace) Object.keys(S.days||{}).forEach(function(d){ S.days[d].sched=[]; });
+    body.forEach(function(r){
+      var d=g('Date',r); if(!d) return;
+      var day=dayLog(d);
+      day.sched=day.sched||[];
+      day.sched.push({who:whoIdFor(g('Who',r)),what:g('What',r),
+        from:g('From',r),to:g('To',r),where:g('Where',r)});
+    });
+  },
+  json:function(){ return {days:S.days,sched:S.sched}; },
+  loadJson:function(o){ if(o.days) S.days=o.days; if(o.sched) S.sched=o.sched; }},
+
+ {key:'income', label:'Income lines', page:'financial',
+  head:['Name','Who','Employer','Title','Hourly rate','Low','Realistic','High','Actual','Counted'],
+  rows:function(){
+    return (S.fin.jobs||[]).map(function(j){
+      return [j.name,WHO(j.who),j.employer||'',j.title||'',j.rate||'',
+        j.low||0,j.real||0,j.high||0,j.actual||'',j.off?'no':'yes']; });
+  },
+  load:function(rows,replace){
+    var g=csvCols(rows[0]), body=rows.slice(1);
+    if(replace) S.fin.jobs=[];
+    body.forEach(function(r){
+      if(!g('Name',r)) return;
+      S.fin.jobs.push({id:uid(),name:g('Name',r),who:whoIdFor(g('Who',r)),
+        employer:g('Employer',r),title:g('Title',r),rate:num(g('Hourly rate',r))||null,
+        low:num(g('Low',r)),real:num(g('Realistic',r)),high:num(g('High',r)),
+        actual:num(g('Actual',r))||null,off:/^(n|no|off|false)$/i.test(g('Counted',r,'yes'))});
+    });
+  },
+  json:function(){ return {jobs:S.fin.jobs}; },
+  loadJson:function(o){ if(o.jobs) S.fin.jobs=o.jobs; }},
+
+ {key:'costs', label:'Cost lines', page:'financial',
+  head:['Name','Section','Who','Low','Realistic','High','Actual','Counted','Note'],
+  rows:function(){
+    return (S.fin.costs||[]).map(function(c){
+      return [c.name,c.section,WHO(c.who),c.low||0,c.real||0,c.high||0,
+        c.actual||'',c.off?'no':'yes',c.note||'']; });
+  },
+  load:function(rows,replace){
+    var g=csvCols(rows[0]), body=rows.slice(1);
+    if(replace) S.fin.costs=[];
+    body.forEach(function(r){
+      if(!g('Name',r)) return;
+      S.fin.costs.push({id:uid(),name:g('Name',r),
+        section:newSection(g('Section',r),g('Name',r)),who:whoIdFor(g('Who',r)),
+        low:num(g('Low',r)),real:num(g('Realistic',r)),high:num(g('High',r)),
+        actual:num(g('Actual',r))||null,
+        off:/^(n|no|off|false)$/i.test(g('Counted',r,'yes')),
+        note:g('Note',r),parts:[]});
+    });
+  },
+  json:function(){ return {costs:S.fin.costs}; },
+  loadJson:function(o){ if(o.costs) S.fin.costs=o.costs; }},
+
+ {key:'breakdown', label:'Cost breakdowns', page:'financial',
+  head:['Cost','Part','Qty','Each'],
+  rows:function(){
+    var out=[];
+    (S.fin.costs||[]).forEach(function(c){ (c.parts||[]).forEach(function(p){
+      out.push([c.name,p.n,p.qty==null?1:p.qty,p.each||0]); }); });
+    (S.fin.jobs||[]).forEach(function(j){ (j.parts||[]).forEach(function(p){
+      out.push([j.name,p.n,p.qty==null?1:p.qty,p.each||0]); }); });
+    return out;
+  },
+  load:function(rows,replace){
+    var g=csvCols(rows[0]), body=rows.slice(1);
+    var all=(S.fin.costs||[]).concat(S.fin.jobs||[]);
+    if(replace) all.forEach(function(x){ x.parts=[]; });
+    body.forEach(function(r){
+      var nm=g('Cost',r), hit=null;
+      all.forEach(function(x){ if(!hit&&x.name===nm) hit=x; });
+      if(!hit) return;
+      hit.parts=hit.parts||[];
+      hit.parts.push({id:uid(),n:g('Part',r)||'Part',
+        qty:num(g('Qty',r,'1'))||1,each:num(g('Each',r))});
+    });
+  }},
+
+ {key:'purchases', label:'Comparison lists', page:'financial/purchases',
+  head:['List','Item','Price','Link','Notes'],
+  rows:function(){
+    var out=[];
+    Object.keys(S.fin.purchases||{}).forEach(function(n){
+      ((S.fin.purchases[n]||{}).items||[]).forEach(function(i){
+        out.push([n,i.name,i.price||'',i.link||'',i.notes||'']); }); });
+    return out;
+  },
+  load:function(rows,replace){
+    var g=csvCols(rows[0]), body=rows.slice(1);
+    if(replace) S.fin.purchases={};
+    body.forEach(function(r){
+      var ln=g('List',r)||'Imported';
+      var L=S.fin.purchases[ln]||(S.fin.purchases[ln]={cat:'',note:'',items:[]});
+      L.items=L.items||[];
+      L.items.push({id:uid(),name:g('Item',r),price:num(g('Price',r)),
+        link:g('Link',r),notes:g('Notes',r),fields:{}});
+    });
+  },
+  json:function(){ return {purchases:S.fin.purchases}; },
+  loadJson:function(o){ if(o.purchases) S.fin.purchases=o.purchases; }},
+
+ {key:'strategies', label:'Strategies', page:'financial/strategies',
+  head:['List','Item','Low','Realistic','High','Rate','Effort','When','Status','How'],
+  rows:function(){
+    var out=[];
+    Object.keys(S.fin.strategies||{}).forEach(function(n){
+      ((S.fin.strategies[n]||{}).items||[]).forEach(function(i){
+        out.push([n,i.name,i.low||0,i.real||0,i.high||0,i.rate||'',i.effort||'',
+          i.when||'',i.status||'',i.how||'']); }); });
+    return out;
+  },
+  load:function(rows,replace){
+    var g=csvCols(rows[0]), body=rows.slice(1);
+    if(replace) S.fin.strategies={};
+    body.forEach(function(r){
+      var ln=g('List',r)||'Imported';
+      var L=S.fin.strategies[ln]||(S.fin.strategies[ln]={note:'',items:[]});
+      L.items=L.items||[];
+      L.items.push({id:uid(),name:g('Item',r),low:num(g('Low',r)),real:num(g('Realistic',r)),
+        high:num(g('High',r)),rate:g('Rate',r),effort:g('Effort',r),
+        when:g('When',r),status:g('Status',r),how:g('How',r)});
+    });
+  },
+  json:function(){ return {strategies:S.fin.strategies}; },
+  loadJson:function(o){ if(o.strategies) S.fin.strategies=o.strategies; }},
+
+ {key:'shopping', label:'Shopping lists', page:'shopping',
+  head:['List','Category','Item','Qty','Done'],
+  rows:function(){
+    var out=[], L=(S.shop||{}).lists||{};
+    Object.keys(L).forEach(function(n){
+      (L[n].items||[]).forEach(function(i){
+        out.push([n,L[n].cat||'',i.n||i.name||'',i.q||i.qty||'',i.done?'yes':'']); }); });
+    return out;
+  },
+  load:function(rows,replace){
+    var g=csvCols(rows[0]), body=rows.slice(1);
+    S.shop=S.shop||{active:'',lists:{}};
+    if(replace) S.shop.lists={};
+    body.forEach(function(r){
+      var ln=g('List',r)||'Imported';
+      var L=S.shop.lists[ln]||(S.shop.lists[ln]={cat:g('Category',r),fav:false,items:[]});
+      L.items=L.items||[];
+      L.items.push({id:uid(),n:g('Item',r),q:g('Qty',r),done:ynBool(g('Done',r))});
+    });
+    if(!S.shop.active||!S.shop.lists[S.shop.active])
+      S.shop.active=Object.keys(S.shop.lists)[0]||'';
+  },
+  json:function(){ return {shop:S.shop}; },
+  loadJson:function(o){ if(o.shop) S.shop=o.shop; }},
+
+ {key:'ingredients', label:'Ingredient prices', page:'shopping/ingredients',
+  head:['Ingredient','Aisle','Walmart per 100g','Costco per 100g'],
+  rows:function(){
+    return allIngKeys().map(function(k){ var g=ING(k);
+      return [g.n,g.a||'',g.w==null?'':g.w,g.c==null?'':g.c]; });
+  },
+  load:function(rows,replace){
+    var g=csvCols(rows[0]), body=rows.slice(1);
+    if(replace) S.ingOv={};
+    var byName={};
+    allIngKeys().forEach(function(k){ byName[ING(k).n.toLowerCase()]=k; });
+    body.forEach(function(r){
+      var k=byName[g('Ingredient',r).toLowerCase()]; if(!k) return;
+      var ov=S.ingOv[k]||{};
+      var w=g('Walmart per 100g',r), c=g('Costco per 100g',r);
+      if(w!=='') ov.w=num(w);
+      if(c!=='') ov.c=num(c);
+      if(g('Aisle',r)) ov.a=g('Aisle',r);
+      S.ingOv[k]=ov;
+    });
+  },
+  json:function(){ return {ingOv:S.ingOv}; },
+  loadJson:function(o){ if(o.ingOv) S.ingOv=o.ingOv; }},
+
+ {key:'daylog', label:'Daily log', page:'meals',
+  head:['Date','Training','Weight','Notes'],
+  rows:function(){
+    return Object.keys(S.days||{}).sort().map(function(d){ var r=S.days[d]||{};
+      return [d,r.workout||'rest',r.w==null?'':r.w,r.notes||'']; });
+  },
+  load:function(rows,replace){
+    var g=csvCols(rows[0]), body=rows.slice(1);
+    body.forEach(function(r){
+      var d=g('Date',r); if(!d) return;
+      var day=dayLog(d);
+      if(g('Training',r)) day.workout=g('Training',r);
+      if(g('Weight',r)) day.w=num(g('Weight',r));
+      if(g('Notes',r)) day.notes=g('Notes',r);
+    });
+  },
+  json:function(){ return {days:S.days}; },
+  loadJson:function(o){ if(o.days) S.days=o.days; }}
+];
+
+function sectionIO(key){
+  var hit=null;
+  SECTION_IO.forEach(function(x){ if(!hit&&x.key===key) hit=x; });
+  return hit;
+}
+/* A name in a spreadsheet back to the person it means. Falls back to shared,
+   because a row that names somebody who left should still come in. */
+function whoIdFor(name){
+  name=String(name||'').trim();
+  if(!name) return shared()?EVERYONE:ME();
+  if(/^(both|both of us|all|shared|everyone|us)$/i.test(name)) return EVERYONE;
+  var hit=null;
+  MEMS().forEach(function(m){ if(!hit&&m.name.toLowerCase()===name.toLowerCase()) hit=m.id; });
+  return hit||(shared()?EVERYONE:ME());
+}
+
+/* One panel, the same for every section. */
+function ioModal(key){
+  var d=sectionIO(key); if(!d) return;
+  var n=d.rows().length;
+  var m=modal(d.label+': import and export',
+    '<p class="sm muted">A spreadsheet for reading and editing, a file for keeping '+
+    'everything exactly as it is. Both only cover '+E(d.label.toLowerCase())+'. '+
+    'To save the whole account at once use Settings.</p>'+
+    '<div class="stats gap-b" style="margin-top:12px">'+
+    '<div class="stat"><b>'+n+'</b><span>rows right now</span></div></div>'+
+    '<div class="row"><button class="b" id="ioCsv">Export a spreadsheet</button>'+
+    (d.json?'<button class="b o" id="ioJson">Export a file</button>':'')+'</div>'+
+    '<div class="sec" style="margin-top:18px"><h2>Bringing some in</h2>'+
+    '<p class="sm muted">A .csv with the same column headings as the export, or a '+
+    'file this app wrote. Column order does not matter, only the headings.</p>'+
+    '<label class="f" style="margin-top:12px"><span>What to do with what is here</span>'+
+    '<select id="ioMode">'+
+    '<option value="merge">Add it to what is already here</option>'+
+    '<option value="replace">Replace what is here</option></select></label>'+
+    '<div class="row"><button class="b o" id="ioPick">Choose a file</button></div>'+
+    '<p class="xs muted" style="margin-top:10px">Headings for this one: '+
+    E(d.head.join(', '))+'</p></div>',
+    '<button class="b" data-close>Close</button>');
+
+  $('#ioCsv',m).onclick=function(){
+    dl(d.key+'-'+today()+'.csv',csvOut([d.head].concat(d.rows())),'text/csv');
+    toast('Spreadsheet saved');
+  };
+  var jb=$('#ioJson',m);
+  if(jb) jb.onclick=function(){
+    dl(d.key+'-'+today()+'.json',
+      JSON.stringify({app:'lockedin',section:d.key,exported:new Date().toISOString(),
+        data:d.json()},null,1),'application/json');
+    toast('File saved');
+  };
+  $('#ioPick',m).onclick=function(){
+    var replace=$('#ioMode',m).value==='replace';
+    var inp=document.createElement('input');
+    inp.type='file'; inp.accept='.csv,.json,text/csv,application/json';
+    inp.onchange=function(){
+      var f=inp.files[0]; if(!f) return;
+      var fr=new FileReader();
+      fr.onload=function(){
+        try{
+          var txt=String(fr.result);
+          var before=d.rows().length;
+          if(/^\s*[\{\[]/.test(txt)){
+            if(!d.loadJson) throw new Error('this section only takes a spreadsheet');
+            var o=JSON.parse(txt);
+            d.loadJson(o.data||o);
+          }else{
+            var rows=csvIn(txt);
+            if(rows.length<2) throw new Error('there are no rows in that file');
+            d.load(rows,replace);
+          }
+          save(); m.remove(); route();
+          toast(d.label+': '+before+' before, '+d.rows().length+' now');
+        }catch(e){
+          alert('That did not load.\n\n'+(e.message||e)+
+            '\n\nThe headings this section expects are:\n'+d.head.join(', '));
+        }
+      };
+      fr.readAsText(f);
+    };
+    inp.click();
+  };
+  return m;
+}
+
 /* ============================ MEALS ============================ */
 var CATC={'Breakfast':['#D89A3C','#B0651F'],'Lunch/Dinner':['#2C6B50','#173C2C'],
  'Snack':['#4E8C7A','#28584A'],'Drink':['#6E5AA8','#3F3168'],
@@ -4099,6 +4486,7 @@ function vRecipeLists(){
    '<p>Collections of recipes: a Sunday prep list, the things she actually eats, '+
    'whatever is worth keeping together.</p></div>'+
    '<div class="row toolbar"><button class="b" id="rlNew">New list</button>'+
+   '<button class="b o" data-io="daylog">Import or export</button>'+
    '<button class="b o" data-nav="meals">&larr; Meals</button></div>'+
    (names.length?names.map(function(n){
      var ids=(L[n]||[]), rs=ids.map(byId).filter(Boolean);
@@ -4208,6 +4596,7 @@ function vShopping(sub){
 
    '<div class="sec"><div class="spread"><h2>Lists</h2>'+
    '<div class="row"><button class="b o s" id="newList">New list</button>'+
+   '<button class="b o s" data-io="shopping">Import or export</button>'+
    '<button class="b o s" data-nav="shopping/ingredients">Ingredient list</button></div></div>'+
    Object.keys(cats).sort().map(function(c){
      return '<div style="margin:10px 0"><div class="lbl" style="margin-bottom:7px">'+E(c)+'</div>'+
@@ -4259,7 +4648,7 @@ function vIngredients(){
    '<div class="row toolbar">'+
    '<button class="b" id="ingNew">Add an ingredient</button>'+
    '<button class="b o" data-nav="shopping">&larr; Back to lists</button>'+
-   '<button class="b o" id="ingCsv">Export list</button>'+
+   '<button class="b o" data-io="ingredients">Import or export</button>'+
    '<input class="right" id="ingQ" placeholder="Search "+keys.length+" ingredients" '+
    'style="padding:10px 13px;border:1px solid var(--line-2);border-radius:9px;min-width:220px">'+
    '</div><div class="tw cards"><table><thead><tr><th>Ingredient</th><th>Aisle</th>'+
@@ -4774,6 +5163,7 @@ function vFinancial(sub){
    '<div class="row"><span class="chip p">'+jobsOn+' of '+S.fin.jobs.length+' on</span>'+
    '<button class="b o s" data-alltog="jobs|1">All on</button>'+
    '<button class="b o s" data-alltog="jobs|0">All off</button>'+
+   '<button class="b o s" data-io="income">Import or export</button>'+
    '<button class="b o s" id="jobAdd2">Add</button></div></div><div class="tw wide cards"><table>'+
    '<thead><tr><th>Name</th><th>Who</th><th>Rate</th><th>Employer</th><th class="num">Low</th>'+
    '<th class="num">Realistic</th><th class="num">High</th><th class="num">Actual</th><th></th></tr></thead><tbody>'+
@@ -4809,6 +5199,7 @@ function vFinancial(sub){
    '<div class="row"><span class="chip p">'+costsOn+' of '+costsInPath+' on</span>'+
    '<button class="b o s" data-alltog="costs|1">All on</button>'+
    '<button class="b o s" data-alltog="costs|0">All off</button>'+
+   '<button class="b o s" data-io="costs">Import or export</button>'+
    '<button class="b o s" id="costAdd">Add</button></div></div><div class="tw wide cards"><table>'+
    '<thead><tr><th>Cost</th><th>Section</th><th>Who</th><th class="num">Low</th>'+
    '<th class="num">Realistic</th><th class="num">High</th><th class="num">Actual</th><th></th></tr></thead><tbody>'+
@@ -4879,7 +5270,8 @@ function vPurchases(){
   return '<div class="page"><div class="phead"><h1>Big purchases</h1>'+
    '<p>Places, houses, cars, anything worth comparing side by side before committing. '+
    'Every list here is yours to rename, edit or delete.</p></div>'+
-   '<div class="row toolbar"><button class="b" id="bpNew">New list</button>'+
+   '<div class="row toolbar"><button class="b o" data-io="purchases">Import or export</button>'+
+   '<button class="b" id="bpNew">New list</button>'+
    '<button class="b o" data-nav="financial">&larr; Financial</button></div>'+
    (names.length?names.map(function(n){var L=P_[n], its=L.items||[];
      var prices=its.map(function(i){return num(i.price);}).filter(function(x){return x>0;});
@@ -4945,7 +5337,8 @@ function vStrategies(){
   return '<div class="page"><div class="phead"><h1>Strategies</h1>'+
    '<p>Ways to close the gap, sorted by what they are worth against what they cost you. '+
    'Anything marked dead has been checked and is dead, so it does not get researched twice.</p></div>'+
-   '<div class="row toolbar"><button class="b" id="stNew">New list</button>'+
+   '<div class="row toolbar"><button class="b o" data-io="strategies">Import or export</button>'+
+   '<button class="b" id="stNew">New list</button>'+
    '<button class="b o" data-nav="financial">&larr; Financial</button>'+
    '<label class="f inline"><span>Column</span><select id="stMode">'+
    opt([['low','Lean (low)'],['real','Realistic'],['high','Good month (high)']],mode)+
@@ -5084,7 +5477,8 @@ function vSchedule(sub){
    '<div class="sec"><div class="spread"><h2>'+pretty(calSel)+'</h2>'+
    '<div class="row"><button class="b" id="evAdd">Add plan</button>'+
    '<button class="b o" id="mealAdd">Log meal</button>'+
-   '<button class="b o" id="spAdd">Log spend</button></div></div>'+
+   '<button class="b o" id="spAdd">Log spend</button>'+
+   '<button class="b o" data-io="schedule">Import or export</button></div></div>'+
    '<div class="grid g2"><div class="card pad">'+tl(calSel)+freeSlots(d)+'</div>'+
    '<div class="card pad"><h3 class="ctitle">The day</h3>'+
    '<label class="f"><span>Training</span><select id="schWorkout">'+
@@ -5205,7 +5599,42 @@ function vTemplateEdit(id){
 /* ============================ PLANNING ============================
    General plans. A collection holds subsections, a subsection holds items.
    All three levels can be created, renamed and deleted. */
+/* Which road a plan belongs to.
+ *
+ * Moving in, renting and buying are three different decisions with three
+ * different sets of work, and stacking them in one list means the buying work
+ * sits in front of you for a year before it is real, while the thing you are
+ * actually doing this month is buried under it. A plan says which road it is
+ * on, the page groups by road, and the one matching the housing path chosen on
+ * Financial is the one open at the top. */
+var PLAN_TRACKS=[
+  ['now','Happening now','Whatever is actually in front of you this month.'],
+  ['rent','Renting together','The lease road: applying, signing, moving in.'],
+  ['buy','Buying a home','The mortgage road. Real once the preapproval says it is.'],
+  ['both','True either way','Work that has to happen whichever road you take.'],
+  ['open','Still undecided','Questions, not tasks. Decide these and things move.']
+];
+function trackName(k){
+  var n=k;
+  PLAN_TRACKS.forEach(function(t){ if(t[0]===k) n=t[1]; });
+  return n;
+}
+function trackOpts(){ return PLAN_TRACKS.map(function(t){ return [t[0],t[1]]; }); }
+function planTrack(c){
+  if(c.track) return c.track;
+  /* Plans written before there were roads. Read the name rather than dumping
+     them all in one bucket, so an account that already has them opens sorted. */
+  var n=(c.name||'').toLowerCase();
+  if(/question|undecided|decide/.test(n)) return 'open';
+  if(/buy|mortgage|purchase|house hunt/.test(n)) return 'buy';
+  if(/rent|lease|apartment/.test(n)) return 'rent';
+  if(/mov(e|ing) in|first night|move/.test(n)) return 'now';
+  return 'both';
+}
 function planCols(){ return (S.plan&&S.plan.cols)||[]; }
+function plansOnTrack(k){
+  return planCols().filter(function(c){ return planTrack(c)===k; });
+}
 function planCol(id){ var c=planCols().filter(function(x){return x.id===id;}); return c[0]||null; }
 function planCount(c){
   var t=0,d=0;
@@ -5216,23 +5645,50 @@ function vPlanning(sub){
   if(sub) return vPlanCol(sub);
   var cols=planCols();
   return '<div class="page"><div class="phead"><h1>Planning</h1>'+
-   '<p>Plans that are not about money or food. Make a collection for anything, break it into '+
-   'subsections, and tick things off as they happen.</p></div>'+
-   '<div class="row toolbar"><button class="b" id="plNew">New collection</button></div>'+
-   (cols.length?'<div class="grid g2">'+cols.map(function(c){
-     var n=planCount(c);
-     return '<button class="card pad plcard" data-plgo="'+c.id+'">'+
-     '<div class="spread"><h3 class="pln">'+E(c.name)+'</h3>'+
-     '<span class="chip p">'+n.done+' / '+n.total+'</span></div>'+
-     (c.note?'<p class="sm muted" style="margin:8px 0 0">'+E(c.note)+'</p>':'')+
-     '<div class="bar" style="margin-top:14px"><i class="pp" style="width:'+n.pct+'%"></i></div>'+
-     '<div class="xs muted" style="margin-top:8px">'+
-     (c.subs||[]).length+' section'+((c.subs||[]).length===1?'':'s')+
-     (n.total?' &middot; '+n.pct+'% done':'')+'</div>'+
-     '</button>';}).join('')+'</div>'
-    :'<div class="empty"><p>No plans yet.</p><p class="sm">Start one for moving in, or a trip, '+
+   '<p>Everything that is not money or food, sorted by which road it belongs to. '+
+   'Moving in, renting and buying are different work, so they get their own boards '+
+   'and the buying list stops sitting in front of you a year before it is real.</p></div>'+
+   '<div class="row toolbar"><button class="b" id="plNew">New plan</button>'+
+   '<button class="b o" data-io="plans">Import or export</button></div>'+
+   (cols.length?planTrackBoards():
+     '<div class="empty"><p>No plans yet.</p><p class="sm">Start one for moving in, or a trip, '+
      'or anything with more than three steps.</p></div>')+
    '</div>';
+}
+
+/* One board per road, in the order you meet them. A road with nothing on it
+   still shows, because the gap is the point: no plan for buying yet is worth
+   seeing. The road matching the housing path on Financial is marked. */
+function planTrackBoards(){
+  var path=(S.fin&&S.fin.path)||'rent';
+  return PLAN_TRACKS.map(function(t){
+    var key=t[0], list=plansOnTrack(key);
+    var live=(key==='rent'&&path==='rent')||(key==='buy'&&path==='buy');
+    var tot={done:0,total:0};
+    list.forEach(function(c){ var n=planCount(c); tot.done+=n.done; tot.total+=n.total; });
+    var pct=tot.total?Math.round(tot.done/tot.total*100):0;
+    return '<div class="trk'+(live?' live':'')+'">'+
+      '<div class="trkhead"><div><h2>'+E(t[1])+
+        (live?'<span class="chip t">the path you are on</span>':'')+'</h2>'+
+        '<p class="sm muted">'+E(t[2])+'</p></div>'+
+        (tot.total?'<span class="chip p">'+tot.done+' / '+tot.total+'</span>':'')+'</div>'+
+      (list.length
+        ? '<div class="grid g2">'+list.map(planCard).join('')+'</div>'
+        : '<p class="xs muted trkempty">Nothing on this road yet.</p>')+
+      '</div>';
+  }).join('');
+}
+function planCard(c){
+  var n=planCount(c);
+  return '<button class="card pad plcard" data-plgo="'+c.id+'">'+
+    '<div class="spread"><h3 class="pln">'+E(c.name)+'</h3>'+
+    '<span class="chip p">'+n.done+' / '+n.total+'</span></div>'+
+    (c.note?'<p class="sm muted" style="margin:8px 0 0">'+E(c.note)+'</p>':'')+
+    '<div class="bar" style="margin-top:14px"><i class="pp" style="width:'+n.pct+'%"></i></div>'+
+    '<div class="xs muted" style="margin-top:8px">'+
+    (c.subs||[]).length+' section'+((c.subs||[]).length===1?'':'s')+
+    (n.total?' &middot; '+n.pct+'% done':'')+'</div>'+
+    '</button>';
 }
 function vPlanCol(id){
   var c=planCol(id);
@@ -5438,11 +5894,6 @@ function bind(){
   if(v==='shopping'&&h[1]==='ingredients'){ drawIngTable('');
     on('#ingQ','input',function(){drawIngTable(this.value);});
     on('#ingNew','click',function(){ingEditor(null);});
-    on('#ingCsv','click',function(){
-      var rows=[['Ingredient','Aisle','Walmart/100g','Costco/100g','Best','BestStore','UsedIn','Edited']];
-      allIngKeys().forEach(function(k){var g=ING(k);
-        rows.push([g.n,g.a||'',g.w,g.c,best(g).toFixed(3),bestStore(g),ingUsage(k),S.ingOv[k]?'yes':'']);});
-      dl('ingredients-'+today()+'.csv',toCSV(rows),'text/csv');});
   }
   if(v==='shopping'&&h[1]!=='ingredients'){ bindShop(); }
   if(v==='training'&&h[1]==='exercises'){ drawEx();
@@ -5988,17 +6439,27 @@ function planSub(colId,subId){
   var s=(c.subs||[]).filter(function(x){return x.id===subId;});
   return s[0]||null;
 }
-function planColEditor(id){
-  var c=id?planCol(id):{name:'',note:''};
+function planColEditor(id,track){
+  var c=id?planCol(id):{name:'',note:'',track:track||'now'};
   if(!c) return;
-  var m=modal(id?'Edit plan':'New collection',
+  var m=modal(id?'Edit plan':'New plan',
     form([{id:'pn',l:'Name',v:c.name,ph:'Moving in together'},
-      {id:'po',l:'Note',t:'area',v:c.note||''}]),
+      {id:'pt',l:'Which road',t:'select',o:trackOpts(),v:planTrack(c)},
+      {id:'po',l:'Note',t:'area',v:c.note||'',ph:'What this one is for'}])+
+    '<p class="xs muted">The road decides where it sits on the Planning page. '+
+    'Renting and buying are different work, so they get their own boards.</p>',
+    (id?'<button class="b o dz" id="pDel">Delete</button>':'')+
     '<button class="b o" data-close>Cancel</button><button class="b" id="pSave">Save</button>');
+  var d=$('#pDel',m);
+  if(d) d.onclick=function(){
+    if(!confirm('Delete "'+c.name+'" and everything in it?'))return;
+    S.plan.cols=planCols().filter(function(x){return x.id!==id;});
+    save();m.remove();nav('planning');};
   $('#pSave',m).onclick=function(){
     var n=$('#pn',m).value.trim(); if(!n){toast('Give it a name');return;}
-    if(id){ c.name=n; c.note=$('#po',m).value.trim(); }
-    else { S.plan.cols.push({id:uid(),name:n,note:$('#po',m).value.trim(),subs:[]}); }
+    if(id){ c.name=n; c.note=$('#po',m).value.trim(); c.track=$('#pt',m).value; }
+    else { S.plan.cols.push({id:uid(),name:n,note:$('#po',m).value.trim(),
+      track:$('#pt',m).value,subs:[]}); }
     save();m.remove();route();};
 }
 function planSubEditor(colId,subId){
@@ -6376,6 +6837,8 @@ document.addEventListener('click',function(e){
       S.sched.cols=tmplCols().filter(function(x){return x.id!==el.dataset.tcdel;});
       save();nav('schedule/templates');}
     return;}
+  if((el=t.closest('[data-io]'))){ ioModal(el.dataset.io); return; }
+  if((el=t.closest('[data-plnew]'))){ planColEditor(null,el.dataset.plnew); return; }
   if((el=t.closest('[data-pex]'))){
     var pid=el.dataset.pex;
     if(openParts[pid]) delete openParts[pid]; else openParts[pid]=1;
@@ -6598,11 +7061,12 @@ function settingsModal(){
 
    setGroup('exp','Exports','Spreadsheets',
      '<div class="row">'+
-     '<button class="b o s" id="stIng">Ingredients</button>'+
-     '<button class="b o s" id="stLog">Daily log</button>'+
-     '<button class="b o s" id="stShift">Shifts</button>'+
-     '<button class="b o s" id="stFin">Budget</button>'+
-     '<button class="b o s" id="stPlan">Plans</button></div>')+
+     '<p class="sm muted">Each of these opens the same panel you get from the '+
+     'section itself: a spreadsheet out, a spreadsheet back in.</p>'+
+     '<div class="row" style="margin-top:10px">'+
+     SECTION_IO.map(function(d){
+       return '<button class="b o s" data-io="'+d.key+'">'+E(d.label)+'</button>';
+     }).join('')+'</div>')+
 
    setGroup('danger','Erase this device','Your account is not touched',
      '<p class="sm muted">This wipes the copy held on this device. Your account keeps what is '+
@@ -6632,35 +7096,11 @@ function settingsModal(){
   if(am) am.onclick=function(){
     S.members.push(blankMember('Someone','m'));
     save();chrome();drawSettingsMembers(m);};
-  $('#stIng',m).onclick=function(){
-    var rows=[['Ingredient','Aisle','Walmart/100g','Costco/100g','Best','Store','UsedIn','Edited']];
-    allIngKeys().forEach(function(k){var g=ING(k);
-      rows.push([g.n,g.a||'',g.w,g.c,best(g).toFixed(3),bestStore(g),ingUsage(k),S.ingOv[k]?'yes':'']);});
-    dl('ingredients-'+today()+'.csv',toCSV(rows),'text/csv');};
-  $('#stLog',m).onclick=function(){
-    var rows=[['Date','Training','Kcal','Protein','FoodCost','OtherSpend','Plans','Notes']];
-    Object.keys(S.days).sort().forEach(function(d){var r=S.days[d],e=eaten(d);
-      var sp=(r.spend||[]).reduce(function(a,x){return a+(x.amt||0);},0);
-      rows.push([d,TRAIN[r.workout]?TRAIN[r.workout].n:r.workout,Math.round(e.kcal),
-        Math.round(e.p),e.cost.toFixed(2),sp.toFixed(2),
-        (r.sched||[]).map(function(x){return WHO(x.who)+':'+x.what;}).join('; '),r.notes||'']);});
-    dl('daily-log-'+today()+'.csv',toCSV(rows),'text/csv');};
-  $('#stShift',m).onclick=function(){
-    var rows=[['Date','Who','Job','Hours','Gross','Net','Note']];
-    S.fin.shifts.forEach(function(s){var j=S.fin.jobs.filter(function(x){return x.id===s.jobId;})[0];
-      rows.push([s.date,j?WHO(j.who):'',j?j.name:'',s.hours,s.gross,s.net,s.note||'']);});
-    dl('shifts-'+today()+'.csv',toCSV(rows),'text/csv');};
-  $('#stFin',m).onclick=function(){
-    var rows=[['Type','Section','Name','Who','Low','Realistic','High','Actual']];
-    S.fin.jobs.forEach(function(j){rows.push(['Income','',j.name,WHO(j.who),j.low,j.real,j.high,j.actual||'']);});
-    S.fin.costs.forEach(function(c){rows.push(['Cost',c.section,c.name,WHO(c.who),c.low,c.real,c.high,c.actual||'']);});
-    dl('budget-'+today()+'.csv',toCSV(rows),'text/csv');};
-  $('#stPlan',m).onclick=function(){
-    var rows=[['Plan','Section','Item','Done','Note']];
-    planCols().forEach(function(c){(c.subs||[]).forEach(function(s){
-      (s.items||[]).forEach(function(i){
-        rows.push([c.name,s.name,i.text,i.done?'yes':'',i.note||'']);});});});
-    dl('plans-'+today()+'.csv',toCSV(rows),'text/csv');};
+  
+  
+  
+  
+  
   var sy=$('#stSync',m); if(sy) sy.onclick=function(){
     if(syncState==='off'){toast('Not signed in');return;}
     pushState(); pullState(); toast('Saving');};

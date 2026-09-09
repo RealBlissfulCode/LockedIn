@@ -512,8 +512,11 @@ function estDayCost(t,mode){
 
 /* ---------------- file persistence ---------------- */
 function exportAll(){
-  var blob={app:'handbook',version:6,exported:new Date().toISOString(),state:S};
-  dl('handbook-data-'+today()+'.json',JSON.stringify(blob,null,1),'application/json');
+  /* The whole thing, every section, exactly as it stands. The label used to say
+     handbook version 6, which was the name and the shape from two rewrites ago. */
+  var blob={app:'lockedin',version:S.v||7,exported:new Date().toISOString(),
+            household:S.household||'',state:S};
+  dl('lockedin-'+today()+'.json',JSON.stringify(blob,null,1),'application/json');
   toast('Saved to file');
 }
 function importAll(file,cb){

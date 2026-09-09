@@ -455,6 +455,7 @@ function vFinancial(sub){
    '<div class="row"><span class="chip p">'+jobsOn+' of '+S.fin.jobs.length+' on</span>'+
    '<button class="b o s" data-alltog="jobs|1">All on</button>'+
    '<button class="b o s" data-alltog="jobs|0">All off</button>'+
+   '<button class="b o s" data-io="income">Import or export</button>'+
    '<button class="b o s" id="jobAdd2">Add</button></div></div><div class="tw wide cards"><table>'+
    '<thead><tr><th>Name</th><th>Who</th><th>Rate</th><th>Employer</th><th class="num">Low</th>'+
    '<th class="num">Realistic</th><th class="num">High</th><th class="num">Actual</th><th></th></tr></thead><tbody>'+
@@ -490,6 +491,7 @@ function vFinancial(sub){
    '<div class="row"><span class="chip p">'+costsOn+' of '+costsInPath+' on</span>'+
    '<button class="b o s" data-alltog="costs|1">All on</button>'+
    '<button class="b o s" data-alltog="costs|0">All off</button>'+
+   '<button class="b o s" data-io="costs">Import or export</button>'+
    '<button class="b o s" id="costAdd">Add</button></div></div><div class="tw wide cards"><table>'+
    '<thead><tr><th>Cost</th><th>Section</th><th>Who</th><th class="num">Low</th>'+
    '<th class="num">Realistic</th><th class="num">High</th><th class="num">Actual</th><th></th></tr></thead><tbody>'+
@@ -560,7 +562,8 @@ function vPurchases(){
   return '<div class="page"><div class="phead"><h1>Big purchases</h1>'+
    '<p>Places, houses, cars, anything worth comparing side by side before committing. '+
    'Every list here is yours to rename, edit or delete.</p></div>'+
-   '<div class="row toolbar"><button class="b" id="bpNew">New list</button>'+
+   '<div class="row toolbar"><button class="b o" data-io="purchases">Import or export</button>'+
+   '<button class="b" id="bpNew">New list</button>'+
    '<button class="b o" data-nav="financial">&larr; Financial</button></div>'+
    (names.length?names.map(function(n){var L=P_[n], its=L.items||[];
      var prices=its.map(function(i){return num(i.price);}).filter(function(x){return x>0;});
@@ -626,7 +629,8 @@ function vStrategies(){
   return '<div class="page"><div class="phead"><h1>Strategies</h1>'+
    '<p>Ways to close the gap, sorted by what they are worth against what they cost you. '+
    'Anything marked dead has been checked and is dead, so it does not get researched twice.</p></div>'+
-   '<div class="row toolbar"><button class="b" id="stNew">New list</button>'+
+   '<div class="row toolbar"><button class="b o" data-io="strategies">Import or export</button>'+
+   '<button class="b" id="stNew">New list</button>'+
    '<button class="b o" data-nav="financial">&larr; Financial</button>'+
    '<label class="f inline"><span>Column</span><select id="stMode">'+
    opt([['low','Lean (low)'],['real','Realistic'],['high','Good month (high)']],mode)+
@@ -765,7 +769,8 @@ function vSchedule(sub){
    '<div class="sec"><div class="spread"><h2>'+pretty(calSel)+'</h2>'+
    '<div class="row"><button class="b" id="evAdd">Add plan</button>'+
    '<button class="b o" id="mealAdd">Log meal</button>'+
-   '<button class="b o" id="spAdd">Log spend</button></div></div>'+
+   '<button class="b o" id="spAdd">Log spend</button>'+
+   '<button class="b o" data-io="schedule">Import or export</button></div></div>'+
    '<div class="grid g2"><div class="card pad">'+tl(calSel)+freeSlots(d)+'</div>'+
    '<div class="card pad"><h3 class="ctitle">The day</h3>'+
    '<label class="f"><span>Training</span><select id="schWorkout">'+
@@ -886,7 +891,42 @@ function vTemplateEdit(id){
 /* ============================ PLANNING ============================
    General plans. A collection holds subsections, a subsection holds items.
    All three levels can be created, renamed and deleted. */
+/* Which road a plan belongs to.
+ *
+ * Moving in, renting and buying are three different decisions with three
+ * different sets of work, and stacking them in one list means the buying work
+ * sits in front of you for a year before it is real, while the thing you are
+ * actually doing this month is buried under it. A plan says which road it is
+ * on, the page groups by road, and the one matching the housing path chosen on
+ * Financial is the one open at the top. */
+var PLAN_TRACKS=[
+  ['now','Happening now','Whatever is actually in front of you this month.'],
+  ['rent','Renting together','The lease road: applying, signing, moving in.'],
+  ['buy','Buying a home','The mortgage road. Real once the preapproval says it is.'],
+  ['both','True either way','Work that has to happen whichever road you take.'],
+  ['open','Still undecided','Questions, not tasks. Decide these and things move.']
+];
+function trackName(k){
+  var n=k;
+  PLAN_TRACKS.forEach(function(t){ if(t[0]===k) n=t[1]; });
+  return n;
+}
+function trackOpts(){ return PLAN_TRACKS.map(function(t){ return [t[0],t[1]]; }); }
+function planTrack(c){
+  if(c.track) return c.track;
+  /* Plans written before there were roads. Read the name rather than dumping
+     them all in one bucket, so an account that already has them opens sorted. */
+  var n=(c.name||'').toLowerCase();
+  if(/question|undecided|decide/.test(n)) return 'open';
+  if(/buy|mortgage|purchase|house hunt/.test(n)) return 'buy';
+  if(/rent|lease|apartment/.test(n)) return 'rent';
+  if(/mov(e|ing) in|first night|move/.test(n)) return 'now';
+  return 'both';
+}
 function planCols(){ return (S.plan&&S.plan.cols)||[]; }
+function plansOnTrack(k){
+  return planCols().filter(function(c){ return planTrack(c)===k; });
+}
 function planCol(id){ var c=planCols().filter(function(x){return x.id===id;}); return c[0]||null; }
 function planCount(c){
   var t=0,d=0;
@@ -897,23 +937,50 @@ function vPlanning(sub){
   if(sub) return vPlanCol(sub);
   var cols=planCols();
   return '<div class="page"><div class="phead"><h1>Planning</h1>'+
-   '<p>Plans that are not about money or food. Make a collection for anything, break it into '+
-   'subsections, and tick things off as they happen.</p></div>'+
-   '<div class="row toolbar"><button class="b" id="plNew">New collection</button></div>'+
-   (cols.length?'<div class="grid g2">'+cols.map(function(c){
-     var n=planCount(c);
-     return '<button class="card pad plcard" data-plgo="'+c.id+'">'+
-     '<div class="spread"><h3 class="pln">'+E(c.name)+'</h3>'+
-     '<span class="chip p">'+n.done+' / '+n.total+'</span></div>'+
-     (c.note?'<p class="sm muted" style="margin:8px 0 0">'+E(c.note)+'</p>':'')+
-     '<div class="bar" style="margin-top:14px"><i class="pp" style="width:'+n.pct+'%"></i></div>'+
-     '<div class="xs muted" style="margin-top:8px">'+
-     (c.subs||[]).length+' section'+((c.subs||[]).length===1?'':'s')+
-     (n.total?' &middot; '+n.pct+'% done':'')+'</div>'+
-     '</button>';}).join('')+'</div>'
-    :'<div class="empty"><p>No plans yet.</p><p class="sm">Start one for moving in, or a trip, '+
+   '<p>Everything that is not money or food, sorted by which road it belongs to. '+
+   'Moving in, renting and buying are different work, so they get their own boards '+
+   'and the buying list stops sitting in front of you a year before it is real.</p></div>'+
+   '<div class="row toolbar"><button class="b" id="plNew">New plan</button>'+
+   '<button class="b o" data-io="plans">Import or export</button></div>'+
+   (cols.length?planTrackBoards():
+     '<div class="empty"><p>No plans yet.</p><p class="sm">Start one for moving in, or a trip, '+
      'or anything with more than three steps.</p></div>')+
    '</div>';
+}
+
+/* One board per road, in the order you meet them. A road with nothing on it
+   still shows, because the gap is the point: no plan for buying yet is worth
+   seeing. The road matching the housing path on Financial is marked. */
+function planTrackBoards(){
+  var path=(S.fin&&S.fin.path)||'rent';
+  return PLAN_TRACKS.map(function(t){
+    var key=t[0], list=plansOnTrack(key);
+    var live=(key==='rent'&&path==='rent')||(key==='buy'&&path==='buy');
+    var tot={done:0,total:0};
+    list.forEach(function(c){ var n=planCount(c); tot.done+=n.done; tot.total+=n.total; });
+    var pct=tot.total?Math.round(tot.done/tot.total*100):0;
+    return '<div class="trk'+(live?' live':'')+'">'+
+      '<div class="trkhead"><div><h2>'+E(t[1])+
+        (live?'<span class="chip t">the path you are on</span>':'')+'</h2>'+
+        '<p class="sm muted">'+E(t[2])+'</p></div>'+
+        (tot.total?'<span class="chip p">'+tot.done+' / '+tot.total+'</span>':'')+'</div>'+
+      (list.length
+        ? '<div class="grid g2">'+list.map(planCard).join('')+'</div>'
+        : '<p class="xs muted trkempty">Nothing on this road yet.</p>')+
+      '</div>';
+  }).join('');
+}
+function planCard(c){
+  var n=planCount(c);
+  return '<button class="card pad plcard" data-plgo="'+c.id+'">'+
+    '<div class="spread"><h3 class="pln">'+E(c.name)+'</h3>'+
+    '<span class="chip p">'+n.done+' / '+n.total+'</span></div>'+
+    (c.note?'<p class="sm muted" style="margin:8px 0 0">'+E(c.note)+'</p>':'')+
+    '<div class="bar" style="margin-top:14px"><i class="pp" style="width:'+n.pct+'%"></i></div>'+
+    '<div class="xs muted" style="margin-top:8px">'+
+    (c.subs||[]).length+' section'+((c.subs||[]).length===1?'':'s')+
+    (n.total?' &middot; '+n.pct+'% done':'')+'</div>'+
+    '</button>';
 }
 function vPlanCol(id){
   var c=planCol(id);
