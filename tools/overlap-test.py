@@ -11,26 +11,50 @@ PAGES=["meals","training","training/exercises","shopping","shopping/ingredients"
        "planning","schedule","schedule/templates","mealplan","household","install"]
 AUDIT = """() => {
   const bad = [];
+  /* Measure what is actually on screen, not what the box says. A closed card
+     collapses with overflow:hidden and a scrolled panel cuts its last line in
+     half, and in both cases the element still reports its full rectangle. So
+     every rect gets trimmed to whatever its scrolling and clipping parents
+     leave showing, and anything trimmed to nothing is not there to be covered. */
+  const visRect = e => {
+    let r = e.getBoundingClientRect();
+    let l = r.left, t = r.top, ri = r.right, b = r.bottom;
+    for (let p = e.parentElement; p; p = p.parentElement) {
+      const s = getComputedStyle(p);
+      if (s.overflow === 'visible' && s.overflowX === 'visible' && s.overflowY === 'visible') continue;
+      const pr = p.getBoundingClientRect();
+      l = Math.max(l, pr.left); t = Math.max(t, pr.top);
+      ri = Math.min(ri, pr.right); b = Math.min(b, pr.bottom);
+      if (ri <= l || b <= t) return null;
+    }
+    return {left: l, top: t, right: ri, bottom: b, width: ri - l, height: b - t};
+  };
   const vis = e => { const s=getComputedStyle(e);
     return s.display!=='none' && s.visibility!=='hidden' && +s.opacity>0.05; };
   const painted = e => { const s=getComputedStyle(e);
     const bg=s.backgroundColor;
-    return bg && bg!=='rgba(0, 0, 0, 0)' && bg!=='transparent'; };
+    return bg && bg!=='rgba(0, 0, 0, 0)' && bg!=='transparent';
+  };
   const textOf = e => {
     let t='';
     for (const n of e.childNodes) if (n.nodeType===3) t+=n.textContent.trim();
     return t;
   };
-  const all=[...document.querySelectorAll('.page *, .mask *')].filter(vis);
-  const texts=all.filter(e=>textOf(e).length>1);
-  const boxes=all.filter(e=>painted(e)&&textOf(e).length===0&&e.getBoundingClientRect().height>6);
+  /* A panel is meant to cover the page behind it, so while one is open the page
+     is not what is being looked at. */
+  const scope = document.querySelector('.mask') ? '.mask *' : '.page *';
+  const all=[...document.querySelectorAll(scope)].filter(vis);
+  const rect=new Map();
+  for (const e of all) { const r=visRect(e); if (r) rect.set(e, r); }
+  const texts=all.filter(e=>rect.has(e)&&textOf(e).length>1);
+  const boxes=all.filter(e=>rect.has(e)&&painted(e)&&textOf(e).length===0&&rect.get(e).height>6);
   const inter=(a,b)=>!(a.right<=b.left+1||b.right<=a.left+1||a.bottom<=b.top+1||b.bottom<=a.top+1);
   for (const t of texts) {
-    const tr=t.getBoundingClientRect();
+    const tr=rect.get(t);
     if (tr.width<4||tr.height<4) continue;
     for (const b of boxes) {
       if (b===t||b.contains(t)||t.contains(b)) continue;
-      const br=b.getBoundingClientRect();
+      const br=rect.get(b);
       if (br.width<4||br.height<4) continue;
       if (!inter(tr,br)) continue;
       /* only a real problem if the box paints on top of the text */
@@ -46,7 +70,7 @@ AUDIT = """() => {
   }
   /* sideways scrollbars where there is nothing to scroll to */
   const scrolls=[];
-  document.querySelectorAll('.page .tw, .mask .tw').forEach(e=>{
+  document.querySelectorAll(scope.replace(' *', ' .tw')).forEach(e=>{
     if (e.scrollWidth>e.clientWidth+2) scrolls.push((e.className||'')+' '+e.scrollWidth+'>'+e.clientWidth);
   });
   return {bad:bad.slice(0,8), scrolls:scrolls.slice(0,6)};
