@@ -764,40 +764,70 @@ white-space:pre-wrap;overflow-wrap:break-word}
 background:var(--panel-2)}
 .plab{font:700 9px/1 var(--f-body);letter-spacing:.18em;text-transform:uppercase;
 color:var(--ink-4)}
-.parts{margin-top:10px}
-/* Said once, at the top, so the rows underneath are just the rows. */
-/* The header and the rows have to be the same grid, so the last column is a
-   fixed width rather than auto: an empty spacer measures nothing and a Remove
-   button measures plenty, and the difference came out of the first column,
-   which put every heading over the wrong box. */
-.pgrid,.phead2,.prow{display:grid;
-grid-template-columns:minmax(0,1fr) 76px 92px 84px 94px;gap:9px;align-items:center}
-.phead2{margin:12px 0 6px;padding:0 2px}
+/* Said once at the top, so the rows underneath are just the rows. Header, rows
+   and total all sit on the same grid, so the sum lands directly under the
+   column it is the sum of. The last column is a fixed width rather
+   than auto: an empty spacer measures nothing and a button measures plenty, and
+   with auto the difference came out of the first column and put every heading
+   over the wrong box. */
+.phead2,.prow,.ptotrow{display:grid;
+grid-template-columns:minmax(0,1fr) 74px 88px 90px 34px;gap:10px;align-items:center}
+.phd{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:2px}
+.ptable{margin-top:13px}
+.phead2{padding:0 0 7px;border-bottom:1px solid var(--line)}
 .phead2>span{font:700 9px/1 var(--f-body);letter-spacing:.14em;text-transform:uppercase;
 color:var(--ink-4)}
 .phead2 .psumh{text-align:right}
-.prow{margin-bottom:7px}
-.pf{display:flex;flex-direction:column;gap:4px;min-width:0}
-.pf>span{display:none}
+.parts{padding-top:7px}
+.prow{margin-bottom:6px}
+/* Named pfld, not pf. There is already a .pf in here: it is the blue fill of a
+   progress bar, and every one of these wrappers was quietly being painted with
+   it, which is why a label sat on a blue block. */
+.pfld{display:flex;flex-direction:column;gap:4px;min-width:0}
+.pfld>span{display:none}
 .prow input{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:var(--r-s);
 background:var(--panel);color:var(--ink);font-size:16px}
+.prow input::placeholder{color:var(--ink-4)}
 .prow input:focus{outline:0;border-color:var(--brass);box-shadow:var(--glow)}
 .psum{font-family:var(--f-mono);font-size:13.5px;font-weight:700;text-align:right;
 color:var(--ink-2);white-space:nowrap}
-.prow .pdel{white-space:nowrap;width:100%;justify-content:center}
-.pempty{margin:10px 0 0}
+/* The remove control is not the point of the row, so it stays out of the way
+   until the row is reached for. It is still a real target and still named. */
+.pdel{width:28px;height:28px;border-radius:7px;border:1px solid transparent;
+background:transparent;color:var(--ink-4);font-size:17px;line-height:1;cursor:pointer;
+display:flex;align-items:center;justify-content:center;opacity:.5;transition:.16s var(--ez)}
+.prow:hover .pdel,.pdel:focus-visible{opacity:1}
+.pdel:hover{color:var(--clay);border-color:var(--line-2);background:var(--panel-2)}
+.pdelt{display:none}
+.ptotrow{padding-top:11px;border-top:1px solid var(--line-2);margin-top:4px}
+.ptotl{grid-column:1/4;font:700 9px/1 var(--f-body);letter-spacing:.14em;
+text-transform:uppercase;color:var(--ink-4)}
+.ptotv{font-family:var(--f-mono);font-size:16px;font-weight:700;text-align:right;
+color:var(--ink);white-space:nowrap}
+.pempty{margin:4px 0 0}
+.pacts{margin-top:14px}
 @media (max-width:620px){
 /* No room for a header row on a phone, so each part carries its own labels and
-   becomes a card, with what it comes to sitting on the same line as Remove. */
+   becomes a card, with what it comes to and Remove sharing the last line. */
 .phead2{display:none}
+.ptable{margin-top:10px}
+.parts{padding-top:0}
 .prow{grid-template-columns:1fr 1fr;grid-template-areas:"n n" "q e" "s d";gap:10px;
 padding:12px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel);
 margin-bottom:10px;align-items:end}
-.prow .pfn{grid-area:n}.prow .pf:nth-of-type(2){grid-area:q}.prow .pf:nth-of-type(3){grid-area:e}
-.prow .psum{grid-area:s;text-align:left;font-size:15px;color:var(--ink);align-self:center}
-.prow .pdel{grid-area:d;min-height:44px;justify-content:center}
-.prow .pf>span{display:block}
+.prow .pfn{grid-area:n}.prow .pfld:nth-of-type(2){grid-area:q}.prow .pfld:nth-of-type(3){grid-area:e}
+.prow .psum{grid-area:s;text-align:left;font-size:16px;color:var(--ink);align-self:center}
+.prow .pfld>span{display:block}
 .prow input{min-height:44px}
+/* A thumb needs the whole word, not a 28px cross tucked in a corner. */
+.prow .pdel{grid-area:d;width:100%;min-height:44px;border-radius:var(--r-s);
+border:1px solid var(--line-2);background:var(--panel-2);color:var(--ink-2);
+opacity:1;font-size:13px;font-weight:600;gap:0}
+.prow .pdelx{display:none}
+.prow .pdelt{display:inline}
+.ptotrow{grid-template-columns:1fr auto;padding-top:12px}
+.ptotl{grid-column:1}
+.pacts .b{flex:1 1 auto;justify-content:center;min-height:44px}
 .pamt{min-width:0}
 }
 

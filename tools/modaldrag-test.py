@@ -80,7 +80,7 @@ with sync_playwright() as pw:
         hdr=pg.evaluate("()=>{const h=document.querySelector('.phead2');return h?getComputedStyle(h).display:'none'}")
         if mob: ck(tag+": no header row, labels on each card", hdr=="none")
         else:   ck(tag+": labels said once at the top", hdr!="none", hdr)
-        lbl=pg.evaluate("()=>{const s=document.querySelector('.prow .pf>span');return s?getComputedStyle(s).display:'?'}")
+        lbl=pg.evaluate("()=>{const s=document.querySelector('.prow .pfld>span');return s?getComputedStyle(s).display:'?'}")
         if mob: ck(tag+": each field is labelled on a phone", lbl!="none", lbl)
         else:   ck(tag+": no repeated labels on a desk", lbl=="none", lbl)
         over=pg.evaluate("""()=>{const vw=document.documentElement.clientWidth;let n=0;

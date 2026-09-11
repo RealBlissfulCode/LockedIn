@@ -59,8 +59,11 @@ ckhas "second write lands at v2"    "$W" '"version":2'
 W=$(curl -s -b /tmp/c1 $J -X POST "$B/doc.php?scope=shared" -d '{"version":1,"body":{"fin":"stale"}}')
 ckhas "stale write conflicts"       "$W" '"error":"conflict"'
 ckhas "conflict returns current"    "$W" '"jobs":\[1\]'
-ckhas "private scope of mine ok"    "$(curl -s -b /tmp/c1 "$B/doc.php?scope=private:1")" '"version":0'
-ckhas "private scope of others no"  "$(curl -s -b /tmp/c1 "$B/doc.php?scope=private:999")" 'bad_scope'
+# Ask who we are rather than assuming the first account is id 1. On a database
+# that has seen other runs it never is.
+MINE=$(curl -s -b /tmp/c1 "$B/auth.php?do=me" | sed -n 's/.*"account":{"id":\([0-9]*\).*/\1/p')
+ckhas "private scope of mine ok"    "$(curl -s -b /tmp/c1 "$B/doc.php?scope=private:$MINE")" '"version":0'
+ckhas "private scope of others no"  "$(curl -s -b /tmp/c1 "$B/doc.php?scope=private:$((MINE+900))")" 'bad_scope'
 ckhas "read all works"              "$(curl -s -b /tmp/c1 "$B/doc.php?do=all")" '"shared"'
 
 echo "--- invites and joining ---"

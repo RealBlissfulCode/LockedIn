@@ -395,32 +395,45 @@ function partRow(p){
   p=p||{};
   var q=(p.qty==null?1:p.qty), e=(p.each||0);
   return '<div class="prow" data-pid="'+E(p.id||uid())+'">'+
-    '<label class="pf pfn"><span>What</span>'+
+    '<label class="pfld pfn"><span>What</span>'+
       '<input class="pn" value="'+E(p.n||'')+'" placeholder="Bin bags"></label>'+
-    '<label class="pf"><span>Qty</span>'+
+    '<label class="pfld"><span>Qty</span>'+
       '<input class="pq" type="number" step="any" inputmode="decimal" min="0" '+
       'value="'+E(p.qty==null?'':String(p.qty))+'" placeholder="1"></label>'+
-    '<label class="pf"><span>Each</span>'+
+    '<label class="pfld"><span>Each</span>'+
       '<input class="pe" type="number" step="any" inputmode="decimal" min="0" '+
       'value="'+E(p.each==null?'':String(p.each))+'" placeholder="0"></label>'+
     '<span class="psum" aria-label="What this part comes to">'+M(q*e)+'</span>'+
-    '<button type="button" class="b o s pdel" aria-label="Remove this part">Remove</button>'+
+    '<button type="button" class="pdel" aria-label="Remove this part" title="Remove">'+
+      '<span class="pdelx" aria-hidden="true">&times;</span>'+
+      '<span class="pdelt">Remove</span></button>'+
     '</div>';
 }
+/* A receipt, not a form.
+ *
+ * Column headings once at the top, the parts under them, a rule, and the total
+ * sitting directly beneath the column it is the sum of. That is how anybody has
+ * read a list of things and what they came to since paper, and it means the
+ * total never has to explain which numbers made it. */
 function partsBlock(parts){
   parts=parts||[];
   return '<div class="pbox">'+
-    '<div class="spread"><span class="plab">Breakdown</span>'+
-    '<span class="chip p" id="pTot">$0</span></div>'+
-    '<p class="xs muted">Optional. What the line is actually made of, per month.</p>'+
-    '<div class="phead2" aria-hidden="true">'+
-      '<span>What</span><span>Qty</span><span>Each</span><span class="psumh">Comes to</span>'+
-      '<span></span></div>'+
-    '<div class="parts" id="parts">'+parts.map(partRow).join('')+'</div>'+
-    (parts.length?'':'<p class="pempty xs muted">Nothing broken down yet.</p>')+
-    '<div class="row" style="margin-top:11px">'+
+    '<div class="phd"><span class="plab">Breakdown</span>'+
+    '<span class="xs muted">Optional. What this line is made of, per month.</span></div>'+
+    '<div class="ptable">'+
+      '<div class="phead2" aria-hidden="true">'+
+        '<span>What</span><span>Qty</span><span>Each</span>'+
+        '<span class="psumh">Comes to</span><span></span></div>'+
+      '<div class="parts" id="parts">'+parts.map(partRow).join('')+'</div>'+
+      '<p class="pempty xs muted"'+(parts.length?' style="display:none"':'')+'>'+
+        'Nothing in it yet. Add the things this line is actually made of.</p>'+
+      '<div class="ptotrow"><span class="ptotl">Adds up to</span>'+
+        '<span class="ptotv" id="pTot">$0</span><span></span></div>'+
+    '</div>'+
+    '<div class="row pacts">'+
     '<button type="button" class="b o s" id="pAdd">Add a part</button>'+
-    '<button type="button" class="b o s" id="pUse">Use the total</button></div></div>';
+    '<button type="button" class="b o s" id="pUse">Use as the realistic figure</button>'+
+    '</div></div>';
 }
 function readParts(m){
   var out=[];
