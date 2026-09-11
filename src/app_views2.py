@@ -307,14 +307,15 @@ function vFinancial(sub){
     '</div></div>';
 
   /* ---- donut of live costs, with a switch per section in the legend ---- */
-  var donutSlices=secNames.map(function(k,i){return {v:byS[k],label:k+' '+M(byS[k]),cls:chTone(i)};});
+  var costRing=chRingKey(), incRing=chRingKey();
+  var donutSlices=secNames.map(function(k,i){return {v:byS[k],label:k,cls:chTone(i)};});
   var legend=chartLegend(secNames.map(function(k,i){
     var anyOn=S.fin.costs.some(function(c){return costInPath(c,path)&&c.section===k&&finLive(c);});
     return {label:k,cls:chTone(i),off:!anyOn,
       value:M(anyOn?byS[k]:bySAll[k]),
       pct:(cost&&anyOn)?Math.round(byS[k]/cost*100)+'%':'-',
       ctrl:finSw('secttog',k,anyOn,k,true)};
-  }));
+  }),costRing);
   var incomePeople=whoTokens().filter(function(w){
     return S.fin.jobs.some(function(j){return j.who===w;});});
   var incLegend=chartLegend(incomePeople.map(function(w,i){
@@ -326,7 +327,7 @@ function vFinancial(sub){
     return {label:w===EVERYONE?'Shared / gig':WHO(w),cls:chTone(i+1),off:!anyOn,
       value:M(anyOn?v:all),pct:(inc&&anyOn)?Math.round(v/inc*100)+'%':'-',
       ctrl:finSw('whotog',w,anyOn,w===EVERYONE?'shared income':WHO(w),true)};
-  }));
+  }),incRing);
   var costPeople=whoTokens().filter(function(w){
     return S.fin.costs.some(function(c){return c.who===w&&costInPath(c,path);});});
   var whoCost='<div class="ckey">'+costPeople.map(function(w,i){
@@ -339,7 +340,7 @@ function vFinancial(sub){
    '<p class="sub">Every switch here moves a whole group at once. The tables further down do it one '+
    'line at a time.</p><div class="grid g2">'+
    '<div class="card pad"><h3 class="ctitle">Costs by section</h3>'+
-   chartDonut(donutSlices,M(cost),'Live costs / mo')+legend+
+   chartDonut(donutSlices,M(cost),'Live costs / mo',costRing)+legend+
    (perDollar.length?'<p class="sm muted" style="margin-top:14px">Of every $100 coming in, '+
      perDollar.slice(0,3).map(function(p){return '$'+Math.round(p[1])+' goes to '+E(p[0].toLowerCase());}).join(', ')+
      '.</p>':'')+'</div>'+
@@ -347,7 +348,7 @@ function vFinancial(sub){
    chartDonut(incomePeople.map(function(w,i){
      return {v:S.fin.jobs.filter(function(j){return j.who===w&&finLive(j);})
        .reduce(function(a,j){return a+(j[mode]||0);},0),
-       label:(w===EVERYONE?'Shared':WHO(w)),cls:chTone(i+1)};}),M(inc),'Live income / mo')+
+       label:(w===EVERYONE?'Shared':WHO(w)),cls:chTone(i+1)};}),M(inc),'Live income / mo',incRing)+
    incLegend+
    '<h3 class="ctitle" style="margin-top:20px">Costs carried by</h3>'+whoCost+
    '<div class="row" style="margin-top:14px"><button class="b o s" id="jobAdd">Add income</button>'+
@@ -456,13 +457,18 @@ function vFinancial(sub){
    '<button class="b o s" data-alltog="jobs|1">All on</button>'+
    '<button class="b o s" data-alltog="jobs|0">All off</button>'+
    '<button class="b o s" data-io="income">Import or export</button>'+
-   '<button class="b o s" id="jobAdd2">Add</button></div></div><div class="tw wide cards"><table>'+
+   finSortSel('jobs')+
+   '<button class="b o s" id="jobAdd2">Add</button></div></div>'+
+   '<p class="sub ordhint">Drag a line by its grip to put the list in whatever order '+
+   'you think in. The order is saved and it is the order it turns up in on the other '+
+   'phone, and in the file when you export it.</p><div class="tw wide cards"><table>'+
    '<thead><tr><th>Name</th><th>Who</th><th>Rate</th><th>Employer</th><th class="num">Low</th>'+
    '<th class="num">Realistic</th><th class="num">High</th><th class="num">Actual</th><th></th></tr></thead><tbody>'+
-   (S.fin.jobs.length?S.fin.jobs.map(function(j){
+   (S.fin.jobs.length?S.fin.jobs.map(function(j,ji){
      var on=finLive(j);
      return '<tr'+(on?'':' class="offrow"')+'>'+
-     '<td class="hd">'+finSw('jobtog',j.id,on,j.name||'this income line')+
+     '<td class="hd">'+finGrip('jobs',ji,j.name||'this income line')+
+       finSw('jobtog',j.id,on,j.name||'this income line')+
        '<b>'+E(j.name)+'</b>'+partsMark(j)+(on?'':'<span class="offtag">off</span>')+'</td>'+
      '<td data-l="Who"><span class="chip">'+E(WHO(j.who))+'</span></td>'+
      '<td data-l="Rate" class="sm muted">'+(j.rate?$$$(j.rate)+'/hr':'')+'</td>'+
@@ -492,13 +498,18 @@ function vFinancial(sub){
    '<button class="b o s" data-alltog="costs|1">All on</button>'+
    '<button class="b o s" data-alltog="costs|0">All off</button>'+
    '<button class="b o s" data-io="costs">Import or export</button>'+
-   '<button class="b o s" id="costAdd">Add</button></div></div><div class="tw wide cards"><table>'+
+   finSortSel('costs')+
+   '<button class="b o s" id="costAdd">Add</button></div></div>'+
+   '<p class="sub ordhint">Same here: drag by the grip, or reorder the whole lot at '+
+   'once and then move the few that end up in the wrong place.</p>'+
+   '<div class="tw wide cards"><table>'+
    '<thead><tr><th>Cost</th><th>Section</th><th>Who</th><th class="num">Low</th>'+
    '<th class="num">Realistic</th><th class="num">High</th><th class="num">Actual</th><th></th></tr></thead><tbody>'+
-   (S.fin.costs.length?S.fin.costs.map(function(c){
+   (S.fin.costs.length?S.fin.costs.map(function(c,ci){
      var on=finLive(c), inPath=costInPath(c,path);
      return '<tr'+(on&&inPath?'':' class="offrow"')+'>'+
-     '<td class="hd">'+finSw('costtog',c.id,on,c.name||'this cost line')+
+     '<td class="hd">'+finGrip('costs',ci,c.name||'this cost line')+
+       finSw('costtog',c.id,on,c.name||'this cost line')+
        '<b>'+E(c.name)+'</b>'+partsMark(c)+
        (on?(inPath?'':'<span class="offtag">other path</span>')
        :'<span class="offtag">off</span>')+'</td>'+

@@ -217,6 +217,7 @@ function boot(){
       document.body.classList.add('unlocked');
       applyTheme();
       chrome();
+      chartsWire();
       /* If the saved copy could not be read, say so loudly and do not treat the
          empty result as a fresh account, because that is how one gets
          overwritten. Nothing is pushed while this is set. */

@@ -846,11 +846,63 @@ gap:14px;margin-bottom:14px;flex-wrap:wrap}
 .trkhead h2{font-size:16px}
 }
 
+/* ---------------- putting lines in order ----------------
+   The grip sits at the head of the row and stays quiet until the row is
+   reached for, the same way the remove cross in a breakdown does. It has to be
+   a real target on a phone though, where there is no hover to reveal it. */
+.sr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;
+clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;border:0}
+.ordhint{margin:-4px 0 12px}
+.grip{flex:none;width:24px;height:28px;display:flex;align-items:center;justify-content:center;
+border:1px solid transparent;border-radius:6px;background:transparent;color:var(--ink-4);
+cursor:grab;opacity:.62;transition:opacity .16s var(--ez),color .16s var(--ez),
+background .16s var(--ez),border-color .16s var(--ez);
+touch-action:none;-webkit-user-select:none;user-select:none}
+.grip svg{fill:currentColor;display:block;pointer-events:none}
+tr:hover>.hd>.grip,.grip:focus-visible{opacity:1}
+.grip:hover{color:var(--ink-2);background:var(--panel-2);border-color:var(--line-2)}
+.grip:active{cursor:grabbing}
+/* While something is moving, the whole page stops trying to select text under
+   the finger and every row animates to its new place except the one being
+   carried, which has to track the finger exactly. */
+body.dragging{-webkit-user-select:none;user-select:none;cursor:grabbing}
+tr.slid>td{transition:transform .16s var(--ez)}
+tr.slid{transition:transform .16s var(--ez)}
+tr.lift{position:relative;z-index:5}
+tr.lift>td{background:var(--panel-2);box-shadow:0 10px 26px rgba(0,0,0,.45)}
+tr.lift>td:first-child{border-left:2px solid var(--brass)}
+/* Reorder sits in the same button row as the rest, so it has to measure like
+   one rather than like a form field that wandered in. */
+.ssel{position:relative;display:inline-flex}
+.ssel select{appearance:none;-webkit-appearance:none;
+padding:0 26px 0 11px;min-height:30px;font:600 12px/1 var(--f-body);
+border:1px solid var(--line-2);border-radius:99px;background:transparent;color:var(--ink-2);
+cursor:pointer;transition:.18s var(--ez)}
+.ssel:after{content:"";position:absolute;right:11px;top:50%;pointer-events:none;
+width:5px;height:5px;margin-top:-4px;border-right:1.5px solid var(--ink-4);
+border-bottom:1.5px solid var(--ink-4);transform:rotate(45deg)}
+.ssel select:hover{border-color:var(--brass);color:var(--ink)}
+.ssel select:focus-visible{outline:0;border-color:var(--brass);box-shadow:var(--glow)}
+
 /* ---------------- charts ---------------- */
 .cempty{padding:26px 4px;text-align:center;color:var(--ink-4);font-size:12.5px}
 .cchart{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:8px;align-items:end}
+/* With a scale on it the first column is the scale, sized to its widest
+   number, and the plot columns share what is left. */
+.cchart.ax{grid-template-columns:auto;gap:8px;column-gap:8px}
 .ccol{min-width:0;text-align:center}
-.cstack{position:relative;height:var(--ch,150px);border-bottom:1px solid var(--line)}
+/* Gridlines are the background of every stack rather than a layer over the
+   top, so they line up across the chart for free and a bar always covers the
+   stretch of line behind it. */
+.cstack{position:relative;height:var(--ch,150px);border-bottom:1px solid var(--line);
+background-image:repeating-linear-gradient(to top,var(--line) 0 1px,transparent 1px 25%);
+background-position:bottom}
+/* The numbers the bars are measured against. Quiet enough to read past. */
+.cyax{position:relative;height:var(--ch,150px);padding-right:9px;
+border-right:1px solid var(--line)}
+.cyax span{position:absolute;right:9px;transform:translateY(50%);white-space:nowrap;
+font:600 9.5px/1 var(--f-mono);color:var(--ink-4)}
+.cyax span:first-child{transform:translateY(35%)}
 .cb{position:absolute;left:var(--l,8%);right:var(--r,8%);bottom:var(--b,0);height:var(--h,0);
 border-radius:4px 4px 0 0;transform-origin:bottom;
 animation:cgrow .58s var(--ez) both;animation-delay:var(--d,0s)}
@@ -885,6 +937,16 @@ justify-content:center;pointer-events:none;text-align:center;padding:0 22px}
 .cdmid b{font:700 21px/1 var(--f-mono);letter-spacing:-.03em;color:var(--ink)}
 .cdmid span{margin-top:6px;font:700 8.5px/1 var(--f-body);letter-spacing:.18em;
 text-transform:uppercase;color:var(--ink-4)}
+/* Pointing at one slice pushes the rest back rather than lighting the one up,
+   which keeps the ring the same brightness while you read it. */
+.cdseg{transition:opacity .18s var(--ez),stroke-width .18s var(--ez)}
+.cdonut.picked .cdseg{opacity:.26}
+.cdonut.picked .cdseg.on{opacity:1;stroke-width:16}
+.cdonut svg{cursor:default}
+.cdseg{cursor:pointer}
+.clrow[data-dleg]{cursor:pointer}
+.clrow.on{background:var(--panel-2)}
+.clrow.on .cln{color:var(--ink)}
 
 .cline{display:block;width:100%;height:auto;overflow:visible}
 .cpath{fill:none;stroke:var(--brass);stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;
@@ -898,12 +960,16 @@ stroke-dasharray:1;animation:cdraw 1s var(--ez) both}
 .cline.neg .cgs0{stop-color:var(--clay)}
 .cline.neg .cgs1{stop-color:var(--clay)}
 .czero{stroke:var(--line-2);stroke-width:1;stroke-dasharray:4 4}
+.cgl{stroke:var(--line);stroke-width:1}
+.clv2{fill:var(--ink-4);font:600 11px/1 var(--f-mono);text-anchor:end}
 .cdot{fill:var(--brass);stroke:var(--panel);stroke-width:1.6;
 animation:cpop .3s var(--ez) both;animation-delay:var(--d,0s)}
 .cline.neg .cdot{fill:var(--clay)}
 @keyframes cpop{from{transform:scale(0);opacity:0}to{transform:scale(1);opacity:1}}
+/* The plot starts after the scale gutter, so the month labels start there too
+   rather than a centimetre to the left of the line they name. */
 .caxis{display:flex;justify-content:space-between;margin-top:8px;
-font:600 10.5px/1 var(--f-body);color:var(--ink-4)}
+padding:0 1.7% 0 9.7%;font:600 10.5px/1 var(--f-body);color:var(--ink-4)}
 
 .cleg{margin-top:16px}
 .clrow{display:flex;align-items:center;gap:9px;padding:7px 0;border-top:1px solid var(--line);
@@ -918,13 +984,33 @@ font-size:13px;transition:opacity .24s var(--ez)}
 font:600 11px/1 var(--f-body);color:var(--ink-3)}
 .ckey span{display:inline-flex;align-items:center;gap:6px}
 .ckey i{width:9px;height:9px;border-radius:2.5px;display:block}
+/* What a bar or a point is worth, in a box a thumb can summon. A title
+   attribute never shows up on a phone, which is where these get looked at. */
+.ctip{position:absolute;left:0;top:0;z-index:300;pointer-events:none;
+max-width:220px;padding:7px 10px;border:1px solid var(--line-2);border-radius:8px;
+background:var(--panel-2);color:var(--ink);box-shadow:0 8px 22px rgba(0,0,0,.45);
+font:600 12px/1.35 var(--f-body);opacity:0;transform:translateY(3px);
+transition:opacity .13s var(--ez),transform .13s var(--ez)}
+.ctip.on{opacity:1;transform:none}
+.cb[data-tip],.cdot[data-tip]{cursor:pointer}
+.cb[data-tip]:focus-visible,.cdseg:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
 /* Redrawing because a switch moved should not slide the page in again. The
    charts still replay, and that is the part carrying the change. */
 .page.noanim{animation:none}
 @media (max-width:560px){
 .cchart{gap:5px}
+.cchart.ax{column-gap:5px}
 .clab{font-size:9.5px}
 .csub{font-size:11px}
+.cyax{padding-right:6px}
+.cyax span{right:6px;font-size:8.5px}
+/* Crowded chart on a narrow screen: the figures under the bars come off
+   rather than run into each other. The scale carries the size and a tap
+   carries the exact number. */
+.cchart.many{gap:3px}
+.cchart.many.ax{column-gap:4px}
+.cchart.many .csub{display:none}
+.cchart.many .clab{font-size:8.5px;letter-spacing:-.01em;margin-top:7px}
 }
 
 
@@ -1075,6 +1161,13 @@ padding:4px 0;border:0;text-align:right}
 .tw.cards td:before{content:attr(data-l);flex:none;color:var(--ink-4);
 font:700 9px/1.5 var(--f-body);letter-spacing:.16em;text-transform:uppercase;text-align:left}
 .tw.cards td:not([data-l]):before{content:none}
+/* No hover on a phone, so the grip is simply there, and big enough to grab
+   without landing on the switch beside it. */
+.tw.cards .grip{opacity:.8;width:32px;height:38px;margin-left:-6px}
+.tw.cards tr.lift{background:var(--panel-2);box-shadow:0 12px 30px rgba(0,0,0,.5);
+border-color:var(--brass)}
+.tw.cards tr.lift>td{background:transparent;box-shadow:none}
+.tw.cards tr.lift>td:first-child{border-left:0}
 /* The name leads the card, full width and unlabelled. The switch rides with it
    so the thing you tap and the thing it belongs to are on the same line. */
 .tw.cards tr.prow2>td{display:block;padding:13px 14px}
@@ -1150,7 +1243,7 @@ border-bottom:1px solid var(--line)}
 </script><script>(function(){
 'use strict';
 var _D=window._DATA;
-var BUILD='5644e55';
+var BUILD='eb5b22a';
 
 /* ============================================================
    THE HANDBOOK  -  five sections, one state object, one file.
@@ -1775,6 +1868,23 @@ function chEmpty(msg){return '<div class="cempty">'+E(msg)+'</div>';}
    is fine. What matters is that touching slices differ, not distant ones. */
 function chTone(i){return 'ct'+(i%6+1);}
 
+/* Round a scale up to something a person would actually write down, so the
+   top gridline reads $7,000 rather than $6,847. */
+function chNice(v){
+  if(!(v>0)) return 1;
+  var p=Math.pow(10,Math.floor(Math.log(v)/Math.LN10));
+  var f=v/p, step=f<=1?1:f<=2?2:f<=2.5?2.5:f<=5?5:10;
+  return step*p;
+}
+/* The scale down the left edge. Four lines is enough to read a bar against
+   and few enough that they stay behind the bars instead of competing. */
+function chAxis(max,h,fmt){
+  var n=4, out='', i;
+  for(i=n;i>=0;i--)
+    out+='<span style="bottom:'+chNum(i/n*100)+'%">'+E((fmt||M)(max*i/n))+'</span>';
+  return '<div class="cyax" style="--ch:'+h+'px">'+out+'</div>';
+}
+
 /* ---------------- columns ----------------
    spec.max     what one full height bar is worth
    spec.cols[]  {label, sub, subCls, bars:[{v, base, cls, tip}]}
@@ -1795,7 +1905,10 @@ function chartCols(spec){
   var anyValue=cols.some(function(c){
     return (c.bars||[]).some(function(b){return Math.abs(b.v||0)>0;});});
   if(!anyValue) return chEmpty(spec.empty||'Nothing to draw yet.');
-  var max=spec.max||0, h=spec.h||150, k=0;
+  /* The scale is rounded up before anything is measured against it, so bars,
+     gridlines and the numbers on the left are all reading off one ruler. */
+  var h=spec.h||150, k=0;
+  var max=spec.axis===false?(spec.max||0):chNice(spec.max||0);
   var n0=cols.length;
   var pad=n0<=2?26:n0<=3?20:n0<=4?15:n0<=6?9:n0<=9?5:3;
   var body=cols.map(function(c,ci){
@@ -1808,7 +1921,8 @@ function chartCols(spec){
       k++;
       return '<i class="cb '+(b.cls||'ct1')+'" style="--l:'+chNum(l)+'%;--r:'+chNum(r)+'%;'+
         '--h:'+chNum(Math.max(hp,hp>0?0.8:0))+'%;--b:'+chNum(bp)+'%;--d:'+(k*0.045).toFixed(3)+'s"'+
-        (b.tip?' title="'+E(b.tip)+'"':'')+'></i>';
+        (b.tip?' tabindex="0" role="img" data-tip="'+E(b.tip)+'" aria-label="'+E(b.tip)+'"':'')+
+        '></i>';
     }).join('');
     /* The connector belongs to the column it leads into, so the first one has
        nothing to join and is skipped. */
@@ -1824,29 +1938,45 @@ function chartCols(spec){
       (c.sub?'<div class="csub '+(c.subCls||'')+'">'+E(c.sub)+'</div>':'')+
       '</div>';
   }).join('');
-  return '<div class="cchart'+(spec.connect?' wf':'')+'">'+body+'</div>';
+  var ax=spec.axis===false?'':chAxis(max,h,spec.fmt);
+  /* Past six columns there is no room on a phone for a figure under every bar,
+     and half a figure overlapping the next one is worse than none. The scale
+     on the left still gives the size, and a tap still gives the exact number. */
+  return '<div class="cchart'+(spec.connect?' wf':'')+(ax?' ax':'')+
+    (n0>6?' many':'')+'">'+ax+body+'</div>';
 }
 
 /* ---------------- donut ----------------
    One circle per slice. The dash is as long as that slice's share and the
    offset is everything ahead of it. pathLength="100" turns the circumference
    into percent, so the radius never enters the maths. */
-function chartDonut(slices,top,bottom){
+function chartDonut(slices,top,bottom,key){
   var live=(slices||[]).filter(function(s){return s.v>0;});
   var tot=live.reduce(function(a,s){return a+s.v;},0);
   if(!tot) return chEmpty('Nothing counted right now.');
-  var acc=0;
+  var acc=0; key=key||chRingKey();
   var arcs=live.map(function(s,i){
     var len=s.v/tot*100, off=-acc; acc+=len;
+    var pct=Math.round(s.v/tot*100)+'%';
     return '<circle class="cdseg '+(s.cls||chTone(i))+'" cx="60" cy="60" r="47" pathLength="100" '+
+      'data-donut="'+key+'" data-di="'+i+'" '+
+      'data-dv="'+E(M(s.v))+'" data-dl="'+E(s.label||'')+'" data-dp="'+pct+'" '+
       'style="--len:'+chNum(len)+';--d:'+(i*0.07).toFixed(2)+'s;stroke-dashoffset:'+chNum(off)+'">'+
-      (s.label?'<title>'+E(s.label)+'</title>':'')+'</circle>';
+      (s.label?'<title>'+E(s.label)+' - '+pct+'</title>':'')+'</circle>';
   }).join('');
-  return '<div class="cdonut"><svg viewBox="0 0 120 120" role="img" aria-label="Breakdown">'+
+  /* The middle holds the total until you point at a slice, and then it holds
+     that slice. Reading a share off a ring is guesswork otherwise. */
+  return '<div class="cdonut" data-dring="'+key+'">'+
+    '<svg viewBox="0 0 120 120" role="img" aria-label="Breakdown">'+
     '<circle class="cdtrack" cx="60" cy="60" r="47"></circle>'+
     '<g transform="rotate(-90 60 60)">'+arcs+'</g></svg>'+
-    '<div class="cdmid"><b>'+E(top)+'</b><span>'+E(bottom)+'</span></div></div>';
+    '<div class="cdmid"><b data-dtop="'+E(top)+'">'+E(top)+'</b>'+
+    '<span data-dbot="'+E(bottom)+'">'+E(bottom)+'</span></div></div>';
 }
+/* Each ring on a page needs its own name so pointing at one does not light up
+   the other, and its legend needs the same name to point back. */
+var _ringN=0;
+function chRingKey(){return 'r'+(++_ringN);}
 
 /* ---------------- projection line ----------------
    pts are plain numbers. If the series crosses zero it gets a zero line, since
@@ -1855,7 +1985,9 @@ function chartLine(pts,opts){
   opts=opts||{};
   var v=(pts||[]).map(function(x){return Number(x)||0;});
   if(v.length<2) return chEmpty('Not enough to project yet.');
-  var W=600,H=170,PL=10,PR=10,PT=12,PB=12;
+  /* Room on the left for the scale, so the numbers sit in a gutter of their
+     own rather than on top of the line they are describing. */
+  var W=600,H=170,PL=58,PR=10,PT=12,PB=12;
   var mn=Math.min.apply(null,v), mx=Math.max.apply(null,v);
   if(opts.zero!==false){mn=Math.min(mn,0);mx=Math.max(mx,0);}
   if(mx===mn){mx=mn+1;}
@@ -1870,9 +2002,18 @@ function chartLine(pts,opts){
     '" y2="'+chNum(Y(0))+'"></line>':'';
   var dots=v.map(function(y,j){
     return '<circle class="cdot" cx="'+chNum(X(j))+'" cy="'+chNum(Y(y))+'" r="3.4" '+
+      'tabindex="0" data-tip="'+E((opts.pt||function(k,val){
+        return 'Month '+(k+1)+': '+M(val);})(j,y))+'" '+
       'style="--d:'+(0.35+j*0.045).toFixed(3)+'s"></circle>';}).join('');
+  /* Three numbers up the side. Without them the line says the shape but not
+     the size, and the size is the part you make decisions on. */
+  var marks=[mx,(mx+mn)/2,mn].map(function(val,j){
+    var gy=chNum(PT+(H-PT-PB)*j/2);
+    return '<text class="clv2" x="'+(PL-9)+'" y="'+gy+'" dy="4">'+
+      E((opts.fmt||M)(val))+'</text>'+
+      '<line class="cgl" x1="'+PL+'" x2="'+(W-PR)+'" y1="'+gy+'" y2="'+gy+'"></line>';}).join('');
   return '<svg class="cline'+(opts.neg?' neg':'')+'" viewBox="0 0 '+W+' '+H+'" role="img" '+
-    'aria-label="'+E(opts.label||'Projection')+'">'+
+    'aria-label="'+E(opts.label||'Projection')+'">'+marks+
     '<defs><linearGradient id="cgFill" x1="0" y1="0" x2="0" y2="1">'+
     '<stop class="cgs0" offset="0"></stop><stop class="cgs1" offset="1"></stop>'+
     '</linearGradient></defs>'+
@@ -1883,14 +2024,94 @@ function chartLine(pts,opts){
 /* ---------------- legend rows ----------------
    On the money pages the switches live in the legend, so a row takes raw
    markup for its control instead of building one itself. */
-function chartLegend(items){
-  return '<div class="cleg">'+(items||[]).map(function(it){
-    return '<div class="clrow'+(it.off?' off':'')+'">'+
+function chartLegend(items,ring){
+  return '<div class="cleg">'+(items||[]).map(function(it,i){
+    return '<div class="clrow'+(it.off?' off':'')+'"'+
+      (ring?' data-dleg="'+E(ring)+'" data-di="'+i+'"':'')+'>'+
       '<span class="cdotc '+(it.cls||'ct1')+'"></span>'+
       '<span class="cln">'+E(it.label)+'</span>'+
       '<b class="clv">'+E(it.value)+'</b>'+
       (it.pct!=null?'<span class="clp">'+E(it.pct)+'</span>':'')+
       (it.ctrl||'')+'</div>';}).join('')+'</div>';
+}
+
+/* ---------------- pointing at a chart ----------------
+   A title attribute is a desktop-only feature. It never appears for a thumb,
+   which meant every number hidden behind one was unreachable on the device the
+   charts get looked at on most. This puts the same text in a real element that
+   a tap can summon and a tap elsewhere dismisses.
+
+   One listener for every chart on the page, installed once. */
+function chTipEl(){
+  var t=document.getElementById('ctip');
+  if(!t){t=document.createElement('div');t.id='ctip';t.className='ctip';
+    t.setAttribute('role','status');document.body.appendChild(t);}
+  return t;
+}
+function chTipShow(el,text){
+  var t=chTipEl();
+  t.textContent=text;
+  t.classList.add('on');
+  var r=el.getBoundingClientRect(), w=t.offsetWidth, h=t.offsetHeight;
+  var x=r.left+r.width/2-w/2, y=r.top-h-9;
+  /* Never off the edge, and never over the thing it is describing. */
+  x=Math.max(8,Math.min(x,(window.innerWidth||0)-w-8));
+  if(y<6) y=r.bottom+9;
+  t.style.left=Math.round(x)+'px';
+  t.style.top=Math.round(y+(window.pageYOffset||0))+'px';
+}
+function chTipHide(){
+  var t=document.getElementById('ctip');
+  if(t) t.classList.remove('on');
+}
+function chRingSet(key,i){
+  var ring=document.querySelector('[data-dring="'+key+'"]');
+  if(!ring) return;
+  var mid=ring.querySelector('.cdmid b'), sub=ring.querySelector('.cdmid span');
+  var seg=i==null?null:ring.querySelector('[data-donut="'+key+'"][data-di="'+i+'"]');
+  ring.classList.toggle('picked',!!seg);
+  $$('[data-donut="'+key+'"]').forEach(function(c){
+    c.classList.toggle('on',!!seg&&c===seg);});
+  $$('[data-dleg="'+key+'"]').forEach(function(r){
+    r.classList.toggle('on',!!seg&&r.dataset.di===String(i));});
+  if(mid) mid.textContent=seg?seg.dataset.dv:mid.dataset.dtop;
+  if(sub) sub.textContent=seg?(seg.dataset.dl+' - '+seg.dataset.dp):sub.dataset.dbot;
+}
+function chartsWire(){
+  var pick=function(t){return t&&t.closest?t.closest('[data-tip],[data-donut],[data-dleg]'):null;};
+  var enter=function(e){
+    var el=pick(e.target);
+    if(!el){chTipHide();return;}
+    if(el.hasAttribute('data-tip')) chTipShow(el,el.getAttribute('data-tip'));
+    var key=el.getAttribute('data-donut')||el.getAttribute('data-dleg');
+    if(key) chRingSet(key,+el.getAttribute('data-di'));
+  };
+  var leave=function(e){
+    /* A finger leaves the moment it lifts. Honouring that would wipe the
+       readout in the same instant it appeared, so on touch it stays until the
+       next tap somewhere else puts it away. */
+    if(e.pointerType&&e.pointerType!=='mouse') return;
+    var el=pick(e.target);
+    if(!el) return;
+    chTipHide();
+    var key=el.getAttribute('data-donut')||el.getAttribute('data-dleg');
+    if(key) chRingSet(key,null);
+  };
+  document.addEventListener('pointerover',enter);
+  document.addEventListener('pointerout',leave);
+  document.addEventListener('focusin',enter);
+  document.addEventListener('focusout',leave);
+  /* A finger has no hover, so a tap does the pointing and the next tap
+     anywhere else puts it back. */
+  document.addEventListener('pointerdown',function(e){
+    if(e.pointerType==='mouse') return;
+    var el=pick(e.target);
+    if(!el){chTipHide();
+      $$('.cdonut[data-dring]').forEach(function(r){chRingSet(r.dataset.dring,null);});
+      return;}
+    enter(e);
+  },true);
+  window.addEventListener('scroll',chTipHide,true);
 }
 
 /* ---------------- count up ----------------
@@ -2129,6 +2350,7 @@ function boot(){
       document.body.classList.add('unlocked');
       applyTheme();
       chrome();
+      chartsWire();
       /* If the saved copy could not be read, say so loudly and do not treat the
          empty result as a fresh account, because that is how one gets
          overwritten. Nothing is pushed while this is set. */
@@ -4585,6 +4807,270 @@ function ioModal(key){
   return m;
 }
 
+/* ============================================================
+   PUTTING THE MONEY LINES IN ORDER
+
+   The order of the income and cost lines is the order they are stored in, so
+   moving one is a real edit. It saves, it syncs, and the other device sees the
+   same list in the same order. Nothing here sorts on the way to the screen,
+   which means what you arranged is what stays arranged.
+
+   Dragging runs on pointer events rather than the HTML5 drag API, because that
+   one does not fire on a phone at all. The grip is also a real button, so the
+   same move is one arrow key away without touching a mouse.
+   ============================================================ */
+
+function finList(kind){return kind==='jobs'?S.fin.jobs:S.fin.costs;}
+
+/* Pull one line out and put it back somewhere else. Everything between the two
+   places closes up behind it, which is what a list does when you move an item
+   in it by hand. */
+function finMove(kind,from,to){
+  var a=finList(kind);
+  if(!a||from<0||from>=a.length) return false;
+  to=Math.max(0,Math.min(a.length-1,to));
+  if(to===from) return false;
+  a.splice(to,0,a.splice(from,1)[0]);
+  save();
+  return true;
+}
+
+/* The grip. Six dots is the oldest sign in the business for "this moves", and
+   it earns its place in the row because it is also the keyboard control. */
+function finGrip(kind,i,label){
+  var d='',x,y;
+  for(y=0;y<3;y++) for(x=0;x<2;x++)
+    d+='<circle cx="'+(2+x*5)+'" cy="'+(3+y*5)+'" r="1.35"></circle>';
+  return '<button type="button" class="grip" data-grip="'+E(kind)+'" data-ord="'+i+'" '+
+    'aria-label="Move '+E(label)+' up or down the list" '+
+    'title="Drag to move it, or use the arrow keys">'+
+    '<svg viewBox="0 0 9 14" width="9" height="14" aria-hidden="true">'+d+'</svg></button>';
+}
+
+/* ---- the drag itself ----
+   Measurements are taken once, in page coordinates rather than screen ones, so
+   the sums still hold while the page scrolls underneath a dragging finger. */
+var _drag=null;
+
+function finUnits(kind,tbody){
+  /* A line can be two rows: itself, and its breakdown underneath if that is
+     open. They travel together or the breakdown detaches from the thing it
+     belongs to. */
+  var out=[];
+  $$('[data-grip="'+kind+'"]',tbody).forEach(function(g){
+    var tr=g.closest('tr'); if(!tr) return;
+    var rows=[tr], nx=tr.nextElementSibling;
+    if(nx&&nx.classList.contains('prow2')) rows.push(nx);
+    var top=tr.getBoundingClientRect().top+(window.pageYOffset||0);
+    var last=rows[rows.length-1].getBoundingClientRect();
+    out.push({idx:+g.dataset.ord, rows:rows, grip:g, top:top,
+              h:last.top+(window.pageYOffset||0)+last.height-top});
+  });
+  return out;
+}
+
+function finDragStart(e){
+  if(_drag||e.button>0) return;
+  var g=e.currentTarget, kind=g.dataset.grip, tbody=g.closest('tbody');
+  if(!tbody) return;
+  var units=finUnits(kind,tbody);
+  var me=null,i;
+  for(i=0;i<units.length;i++) if(units[i].grip===g) me=units[i];
+  if(!me||units.length<2) return;
+  e.preventDefault();
+  try{g.setPointerCapture(e.pointerId);}catch(err){}
+  _drag={kind:kind,g:g,me:me,units:units,from:me.idx,to:me.idx,
+         startY:e.clientY+(window.pageYOffset||0),clientY:e.clientY,raf:0};
+  me.rows.forEach(function(r){r.classList.add('lift');});
+  document.body.classList.add('dragging');
+  g.addEventListener('pointermove',finDragMove);
+  g.addEventListener('pointerup',finDragEnd);
+  g.addEventListener('pointercancel',finDragCancel);
+  window.addEventListener('keydown',finDragKey,true);
+  finDragPaint();
+}
+
+/* Near the top or bottom of the screen the page comes to the finger. Without
+   it a line on a phone can only ever move as far as one screenful. */
+function finDragScroll(){
+  if(!_drag) return;
+  var y=_drag.clientY, h=window.innerHeight||0, edge=74, step=0;
+  if(y<edge) step=-Math.ceil((edge-y)/5);
+  else if(y>h-edge) step=Math.ceil((y-(h-edge))/5);
+  if(step){
+    var before=window.pageYOffset||0;
+    window.scrollBy(0,step);
+    if((window.pageYOffset||0)!==before) finDragPaint();
+  }
+  _drag.raf=requestAnimationFrame(finDragScroll);
+}
+
+function finDragPaint(){
+  var d=_drag; if(!d) return;
+  var dy=(d.clientY+(window.pageYOffset||0))-d.startY;
+  var top=d.me.top+dy, bot=top+d.me.h, to=d.from;
+  d.units.forEach(function(u){
+    if(u.idx===d.from) return;
+    var mid=u.top+u.h/2;
+    if(u.idx<d.from&&top<mid) to=Math.min(to,u.idx);
+    else if(u.idx>d.from&&bot>mid) to=Math.max(to,u.idx);
+  });
+  d.to=to;
+  d.units.forEach(function(u){
+    var shift=0;
+    if(u.idx===d.from) shift=dy;
+    else if(u.idx>=to&&u.idx<d.from) shift=d.me.h;
+    else if(u.idx>d.from&&u.idx<=to) shift=-d.me.h;
+    u.rows.forEach(function(r){
+      r.style.transform=shift?'translateY('+shift+'px)':'';
+      r.classList.toggle('slid',!!shift&&u.idx!==d.from);
+    });
+  });
+}
+
+function finDragMove(e){
+  if(!_drag) return;
+  e.preventDefault();
+  _drag.clientY=e.clientY;
+  if(!_drag.raf) _drag.raf=requestAnimationFrame(finDragScroll);
+  finDragPaint();
+}
+
+function finDragClear(){
+  var d=_drag; if(!d) return;
+  if(d.raf) cancelAnimationFrame(d.raf);
+  d.units.forEach(function(u){u.rows.forEach(function(r){
+    r.style.transform=''; r.classList.remove('lift','slid');});});
+  document.body.classList.remove('dragging');
+  d.g.removeEventListener('pointermove',finDragMove);
+  d.g.removeEventListener('pointerup',finDragEnd);
+  d.g.removeEventListener('pointercancel',finDragCancel);
+  window.removeEventListener('keydown',finDragKey,true);
+  _drag=null;
+}
+
+function finDragEnd(){
+  var d=_drag; if(!d) return;
+  var kind=d.kind, from=d.from, to=d.to;
+  finDragClear();
+  if(to!==from&&finMove(kind,from,to)) finAfterMove(kind,to);
+}
+
+function finDragCancel(){finDragClear();}
+
+function finDragKey(e){
+  if(e.key==='Escape'&&_drag){e.preventDefault();finDragCancel();}
+}
+
+/* ---- keyboard ----
+   Arrows move it a step, Home and End take it to the ends. Focus follows the
+   line to where it landed, so holding an arrow down walks it up the list. */
+function finGripKey(e){
+  var g=e.currentTarget, kind=g.dataset.grip, i=+g.dataset.ord;
+  var n=finList(kind).length, to=null;
+  if(e.key==='ArrowUp') to=i-1;
+  else if(e.key==='ArrowDown') to=i+1;
+  else if(e.key==='Home') to=0;
+  else if(e.key==='End') to=n-1;
+  else return;
+  e.preventDefault();
+  if(finMove(kind,i,Math.max(0,Math.min(n-1,to)))) finAfterMove(kind,Math.max(0,Math.min(n-1,to)));
+}
+
+/* Redraw, then put the caret back on the line that moved rather than at the
+   top of the page, and say where it ended up for anyone listening. */
+function finAfterMove(kind,to){
+  reroute();
+  var g=$('[data-grip="'+kind+'"][data-ord="'+to+'"]');
+  if(g){
+    try{g.focus({preventScroll:true});}catch(e){try{g.focus();}catch(e2){}}
+    var r=g.getBoundingClientRect();
+    if(r.top<80||r.bottom>(window.innerHeight||0)-80)
+      try{g.scrollIntoView({block:'center',behavior:'smooth'});}catch(e3){}
+  }
+  finSay((kind==='jobs'?'Income line':'Cost line')+' moved to number '+(to+1));
+}
+
+/* A quiet line for a screen reader. It says what just happened without
+   putting a toast over the table you are working in. */
+function finSay(msg){
+  var n=$('#finsay');
+  if(!n){n=document.createElement('div');n.id='finsay';n.className='sr';
+    n.setAttribute('aria-live','polite');document.body.appendChild(n);}
+  n.textContent=msg;
+}
+
+/* ---- sorting ----
+   A sort writes the order into the list and then gets out of the way. It is a
+   starting point you can drag from, not a setting that keeps reasserting
+   itself over whatever you arrange by hand. */
+var FINSORTS=[
+  ['big','Biggest first'],
+  ['small','Smallest first'],
+  ['az','Name, A to Z'],
+  ['who','By person, then biggest'],
+  ['sect','By section, then biggest'],
+  ['on','Counted ones first']
+];
+function finSortOpts(kind){
+  return FINSORTS.filter(function(o){return o[0]!=='sect'||kind==='costs';});
+}
+/* It reads "Reorder" rather than "Sort by" because it does the move once and
+   then hands the list back. There is nothing left switched on afterwards. */
+function finSortSel(kind){
+  return '<label class="ssel"><span class="sr">Reorder the '+
+    (kind==='jobs'?'income':'cost')+' lines</span><select data-finsort="'+E(kind)+'">'+
+    '<option value="">Reorder...</option>'+
+    finSortOpts(kind).map(function(o){
+      return '<option value="'+E(o[0])+'">'+E(o[1])+'</option>';}).join('')+
+    '</select></label>';
+}
+function finSortBy(kind,how){
+  var a=finList(kind), mode=S.fin.mode||'real';
+  if(!a||a.length<2) return false;
+  var amt=function(x){return Math.abs(Number(x[mode])||0);};
+  var nm=function(x){return String(x.name||'').toLowerCase();};
+  var who=function(x){return String(x.who===EVERYONE?'￿':WHO(x.who)).toLowerCase();};
+  var sect=function(x){return String(x.section||'￿').toLowerCase();};
+  var cmp={
+    big:function(x,y){return amt(y)-amt(x)||nm(x).localeCompare(nm(y));},
+    small:function(x,y){return amt(x)-amt(y)||nm(x).localeCompare(nm(y));},
+    az:function(x,y){return nm(x).localeCompare(nm(y));},
+    who:function(x,y){return who(x).localeCompare(who(y))||amt(y)-amt(x);},
+    sect:function(x,y){return sect(x).localeCompare(sect(y))||amt(y)-amt(x);},
+    on:function(x,y){return (finLive(y)?1:0)-(finLive(x)?1:0)||amt(y)-amt(x);}
+  }[how];
+  if(!cmp) return false;
+  var was=a.map(function(x){return x.id;}).join('|');
+  a.sort(cmp);
+  if(a.map(function(x){return x.id;}).join('|')===was) return false;
+  save();
+  return true;
+}
+
+/* ---- wiring ---- */
+function wireReorder(){
+  $$('[data-grip]').forEach(function(g){
+    g.addEventListener('pointerdown',finDragStart);
+    g.addEventListener('keydown',finGripKey);
+    /* A grip is for grabbing, not for following a link somewhere. */
+    g.addEventListener('click',function(e){e.preventDefault();});
+  });
+  $$('[data-finsort]').forEach(function(sel){
+    sel.addEventListener('change',function(){
+      var kind=this.dataset.finsort, how=this.value;
+      this.value='';
+      if(!how) return;
+      if(finSortBy(kind,how)){
+        reroute();
+        var lbl='';
+        FINSORTS.forEach(function(o){if(o[0]===how)lbl=o[1].toLowerCase();});
+        toast((kind==='jobs'?'Income':'Costs')+' now in order: '+lbl);
+      } else toast('Already in that order');
+    });
+  });
+}
+
 /* ============================ MEALS ============================ */
 var CATC={'Breakfast':['#D89A3C','#B0651F'],'Lunch/Dinner':['#2C6B50','#173C2C'],
  'Snack':['#4E8C7A','#28584A'],'Drink':['#6E5AA8','#3F3168'],
@@ -5310,14 +5796,15 @@ function vFinancial(sub){
     '</div></div>';
 
   /* ---- donut of live costs, with a switch per section in the legend ---- */
-  var donutSlices=secNames.map(function(k,i){return {v:byS[k],label:k+' '+M(byS[k]),cls:chTone(i)};});
+  var costRing=chRingKey(), incRing=chRingKey();
+  var donutSlices=secNames.map(function(k,i){return {v:byS[k],label:k,cls:chTone(i)};});
   var legend=chartLegend(secNames.map(function(k,i){
     var anyOn=S.fin.costs.some(function(c){return costInPath(c,path)&&c.section===k&&finLive(c);});
     return {label:k,cls:chTone(i),off:!anyOn,
       value:M(anyOn?byS[k]:bySAll[k]),
       pct:(cost&&anyOn)?Math.round(byS[k]/cost*100)+'%':'-',
       ctrl:finSw('secttog',k,anyOn,k,true)};
-  }));
+  }),costRing);
   var incomePeople=whoTokens().filter(function(w){
     return S.fin.jobs.some(function(j){return j.who===w;});});
   var incLegend=chartLegend(incomePeople.map(function(w,i){
@@ -5329,7 +5816,7 @@ function vFinancial(sub){
     return {label:w===EVERYONE?'Shared / gig':WHO(w),cls:chTone(i+1),off:!anyOn,
       value:M(anyOn?v:all),pct:(inc&&anyOn)?Math.round(v/inc*100)+'%':'-',
       ctrl:finSw('whotog',w,anyOn,w===EVERYONE?'shared income':WHO(w),true)};
-  }));
+  }),incRing);
   var costPeople=whoTokens().filter(function(w){
     return S.fin.costs.some(function(c){return c.who===w&&costInPath(c,path);});});
   var whoCost='<div class="ckey">'+costPeople.map(function(w,i){
@@ -5342,7 +5829,7 @@ function vFinancial(sub){
    '<p class="sub">Every switch here moves a whole group at once. The tables further down do it one '+
    'line at a time.</p><div class="grid g2">'+
    '<div class="card pad"><h3 class="ctitle">Costs by section</h3>'+
-   chartDonut(donutSlices,M(cost),'Live costs / mo')+legend+
+   chartDonut(donutSlices,M(cost),'Live costs / mo',costRing)+legend+
    (perDollar.length?'<p class="sm muted" style="margin-top:14px">Of every $100 coming in, '+
      perDollar.slice(0,3).map(function(p){return '$'+Math.round(p[1])+' goes to '+E(p[0].toLowerCase());}).join(', ')+
      '.</p>':'')+'</div>'+
@@ -5350,7 +5837,7 @@ function vFinancial(sub){
    chartDonut(incomePeople.map(function(w,i){
      return {v:S.fin.jobs.filter(function(j){return j.who===w&&finLive(j);})
        .reduce(function(a,j){return a+(j[mode]||0);},0),
-       label:(w===EVERYONE?'Shared':WHO(w)),cls:chTone(i+1)};}),M(inc),'Live income / mo')+
+       label:(w===EVERYONE?'Shared':WHO(w)),cls:chTone(i+1)};}),M(inc),'Live income / mo',incRing)+
    incLegend+
    '<h3 class="ctitle" style="margin-top:20px">Costs carried by</h3>'+whoCost+
    '<div class="row" style="margin-top:14px"><button class="b o s" id="jobAdd">Add income</button>'+
@@ -5459,13 +5946,18 @@ function vFinancial(sub){
    '<button class="b o s" data-alltog="jobs|1">All on</button>'+
    '<button class="b o s" data-alltog="jobs|0">All off</button>'+
    '<button class="b o s" data-io="income">Import or export</button>'+
-   '<button class="b o s" id="jobAdd2">Add</button></div></div><div class="tw wide cards"><table>'+
+   finSortSel('jobs')+
+   '<button class="b o s" id="jobAdd2">Add</button></div></div>'+
+   '<p class="sub ordhint">Drag a line by its grip to put the list in whatever order '+
+   'you think in. The order is saved and it is the order it turns up in on the other '+
+   'phone, and in the file when you export it.</p><div class="tw wide cards"><table>'+
    '<thead><tr><th>Name</th><th>Who</th><th>Rate</th><th>Employer</th><th class="num">Low</th>'+
    '<th class="num">Realistic</th><th class="num">High</th><th class="num">Actual</th><th></th></tr></thead><tbody>'+
-   (S.fin.jobs.length?S.fin.jobs.map(function(j){
+   (S.fin.jobs.length?S.fin.jobs.map(function(j,ji){
      var on=finLive(j);
      return '<tr'+(on?'':' class="offrow"')+'>'+
-     '<td class="hd">'+finSw('jobtog',j.id,on,j.name||'this income line')+
+     '<td class="hd">'+finGrip('jobs',ji,j.name||'this income line')+
+       finSw('jobtog',j.id,on,j.name||'this income line')+
        '<b>'+E(j.name)+'</b>'+partsMark(j)+(on?'':'<span class="offtag">off</span>')+'</td>'+
      '<td data-l="Who"><span class="chip">'+E(WHO(j.who))+'</span></td>'+
      '<td data-l="Rate" class="sm muted">'+(j.rate?$$$(j.rate)+'/hr':'')+'</td>'+
@@ -5495,13 +5987,18 @@ function vFinancial(sub){
    '<button class="b o s" data-alltog="costs|1">All on</button>'+
    '<button class="b o s" data-alltog="costs|0">All off</button>'+
    '<button class="b o s" data-io="costs">Import or export</button>'+
-   '<button class="b o s" id="costAdd">Add</button></div></div><div class="tw wide cards"><table>'+
+   finSortSel('costs')+
+   '<button class="b o s" id="costAdd">Add</button></div></div>'+
+   '<p class="sub ordhint">Same here: drag by the grip, or reorder the whole lot at '+
+   'once and then move the few that end up in the wrong place.</p>'+
+   '<div class="tw wide cards"><table>'+
    '<thead><tr><th>Cost</th><th>Section</th><th>Who</th><th class="num">Low</th>'+
    '<th class="num">Realistic</th><th class="num">High</th><th class="num">Actual</th><th></th></tr></thead><tbody>'+
-   (S.fin.costs.length?S.fin.costs.map(function(c){
+   (S.fin.costs.length?S.fin.costs.map(function(c,ci){
      var on=finLive(c), inPath=costInPath(c,path);
      return '<tr'+(on&&inPath?'':' class="offrow"')+'>'+
-     '<td class="hd">'+finSw('costtog',c.id,on,c.name||'this cost line')+
+     '<td class="hd">'+finGrip('costs',ci,c.name||'this cost line')+
+       finSw('costtog',c.id,on,c.name||'this cost line')+
        '<b>'+E(c.name)+'</b>'+partsMark(c)+
        (on?(inPath?'':'<span class="offtag">other path</span>')
        :'<span class="offtag">off</span>')+'</td>'+
@@ -6426,6 +6923,7 @@ function bindFin(sub){
   on('#stNew','click',function(){stratListEditor(null);});
   on('#stMode','change',function(){S.fin.stratMode=this.value;save();route();});
   if(sub==='actual') bindActuals();
+  wireReorder();
   countUp($('#view'));
 }
 /* ---------------- switching lines in and out ----------------

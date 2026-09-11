@@ -354,6 +354,7 @@ function bindFin(sub){
   on('#stNew','click',function(){stratListEditor(null);});
   on('#stMode','change',function(){S.fin.stratMode=this.value;save();route();});
   if(sub==='actual') bindActuals();
+  wireReorder();
   countUp($('#view'));
 }
 /* ---------------- switching lines in and out ----------------

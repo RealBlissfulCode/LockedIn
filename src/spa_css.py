@@ -847,11 +847,63 @@ gap:14px;margin-bottom:14px;flex-wrap:wrap}
 .trkhead h2{font-size:16px}
 }
 
+/* ---------------- putting lines in order ----------------
+   The grip sits at the head of the row and stays quiet until the row is
+   reached for, the same way the remove cross in a breakdown does. It has to be
+   a real target on a phone though, where there is no hover to reveal it. */
+.sr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;
+clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;border:0}
+.ordhint{margin:-4px 0 12px}
+.grip{flex:none;width:24px;height:28px;display:flex;align-items:center;justify-content:center;
+border:1px solid transparent;border-radius:6px;background:transparent;color:var(--ink-4);
+cursor:grab;opacity:.62;transition:opacity .16s var(--ez),color .16s var(--ez),
+background .16s var(--ez),border-color .16s var(--ez);
+touch-action:none;-webkit-user-select:none;user-select:none}
+.grip svg{fill:currentColor;display:block;pointer-events:none}
+tr:hover>.hd>.grip,.grip:focus-visible{opacity:1}
+.grip:hover{color:var(--ink-2);background:var(--panel-2);border-color:var(--line-2)}
+.grip:active{cursor:grabbing}
+/* While something is moving, the whole page stops trying to select text under
+   the finger and every row animates to its new place except the one being
+   carried, which has to track the finger exactly. */
+body.dragging{-webkit-user-select:none;user-select:none;cursor:grabbing}
+tr.slid>td{transition:transform .16s var(--ez)}
+tr.slid{transition:transform .16s var(--ez)}
+tr.lift{position:relative;z-index:5}
+tr.lift>td{background:var(--panel-2);box-shadow:0 10px 26px rgba(0,0,0,.45)}
+tr.lift>td:first-child{border-left:2px solid var(--brass)}
+/* Reorder sits in the same button row as the rest, so it has to measure like
+   one rather than like a form field that wandered in. */
+.ssel{position:relative;display:inline-flex}
+.ssel select{appearance:none;-webkit-appearance:none;
+padding:0 26px 0 11px;min-height:30px;font:600 12px/1 var(--f-body);
+border:1px solid var(--line-2);border-radius:99px;background:transparent;color:var(--ink-2);
+cursor:pointer;transition:.18s var(--ez)}
+.ssel:after{content:"";position:absolute;right:11px;top:50%;pointer-events:none;
+width:5px;height:5px;margin-top:-4px;border-right:1.5px solid var(--ink-4);
+border-bottom:1.5px solid var(--ink-4);transform:rotate(45deg)}
+.ssel select:hover{border-color:var(--brass);color:var(--ink)}
+.ssel select:focus-visible{outline:0;border-color:var(--brass);box-shadow:var(--glow)}
+
 /* ---------------- charts ---------------- */
 .cempty{padding:26px 4px;text-align:center;color:var(--ink-4);font-size:12.5px}
 .cchart{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:8px;align-items:end}
+/* With a scale on it the first column is the scale, sized to its widest
+   number, and the plot columns share what is left. */
+.cchart.ax{grid-template-columns:auto;gap:8px;column-gap:8px}
 .ccol{min-width:0;text-align:center}
-.cstack{position:relative;height:var(--ch,150px);border-bottom:1px solid var(--line)}
+/* Gridlines are the background of every stack rather than a layer over the
+   top, so they line up across the chart for free and a bar always covers the
+   stretch of line behind it. */
+.cstack{position:relative;height:var(--ch,150px);border-bottom:1px solid var(--line);
+background-image:repeating-linear-gradient(to top,var(--line) 0 1px,transparent 1px 25%);
+background-position:bottom}
+/* The numbers the bars are measured against. Quiet enough to read past. */
+.cyax{position:relative;height:var(--ch,150px);padding-right:9px;
+border-right:1px solid var(--line)}
+.cyax span{position:absolute;right:9px;transform:translateY(50%);white-space:nowrap;
+font:600 9.5px/1 var(--f-mono);color:var(--ink-4)}
+.cyax span:first-child{transform:translateY(35%)}
 .cb{position:absolute;left:var(--l,8%);right:var(--r,8%);bottom:var(--b,0);height:var(--h,0);
 border-radius:4px 4px 0 0;transform-origin:bottom;
 animation:cgrow .58s var(--ez) both;animation-delay:var(--d,0s)}
@@ -886,6 +938,16 @@ justify-content:center;pointer-events:none;text-align:center;padding:0 22px}
 .cdmid b{font:700 21px/1 var(--f-mono);letter-spacing:-.03em;color:var(--ink)}
 .cdmid span{margin-top:6px;font:700 8.5px/1 var(--f-body);letter-spacing:.18em;
 text-transform:uppercase;color:var(--ink-4)}
+/* Pointing at one slice pushes the rest back rather than lighting the one up,
+   which keeps the ring the same brightness while you read it. */
+.cdseg{transition:opacity .18s var(--ez),stroke-width .18s var(--ez)}
+.cdonut.picked .cdseg{opacity:.26}
+.cdonut.picked .cdseg.on{opacity:1;stroke-width:16}
+.cdonut svg{cursor:default}
+.cdseg{cursor:pointer}
+.clrow[data-dleg]{cursor:pointer}
+.clrow.on{background:var(--panel-2)}
+.clrow.on .cln{color:var(--ink)}
 
 .cline{display:block;width:100%;height:auto;overflow:visible}
 .cpath{fill:none;stroke:var(--brass);stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;
@@ -899,12 +961,16 @@ stroke-dasharray:1;animation:cdraw 1s var(--ez) both}
 .cline.neg .cgs0{stop-color:var(--clay)}
 .cline.neg .cgs1{stop-color:var(--clay)}
 .czero{stroke:var(--line-2);stroke-width:1;stroke-dasharray:4 4}
+.cgl{stroke:var(--line);stroke-width:1}
+.clv2{fill:var(--ink-4);font:600 11px/1 var(--f-mono);text-anchor:end}
 .cdot{fill:var(--brass);stroke:var(--panel);stroke-width:1.6;
 animation:cpop .3s var(--ez) both;animation-delay:var(--d,0s)}
 .cline.neg .cdot{fill:var(--clay)}
 @keyframes cpop{from{transform:scale(0);opacity:0}to{transform:scale(1);opacity:1}}
+/* The plot starts after the scale gutter, so the month labels start there too
+   rather than a centimetre to the left of the line they name. */
 .caxis{display:flex;justify-content:space-between;margin-top:8px;
-font:600 10.5px/1 var(--f-body);color:var(--ink-4)}
+padding:0 1.7% 0 9.7%;font:600 10.5px/1 var(--f-body);color:var(--ink-4)}
 
 .cleg{margin-top:16px}
 .clrow{display:flex;align-items:center;gap:9px;padding:7px 0;border-top:1px solid var(--line);
@@ -919,13 +985,33 @@ font-size:13px;transition:opacity .24s var(--ez)}
 font:600 11px/1 var(--f-body);color:var(--ink-3)}
 .ckey span{display:inline-flex;align-items:center;gap:6px}
 .ckey i{width:9px;height:9px;border-radius:2.5px;display:block}
+/* What a bar or a point is worth, in a box a thumb can summon. A title
+   attribute never shows up on a phone, which is where these get looked at. */
+.ctip{position:absolute;left:0;top:0;z-index:300;pointer-events:none;
+max-width:220px;padding:7px 10px;border:1px solid var(--line-2);border-radius:8px;
+background:var(--panel-2);color:var(--ink);box-shadow:0 8px 22px rgba(0,0,0,.45);
+font:600 12px/1.35 var(--f-body);opacity:0;transform:translateY(3px);
+transition:opacity .13s var(--ez),transform .13s var(--ez)}
+.ctip.on{opacity:1;transform:none}
+.cb[data-tip],.cdot[data-tip]{cursor:pointer}
+.cb[data-tip]:focus-visible,.cdseg:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
 /* Redrawing because a switch moved should not slide the page in again. The
    charts still replay, and that is the part carrying the change. */
 .page.noanim{animation:none}
 @media (max-width:560px){
 .cchart{gap:5px}
+.cchart.ax{column-gap:5px}
 .clab{font-size:9.5px}
 .csub{font-size:11px}
+.cyax{padding-right:6px}
+.cyax span{right:6px;font-size:8.5px}
+/* Crowded chart on a narrow screen: the figures under the bars come off
+   rather than run into each other. The scale carries the size and a tap
+   carries the exact number. */
+.cchart.many{gap:3px}
+.cchart.many.ax{column-gap:4px}
+.cchart.many .csub{display:none}
+.cchart.many .clab{font-size:8.5px;letter-spacing:-.01em;margin-top:7px}
 }
 
 
@@ -1076,6 +1162,13 @@ padding:4px 0;border:0;text-align:right}
 .tw.cards td:before{content:attr(data-l);flex:none;color:var(--ink-4);
 font:700 9px/1.5 var(--f-body);letter-spacing:.16em;text-transform:uppercase;text-align:left}
 .tw.cards td:not([data-l]):before{content:none}
+/* No hover on a phone, so the grip is simply there, and big enough to grab
+   without landing on the switch beside it. */
+.tw.cards .grip{opacity:.8;width:32px;height:38px;margin-left:-6px}
+.tw.cards tr.lift{background:var(--panel-2);box-shadow:0 12px 30px rgba(0,0,0,.5);
+border-color:var(--brass)}
+.tw.cards tr.lift>td{background:transparent;box-shadow:none}
+.tw.cards tr.lift>td:first-child{border-left:0}
 /* The name leads the card, full width and unlabelled. The switch rides with it
    so the thing you tap and the thing it belongs to are on the same line. */
 .tw.cards tr.prow2>td{display:block;padding:13px 14px}
